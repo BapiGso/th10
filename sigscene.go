@@ -18,21 +18,23 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	_ "image/png"
-	"time"
 )
 
-var Sigbg [5]*ebiten.Image
-var Sigstart bool
+var ImgCache = &Img{}
 
 func init() {
-	Sigbg[0], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/sig.png")
-	Sigbg[1], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/loading.png")
-	go Signext()
+	ImgCache.Sig, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/sig.png")
+	ImgCache.Loading, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/loading.png")
 }
 
-func Signext() {
-	time.Sleep(time.Second * 1)
-	Sigstart = true
+type Img struct {
+	Sig     *ebiten.Image   //签名图
+	TitleBg *ebiten.Image   //标题的背景图
+	Logo    []*ebiten.Image //标题的logo
+	Loading *ebiten.Image   //少女祈祷中。。。
+	Menu    []*ebiten.Image //菜单
+	Player  []*ebiten.Image //选人
+	Skill   []*ebiten.Image //技能
 }
 
 type SigScene struct {
@@ -54,9 +56,8 @@ func anyGamepadVirtualButtonJustPressed(i *Input) bool {
 
 func (s *SigScene) Update(state *GameState) error {
 	s.count++
-	if Sigstart {
-		//return nil
-		//time.Sleep(time.Second * 10)
+	if s.count == 100 {
+		go bgmsw("assets/th10_01.mp3")
 		state.SceneManager.GoTo(&WelcomeScene{})
 		return nil
 	}
@@ -64,25 +65,8 @@ func (s *SigScene) Update(state *GameState) error {
 }
 
 func (s *SigScene) Draw(r *ebiten.Image) {
-	s.drawSigBackground(r, s.count)
-	//drawLogo(r, "BLOCKS")
-
-}
-
-func (s *SigScene) drawSigBackground(r *ebiten.Image, c int) {
-	//w, h := imageBackground.Size()
 	op := &ebiten.DrawImageOptions{}
-
-	//for i := 0; i < (ScreenWidth/w+1)*(ScreenHeight/h+2); i++ {
-	//	op.GeoM.Reset()
-	//	dx := -(c / 1) % w
-	//	dy := (c / 1) % h
-	//	dstX := (i%(ScreenWidth/w+1))*w + dx
-	//	dstY := (i/(ScreenWidth/w+1)-1)*h + dy
-	//	op.GeoM.Translate(float64(dstX), float64(dstY))
-	//	r.DrawImage(imageBackground, op)
-	//}
-	r.DrawImage(Sigbg[0], op)
+	r.DrawImage(ImgCache.Sig, op)
 	op.GeoM.Translate((ScreenWidth - 180), (ScreenHeight - 100))
-	r.DrawImage(Sigbg[1], op)
+	r.DrawImage(ImgCache.Loading, op)
 }

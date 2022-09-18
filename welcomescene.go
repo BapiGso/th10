@@ -20,6 +20,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
+	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"image"
@@ -33,9 +34,10 @@ type WelcomeScene struct {
 }
 
 var Welcomeimg [10]*ebiten.Image
+var audioContext = audio.NewContext(SampleRate)
+var bgm *audio.Player
 
 func init() {
-	go bgm("assets/th10_01.mp3")
 	Welcomeimg[0], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/title00a.png")
 	_, m, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/title_logo.png")
 	_, m1, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/title01.png")
@@ -54,27 +56,23 @@ func init() {
 
 }
 
-func PlaySE() {
-	Welcomeimgm, _ := assets.ReadFile("assets/th10_01.mp3")
-	content := audio.NewContext(SampleRate)
+// 停止当前播放的bgm并播放新的bgm
+func bgmsw(path string) {
+	if bgm != nil && bgm.IsPlaying() {
+		bgm.Pause()
+	}
+	Welcomeimgm, _ := assets.ReadFile(path)
 	s, _ := mp3.DecodeWithoutResampling(bytes.NewReader(Welcomeimgm))
-	a, _ := content.NewPlayer(s)
-	fmt.Println(a)
-	// sePlayer is never GCed as long as it plays.
-	//sePlayer.Play()
+	bgm, _ = audioContext.NewPlayer(s)
+	bgm.Play()
 }
 
-func bgm(path string) *audio.Player {
-	Welcomeimgm, _ := assets.ReadFile(path)
-	audioContext := audio.NewContext(SampleRate)
-	s, _ := mp3.DecodeWithoutResampling(bytes.NewReader(Welcomeimgm))
-	p, _ := audioContext.NewPlayer(s)
-	if p.IsPlaying() {
-		p.Pause()
-	} else {
-		p.Play()
-	}
-	return p
+// 播放一个音效
+func playsound(path string) {
+	soundfile, _ := assets.ReadFile(path)
+	s, _ := wav.DecodeWithoutResampling(bytes.NewReader(soundfile))
+	sound, _ := audioContext.NewPlayer(s)
+	sound.Play()
 }
 
 func (s *WelcomeScene) Update(state *GameState) error {
@@ -86,7 +84,14 @@ func (s *WelcomeScene) Update(state *GameState) error {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyZ) {
+		bgmsw("assets/th10_02.mp3")
+		//return nil
 		state.SceneManager.GoTo(NewGameScene())
+		return nil
+	}
+
+	if ebiten.IsKeyPressed(ebiten.KeyX) {
+		playsound("assets/se_tan01.wav")
 		return nil
 	}
 

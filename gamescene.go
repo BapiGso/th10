@@ -29,8 +29,9 @@ import (
 )
 
 var (
-	imageGameBG  *ebiten.Image
-	imageWindows = ebiten.NewImage(ScreenWidth, ScreenHeight)
+	imageGameBG           *ebiten.Image
+	imageWindows          = ebiten.NewImage(ScreenWidth, ScreenHeight)
+	imageBackground, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/stg1bg.png")
 )
 
 func fieldWindowPosition() (x, y int) {
@@ -128,6 +129,7 @@ type GameScene struct {
 	score              int
 	lines              int
 	gameover           bool
+	count              int
 }
 
 func init() {
@@ -197,6 +199,12 @@ func (s *GameScene) addScore(lines int) {
 }
 
 func (s *GameScene) Update(state *GameState) error {
+	s.count++
+	if ebiten.IsKeyPressed(ebiten.KeyX) {
+		playsound("assets/se_tan01.wav")
+		return nil
+	}
+	return nil
 	s.field.Update()
 
 	if s.gameover {
@@ -294,7 +302,7 @@ func (s *GameScene) Draw(r *ebiten.Image) {
 	s.drawBackground(r)
 	msg := fmt.Sprintf("%0.2f fps", ebiten.ActualTPS())
 	ebitenutil.DebugPrintAt(r, msg, ScreenWidth-70, ScreenHeight-20)
-	r.DrawImage(imageWindows, nil)
+	//r.DrawImage(imageWindows, nil)
 
 	// Draw score
 	x, y := scoreTextBoxPosition()
@@ -306,6 +314,17 @@ func (s *GameScene) Draw(r *ebiten.Image) {
 
 	// Draw lines
 	x, y = linesTextBoxPosition()
-	drawTextBoxContent(r, strconv.Itoa(s.lines), x, y, textBoxWidth())
+	s.drawTitleBackground(r, s.count)
+}
 
+func (s *GameScene) drawTitleBackground(r *ebiten.Image, c int) {
+	w, h := imageBackground.Size()
+	op := &ebiten.DrawImageOptions{}
+	for i := 0; i < 200; i++ {
+		op.GeoM.Reset()
+		dy := (c) % h
+		dstY := (i/(ScreenWidth/w+1)-1)*h + dy
+		op.GeoM.Translate(30, float64(dstY)*10)
+		r.DrawImage(imageBackground, op)
+	}
 }
