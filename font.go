@@ -23,7 +23,6 @@ import (
 	"golang.org/x/image/font/opentype"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/text"
 )
 
@@ -33,21 +32,21 @@ const (
 
 var (
 	arcadeFonts map[int]font.Face
+	ttf, _      = assets.ReadFile("assets/ttf/MadokaLetters.ttf")
 )
 
+// 解析使用字体文件并且指定font size
 func getArcadeFonts(scale int) font.Face {
 	if arcadeFonts == nil {
-		tt, err := opentype.Parse(fonts.PressStart2P_ttf)
+		tt, err := opentype.Parse(ttf)
 		if err != nil {
 			log.Fatal(err)
 		}
-
 		arcadeFonts = map[int]font.Face{}
 		for i := 1; i <= 4; i++ {
-			const dpi = 72
 			arcadeFonts[i], err = opentype.NewFace(tt, &opentype.FaceOptions{
 				Size:    float64(arcadeFontBaseSize * i),
-				DPI:     dpi,
+				DPI:     72,
 				Hinting: font.HintingFull,
 			})
 			if err != nil {
@@ -75,10 +74,18 @@ var (
 )
 
 func drawTextWithShadow(rt *ebiten.Image, str string, x, y, scale int, clr color.Color) {
+	op := &ebiten.DrawImageOptions{}
 	offsetY := arcadeFontBaseSize * scale
 	for _, line := range strings.Split(str, "\n") {
 		y += offsetY
-		text.Draw(rt, line, getArcadeFonts(scale), x+3, y+3, shadowColor)
+		op.GeoM.Scale(1.1, 1.1)
+		op.GeoM.Translate(float64(x), float64(y))
+		//
+		//op.ColorM.ScaleWithColor(color.Black)
+		//text.DrawWithOptions(rt, line, getArcadeFonts(scale), op)
+		//op.GeoM.Scale(1, 1)
+		//op.ColorM.ScaleWithColor(color.White)
+		//text.DrawWithOptions(rt, line, getArcadeFonts(scale), op)
 		text.Draw(rt, line, getArcadeFonts(scale), x, y, clr)
 	}
 }

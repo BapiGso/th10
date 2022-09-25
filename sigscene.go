@@ -23,8 +23,8 @@ import (
 var ImgCache = &Img{}
 
 func init() {
-	ImgCache.Sig, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/sig.png")
-	ImgCache.Loading, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/loading.png")
+	ImgCache.Sig, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/sig.png")
+	ImgCache.Loading, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/loading.png")
 }
 
 type Img struct {
@@ -57,7 +57,7 @@ func anyGamepadVirtualButtonJustPressed(i *Input) bool {
 func (s *SigScene) Update(state *GameState) error {
 	s.count++
 	if s.count == 100 {
-		go bgmsw("assets/th10_01.mp3")
+		go bgmsw("assets/wav/th10_01.mp3")
 		state.SceneManager.GoTo(&WelcomeScene{})
 		return nil
 	}

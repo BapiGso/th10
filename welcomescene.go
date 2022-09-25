@@ -38,9 +38,9 @@ var audioContext = audio.NewContext(SampleRate)
 var bgm *audio.Player
 
 func init() {
-	Welcomeimg[0], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/title00a.png")
-	_, m, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/title_logo.png")
-	_, m1, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/title01.png")
+	Welcomeimg[0], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/title00a.png")
+	_, m, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/img/title_logo.png")
+	_, m1, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/img/title01.png")
 	subImage1 := m.(*image.NRGBA).SubImage(image.Rect(0, 0, 512, 128)).(*image.NRGBA)
 	subImage2 := m.(*image.NRGBA).SubImage(image.Rect(0, 128, 512, 256)).(*image.NRGBA)
 	subImage3 := m1.(*image.NRGBA).SubImage(image.Rect(0, 0, 160, 30)).(*image.NRGBA)
@@ -53,7 +53,6 @@ func init() {
 	Welcomeimg[4] = ebiten.NewImageFromImage(subImage4)
 	Welcomeimg[5] = ebiten.NewImageFromImage(subImage5)
 	Welcomeimg[6] = ebiten.NewImageFromImage(subImage6)
-
 }
 
 // 停止当前播放的bgm并播放新的bgm
@@ -84,14 +83,14 @@ func (s *WelcomeScene) Update(state *GameState) error {
 	}
 
 	if inpututil.IsKeyJustPressed(ebiten.KeyZ) {
-		bgmsw("assets/th10_02.mp3")
+		bgmsw("assets/wav/th10_02.mp3")
 		//return nil
-		state.SceneManager.GoTo(NewGameScene())
+		state.SceneManager.GoTo(NewStage1())
 		return nil
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyX) {
-		playsound("assets/se_tan01.wav")
+		playsound("assets/wav/se_tan01.wav")
 		return nil
 	}
 
@@ -101,14 +100,13 @@ func (s *WelcomeScene) Update(state *GameState) error {
 func (s *WelcomeScene) Draw(r *ebiten.Image) {
 	s.drawImg(r, Welcomeimg[0], 0, 0, s.count)
 	//drawLogo(r, "BLOCKS")
-	msg := fmt.Sprintf("%0.2f fps", ebiten.ActualTPS())
-	ebitenutil.DebugPrintAt(r, msg, ScreenWidth-70, ScreenHeight-20)
+	ebitenutil.DebugPrintAt(r, fmt.Sprintf("%0.2f fps", ebiten.ActualTPS()), ScreenWidth-70, ScreenHeight-20)
 	if s.status == 0 {
 		s.drawImg(r, Welcomeimg[1], (ScreenWidth-512)/2, (ScreenHeight-128)/2, s.count)
 		message := "PRESS ANY BUTTON"
 		x := 0
 		y := ScreenHeight - 100
-		drawTextWithShadowCenter(r, message, x, y, 2, color.NRGBA{255, 255, 255, 255}, ScreenWidth)
+		drawTextWithShadowCenter(r, message, x, y, 3, color.NRGBA{255, 255, 255, 255}, ScreenWidth)
 	} else if s.status == 1 {
 		s.drawImg(r, Welcomeimg[2], ScreenWidth*0.05, ScreenHeight*0.4, s.count)
 		s.drawImg(r, Welcomeimg[3], ScreenWidth-240, ScreenHeight-330, s.count)
