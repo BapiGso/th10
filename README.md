@@ -17,7 +17,7 @@
 本作品为东方Project二次创作同人游戏，主要参考  東方風神録　　～ Mountain of Faith.
 
 ### preview
-![preview](https://github.com/BapiGso/th10/preview/QQ截图20220926134742.png)
+![preview](https://github.com/BapiGso/th10/blob/master/preview/QQ%E6%88%AA%E5%9B%BE20220926134742.png)
 
 ## 原作
 
