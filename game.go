@@ -2,17 +2,19 @@ package main
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
 )
 
 const (
-	ScreenWidth  = 640
-	ScreenHeight = 480
+	ScreenWidth  = 1600
+	ScreenHeight = 1200
 	SampleRate   = 44100
 )
 
 type Game struct {
 	sceneManager *SceneManager
 	input        Input
+	bgm          *audio.Player
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {

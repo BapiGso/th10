@@ -12,7 +12,7 @@ var assets embed.FS
 
 func main() {
 	ebiten.SetWindowSize(ScreenWidth, ScreenHeight)
-	ebiten.SetWindowTitle("东方风神录　～ Mountain of Faith. ver alpha")
+	ebiten.SetWindowTitle("东方枫之谣　～ Maple of Legend . ver alpha")
 	if err := ebiten.RunGame(&Game{}); err != nil {
 		log.Fatal(err)
 	}

@@ -29,7 +29,7 @@ import (
 
 var (
 	imageWindows       = ebiten.NewImage(ScreenWidth, ScreenHeight)
-	imagePanelBG, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/gamebg.png")
+	imagePanelBG, _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/stagebg.png")
 	imageBackground    [4]*ebiten.Image
 )
 
@@ -38,46 +38,14 @@ func init() {
 	imageBackground[1], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/stg3bg2.png")
 	imageBackground[2], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/stg3bg3.png")
 	imageBackground[3], _, _ = ebitenutil.NewImageFromFileSystem(assets, "assets/img/stg3bg4.png")
-	NewStage1().player.x, NewStage1().player.y = 300, 400
 	// Windows: Field
 
-	drawWindow(imageWindows, 32, 16, 384, 448)
+	drawWindow(imageWindows, 32, 16, 960, 1120)
 
-}
-
-func (s *Stage1) init() {
-	s.player.x, s.player.y = 500, 300
-}
-
-func joinimg() {
-	_, m, _ := ebitenutil.NewImageFromFileSystem(assets, "assets/img/pl00.png")
-	for i := 0; i < 8; i++ {
-		if m == nil {
-
-		}
-	}
-}
-
-func subimg(img image.Image, x0, y0, x1, y1 int) *image.NRGBA {
-	subImage := img.(*image.NRGBA).SubImage(image.Rect(x0, y0, x1, y1)).(*image.NRGBA)
-	return subImage
 }
 
 func drawWindow(r *ebiten.Image, x, y, width, height int) {
 	ebitenutil.DrawRect(r, float64(x), float64(y), float64(width), float64(height), color.RGBA{0, 0, 0, 0xc0})
-}
-
-var fontColor = color.NRGBA{0x40, 0x40, 0xff, 0xff}
-
-func drawTextBox(r *ebiten.Image, label string, x, y, width int) {
-	drawTextWithShadow(r, label, x, y, 1, fontColor)
-	y += blockWidth
-	drawWindow(r, x, y, width, 2*blockHeight)
-}
-
-func drawTextBoxContent(r *ebiten.Image, content string, x, y, width int) {
-	y += blockWidth
-	drawTextWithShadowRight(r, content, x, y+blockHeight*3/4, 1, color.White, width-blockWidth/2)
 }
 
 type Stage1 struct {
@@ -115,11 +83,6 @@ func NewStage1() *Stage1 {
 		field: &Field{},
 	}
 }
-
-const (
-	fieldWidth  = blockWidth * fieldBlockCountX
-	fieldHeight = blockHeight * fieldBlockCountY
-)
 
 func (s *Stage1) choosePiece() *Piece {
 	num := int(BlockTypeMax)
@@ -163,33 +126,37 @@ func (s *Stage1) Update(state *GameState) error {
 		return nil
 	}
 
+	if s.count%20 == 0 {
+		s.score += rand.Intn(10000)
+	}
+
 	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
 		if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
-			s.player.y -= 1
+			s.player.y -= 2
 		} else {
-			s.player.y -= 3
+			s.player.y -= 6
 		}
 	} else if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
 		if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
-			s.player.y += 1
+			s.player.y += 2
 		} else {
-			s.player.y += 3
+			s.player.y += 6
 		}
 	}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
 		s.player.moveStatus = 2
 		if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
-			s.player.x += 1
+			s.player.x += 2
 		} else {
-			s.player.x += 3
+			s.player.x += 6
 		}
 	} else if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
 		s.player.moveStatus = 1
 		if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
-			s.player.x -= 1
+			s.player.x -= 2
 		} else {
-			s.player.x -= 3
+			s.player.x -= 6
 		}
 	} else {
 		s.player.moveStatus = 0
@@ -209,8 +176,8 @@ func (s *Stage1) drawPlayer(r *ebiten.Image, c int) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(s.player.x, s.player.y)
 	i := (s.count / 5) % 8
-	sx, sy := i*32, s.player.moveStatus*48
-	r.DrawImage(m1.SubImage(image.Rect(sx, sy, sx+32, sy+48)).(*ebiten.Image), op)
+	sx, sy := i*64, s.player.moveStatus*96
+	r.DrawImage(m1.SubImage(image.Rect(sx, sy, sx+64, sy+96)).(*ebiten.Image), op)
 }
 
 func (s *Stage1) drawGameBg(r *ebiten.Image, img *ebiten.Image, c int) {
@@ -220,7 +187,7 @@ func (s *Stage1) drawGameBg(r *ebiten.Image, img *ebiten.Image, c int) {
 		op.GeoM.Reset()
 		dy := (c) % h
 		dstY := (i/(ScreenWidth/w+1)-1)*h + dy
-		op.GeoM.Translate(32, float64(dstY))
+		op.GeoM.Translate(80, float64(dstY))
 		//fmt.Println(op.GeoM)
 		//透视矩阵
 		//lineW := w + i*3/4
@@ -231,11 +198,12 @@ func (s *Stage1) drawGameBg(r *ebiten.Image, img *ebiten.Image, c int) {
 	}
 }
 func (s *Stage1) layoutInfo(r *ebiten.Image) {
-
 	//面板背景
 	r.DrawImage(imagePanelBG, nil)
 	//info面板
-	drawTextWithShadow(r, "Hiscore\n\n\nScore\n\n\nPlayer\n\n\nPower", 430, 15, 2, color.White)
+	drawTextWithShadow(r, "Hiscore\n\n\nScore\n\n\nPlayer\n\n\nPower", 0.7*ScreenWidth, 0.05*ScreenHeight, 4, color.White)
+	//分数
+	drawTextWithShadow(r, fmt.Sprintf("%09d\n\n\n%09d", s.score, s.score), 0.8*ScreenWidth, 0.05*ScreenHeight, 4, color.White)
 	//帧数
 	ebitenutil.DebugPrintAt(r, fmt.Sprintf("%0.2f fps", ebiten.ActualTPS()), ScreenWidth-70, ScreenHeight-20)
 }
