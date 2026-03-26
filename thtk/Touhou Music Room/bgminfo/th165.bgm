@@ -1,0 +1,100 @@
+﻿# Music Room Interface Info
+[game]
+name = "秘封ナイトメアダイアリー　〜 Violet Detector"
+name_en = "Hifuu Nightmare Diary ~ Violet Detector"
+artist = "ZUN"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+year = 2018
+gamenum = "16.5"
+
+packmethod = 2
+bgmfile = "thbgm.dat"
+zwavid_08 = 0x50
+zwavid_09 = 0x16
+
+tracks = 8
+
+[thvorbis]
+patchclass = "slow"
+
+[update]
+wikipage = "Violet_Detector/Music"
+wikirev = 409907
+
+[01]
+name_jp = "悪夢日記"
+name_en = "Diary of Nightmares"
+filename = "th165_01.wav"
+position = "0x000010, 0x66dc80, 0x11be800"
+frequency = 44100
+comment_en = "This is the Title theme.\n\nI feel like most stories about dreams end up going in a horror-esque direction.\nI tried putting in just enough horror flavor as to not take it too far."
+comment_jp = "タイトル画面のテーマです。\n\n　夢がテーマになると大体ホラー展開になりがちな気がします。\n　行きすぎない程度にホラー風味を入れてみました。"
+
+
+[02]
+name_jp = "ルーシッドドリーマー"
+name_en = "Lucid Dreamer"
+filename = "th165_04.wav"
+position = "0x1da6210, 0x0a8580, 0x11dbb00"
+frequency = 44100
+comment_en = "This is the First Week theme.\n\nHave you ever dreamed about flying?\nI regularly have dreams where I'm skiing down a steep slope as if I'm flying.\nWhenever I have that dream, it's usually when I'm feeling in pretty good shape."
+comment_jp = "一週目のテーマです。\n\n空を飛ぶ夢を見る事ってあります？\n僕は定期的に急斜面を飛ぶようにスキーで滑る夢を見ます。\nそれを見たときは、大体調子の良いときですね。"
+
+
+[03]
+name_jp = "ルナティックドリーマー"
+name_en = "Lunatic Dreamer"
+filename = "th165_06.wav"
+position = "0x4251e50, 0x1eb2c0, 0x13dcc40"
+frequency = 44100
+comment_en = "This is the Second Week theme.\n\nSometimes you have dreams where the events have no sense of reality, and you're left with nothing\nbut a feeling of fatigue afterward. That irritating sort of dream is what I envisioned here.\nYou have those sometimes, right? Dreams that exhaust you even though you forget what happened."
+comment_jp = "二週目のテーマです。\n\n夢の内容が現実味が無くなって、ただ単に疲労感だけが残る\nそういった焦るような夢をイメージしました。\nたまに見ますよね。何があったか忘れたけど疲れる夢。"
+
+
+[04]
+name_jp = "ナイトメアダイアリー"
+name_en = "Nightmare Diary"
+filename = "th165_07.wav"
+position = "0x562ea90, 0x096700, 0x171ed00"
+frequency = 44100
+comment_en = "This is the Third Week theme.\n\nA song with the usual Touhou-ness to it.\nI made it with the image of a finale that could stretch on forever if you left it alone.\nAm I the only one who thinks that horror dreams feel extremely nice?\nI'm always fantasizing about horror stuff as I fall asleep, but I only get those dreams sometimes."
+comment_jp = "三週目のテーマです。\n\nいつもの東方っぽい感じで曲を作りました。\n放って置けば延々と続きそうな終盤ってイメージです。\nホラーな夢って、最高に気持ちいいのは自分だけ？\nいつもホラーな妄想をしながら寝ますが、たまにしか見られません。"
+
+
+[05]
+name_jp = "バー・オールドアダム"
+name_en = "\"Old Adam\" Bar"
+filename = "th165_02.wav"
+position = "0x11be810, 0x081300, 0xbe7a00"
+frequency = 44100
+comment_en = "This is Story Theme 1.\n\n *From Old Testament Tavern ~ Dateless Bar \"Old Adam\"."
+comment_jp = "ストーリーのテーマ１です。\n\n　＊旧約酒場　～ Dateless Bar \"Old Adam\" より"
+
+
+[06]
+name_jp = "燕石博物誌が連れてきた闇"
+name_en = "The Darkness Brought In by Swallowstone Naturalis Historia"
+filename = "th165_05.wav"
+position = "0x2f81d10, 0x437ac0, 0x12d0140"
+frequency = 44100
+comment_en = "This is Story Theme 2.\n\n *From Old Testament Tavern ~ Dateless Bar \"Old Adam\"."
+comment_jp = "ストーリーのテーマ２です。\n\n　＊旧約酒場　～ Dateless Bar \"Old Adam\" より"
+
+[07]
+name_jp = "永遠の春夢"
+name_en = "Eternal Spring Dream"
+filename = "th15_07.wav"
+position = "0x6d4d790, 0x40103c, 0x1d44200"
+frequency = 44100
+comment_en = "This is Story Theme 3.\n\n From Legacy of Lunatic Kingdom."
+comment_jp = "ストーリーのテーマ３です。\n\n　東方紺珠伝より"
+
+[08]
+name_jp = "秘匿されたフォーシーズンズ"
+name_en = "The Concealed Four Seasons"
+filename = "th16_12.wav"
+position = "0x8a91990, 0x11b160, 0x200aa20"
+frequency = 44100
+comment_en = "This is Story Theme 4.\n\n From Hidden Star in Four Seasons."
+comment_jp = "ストーリーのテーマ４です。\n\n　東方天空璋より"

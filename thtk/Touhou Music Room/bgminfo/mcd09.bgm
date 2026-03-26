@@ -1,0 +1,184 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "旧約酒場　～ Dateless Bar \"Old Adam\""
+name_en = "Old Testament Tavern ~ Dateless Bar \"Old Adam\""
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2016
+gamenum = "09"
+
+packmethod = 0
+
+tracks = 10
+
+[update]
+wikipage = "Dateless_Bar_\"Old_Adam\"/Story"
+wikirev = 358915
+
+[01]
+name_jp = "バー・オールドアダム"
+name_en = "Old Adam Bar"
+comment8_en = "It was only natural for Maribel Hearn (Merry) to be suspicious.　'Dr. Latency,' after all, was Merry's own pen name."
+comment8_jp = "マエリベリー・ハーン（メリー）の疑問は当然だ。　Ｄr.レイテンシーとはメリーのペンネームなのだから。"
+comment7_en = "\"What? Who is that?\"　\"Well, who knows. Probably one of those anonymous-by-choice folks,\"　Renko Usami answered."
+comment7_jp = "「あれ、誰？」　「さあねぇ、いわゆる匿名希望って奴でしょう」　と宇佐見蓮子は答えた。"
+comment6_en = "The man sat on the counter, and ordered a drink that they'd never heard the name of."
+comment6_jp = "男はカウンターに座ると聞いた事も無い名前のお酒を頼んだ。"
+comment5_en = "Thusly addressed, the bearded, elderly man raised his hand without a word.　You could interpret the gesture as one of either affirmation or denial, but the only people who take such a vague attitude are the ones who want it to be interpreted as affirmative."
+comment5_jp = "そう聞かれた髭を蓄えた初老の男性が、無言で手を上げる。　否定とも肯定とも取れる仕草だが、こういう曖昧な態度を取る人間は肯定だと思われたいだけの人間である。"
+comment4_en = "\"You must be Dr. Latency.　We've been awaiting your arrival.\""
+comment4_jp = "「貴方がＤr.レイテンシーですね。　　お待ちしておりました」"
+comment3_en = "The unfriendly bartender spoke without looking this way."
+comment3_jp = "バーの愛想の無いマスターがこちらも見ずに言う。"
+comment2_en = "\"---Welcome.\""
+comment2_jp = "「――いらっしゃいませ」"
+
+
+[02]
+name_jp = "燕石博物誌が連れてきた闇"
+name_en = "The Darkness Brought in by Swallowstone Naturalis Historia"
+comment6_en = "In short, perhaps they had abilities similar to Merry's.　The two had infiltrated the Old Adam Bar to confirm this."
+comment6_jp = "つまりは、メリーと同じような能力を持っていると言うのだろうか。　それを確かめに二人はバー・オールドアダムに潜入したのだった。"
+comment5_en = "Now, it was only amongst the patrons of this bar, but Swallowstone Naturalis Historia was apparently quite famous. The majority of the patrons had read it, and believed its contents entirely.　Which was only natural, because every single patron of this bar claimed to have had experiences just like those written in Naturalis Historia."
+comment5_jp = "あくまでもこのお店の客に限っての話だが、燕石博物誌は有名で、殆どの客が読んでいて、内容も信じているのだという。　それもそのはず、このお店に来ている客は皆、燕石博物誌に書かれているような体験と、同じような体験をした事があると言っているらしい。"
+comment4_en = "It seemed that Renko had bought this information while selling copies of \"Swallowstone Naturalis Historia,\" the fanzine the two of them had made..."
+comment4_jp = "蓮子は二人が作った同人誌、「燕石博物誌」を売っている時にその情報を仕入れたらしいが・・・。"
+comment3_en = "According to Renko, unique people gathered in this bar night after night to share peculiar personal stories, exchange opinions, and so on."
+comment3_jp = "蓮子の話によるとこのお店では、夜な夜な特殊な人間達が集まっては独自の経験談を語ったり、意見交換をしたりしているのだという。"
+comment2_en = "\"So, Renko, what did you bring me all the way to this creepy bar to see? That old guy?\"　\"That was a coincidence.　But this will be perfect for an extracurricular Sealing Club activity!\""
+comment2_jp = "「こんな不気味なお店に連れてきてまで、　　蓮子が見せたかったのはあのお爺さん？」　「それは偶然ね。　　でも、秘封倶楽部の課外活動としては最高だわ」"
+
+
+[03]
+name_jp = "リバースイデオロギー"
+name_en = "Reverse Ideology"
+comment6_en = "However, old-style liquor is the more expensive and valuable kind.　An inversion of ideologies is occurring. In short, those with money to spare are choosing to drink themselves under the table in unkempt pubs."
+comment6_jp = "しかし、旧型酒の方が高く、貴重品なのだ。　ここで価値観の逆転が起こっている。つまり、お金に余裕が有る者が、選んで汚いお店で酔いつぶれるという事態が起こっているのだ。"
+comment5_en = "In establishments serving new liquor, people don't binge drink, so they're generally very clean. They're sound and hygenic places.　On the other hand, old-style liquor establishments-- perhaps modeled after classic drinking places-- are often old, unclean buildings. Also, their guests somehow tend to be unpleasant people."
+comment5_jp = "新酒を取り扱うお店は、酔っ払いすぎる人がいないので、常に綺麗である。衛生的で健康的だ。　一方、一般的に旧型酒を取る扱う店の方が、その古典的居酒屋の習わしからか建物も古く、汚いお店が多い。それに客も何だか質が悪いようだ。"
+comment4_en = "This \"Old Adam\" bar specially dealt in old-style liquor."
+comment4_jp = "このバー・オールドアダムは、旧型酒を専門に取り扱っているお店だ。"
+comment3_en = "New-style liquor is what's commonly and widely drunk; it's designed so that you can't get horribly drunk from it. The chance of becoming dependent on it is low, and it's relatively harmless to the body.　Old-style liquor is the kind that's been drunk since a long time ago, made by natural yeasts. Most such liquors include alcohol, but none contain enzymes or such things that help break down the alcohol. You drink it, you get sloshed."
+comment3_jp = "新型酒は、一般的に広く呑まれているお酒で、酔いつぶれないような工夫がされている。依存も低く、比較的身体に害は無い。　旧型酒は古くから呑まれてきたお酒であり、自然の酵母が作り上げたお酒である。多分にアルコールを含んでいるが、アルコールの分解を促進する酵素などは一切含まれていない。呑めば酔う。"
+comment2_en = "These days, establishments selling liquor are divided into two main groups.　Normal stores selling \"new-style liquor\", and those selling \"old-style liquor\"."
+comment2_jp = "今の時代、お酒を出すお店は大きく二つに分かれている。　“新型酒“を出す普通の店と、“旧型酒“を出す店だ。"
+
+
+[04]
+name_jp = "アウトサイダーカクテル"
+name_en = "Outsider Cocktail"
+comment5_en = "\"Cider? Is this juice or something?\"　\"Cider is liquor made from apples.　Since this drink's being served, it looks like it's about to start.\""
+comment5_jp = "「サイダー？　ジュースなの？」　「サイダーは林檎のお酒よ。　　このお酒が配られたと言う事は、どうやら始まりそうね」"
+comment4_en = "The bartender placed a pair of yellow cocktails on their table.　When asked what they were, he said \"Forbidden Cider.\" He was serving the same drinks to the other patrons."
+comment4_jp = "マスターが二人のテーブルに黄色いカクテルを置いた。　これは？と聞くと、「フォービドゥンサイダー」と答えた。他の客にも同じお酒を配っている。"
+comment3_en = "Drink makes people very talkative.　When someone drinks, they always become self-affirming. This is one of alcohol's major effects. With this effect, alcohol has put human society in motion from the shadows."
+comment3_jp = "お酒は人を饒舌にさせる。　お酒を呑むと人は必ず自己肯定をする。これがアルコールの一つの効能だ。お酒はこの効能で、人間社会を裏から動かしてきたのである。"
+comment2_en = "\"Wow, this is expensive.\"　\"It's old-style stuff, is why.　But it'll get you drunk for real. Nothing like your usual safe liquor.\"　\"I wonder if you can get drunk off liquor and still stay healthy?\"　\"Healthy? Think reeeal hard about that.　Alcohol, oil, salt, sugar, caffeine, gluten... they're always warnin' you about how healthy your food is, but since med technology's gone and advanced too far and people don't die that easy, they're decidin' they should systematically determine people's lifespans, right? Society doesn't know whether it wants people to live or die! The people paying top dollar to drink old-style liquor are realists, honestly."
+comment2_jp = "「結構高いのね」　「旧型酒だからねぇ。　　でも、いつもの安酒より本格的に酔えるわよ」　「お酒に酔っても健康的にいられるのかしら」　「健康的？　よーく考えてみてよ。　　お酒、油、塩分、糖質、カフェイン、グルテン……、食の健康に　　関しては過度に注意するくせに、医療が進化すぎてなかなか人が　　死なないもんだから、計画的に寿命を決めようとしているでしょ？　　社会は人を生かしたいんだか、殺したいんだか判んないよね。　　高い金を払って旧型酒を呑んでいる人達はリアリストだわ」"
+
+
+[05]
+name_jp = "大神神話伝"
+name_en = "Omiwa Legend"
+comment6_en = "Snakes. Snakes! A giant mass of them, all squirming around...　I figure they can't do anything about them, since snakes are one of Mount Miwa's gods and all.　Just what could they be eating for there to be so many of them there?　I'll bet you it's got nothing to do with how Nara prefecture's lifespan regulations are proceeding the smoothest in the country..."
+comment6_jp = "蛇ですよ。蛇。それはもう大量の蛇がウヨウヨしてまして……。　三輪山では蛇は神様だから手が出せないんでしょうな。　あれだけ蛇が増えて餌は何を食べているんでしょうねぇ……。　奈良県の寿命統制がピカイチ進んでいるのは関係無いですよねぇ……。"
+comment5_en = "And then I understood-- terribly so-- why they had closed off the mountain."
+comment5_jp = "そうしたら嫌と言うほど判りましたよ。入山規制の理由が。"
+comment4_en = "How did I get in, even though it's off-limits?　Well, I'd been having a lot of trouble at work and at home right around then... I sort of thought I should turn to God? Or, well, you could say I was just getting desperate. So I snuck in there in the middle of the night..."
+comment4_jp = "規制中なのに、どうやって入ったのかって？　丁度その時、仕事も家庭も上手くいってなくて……。神頼みというか自暴自棄になっていまして。それで真夜中にこっそりと忍び込みまして……。"
+comment3_en = "Yes, I know the prefecture's been restricting mountain-climbing lately. But they haven't made the reason public, which conversely makes you really interested."
+comment3_jp = "ええ、最近は県が入山を制限している事は知っています。その理由が公表されないので、逆に興味を惹いていますよね。"
+comment2_en = "---This happened a few years ago, when I went to Nara.　I went over to Mount Miwa, real famous for being a power spot.　See, as an occult lover myself, I've traveled to most famous places, but I'd been thinking, 'hey, I've never climbed Mount Miwa, huh?'"
+comment2_jp = "――あれは数年前。奈良に行った時の話です。　パワースポットで大変有名な三輪山に入山したんですね。　ほら、私もオカルト好きの身として有名なところは大抵足を運んでいたんですが、そういえば三輪山には登ったことが無かったな、と思いまして。"
+
+
+[06]
+name_jp = "パンデモニックプラネット"
+name_en = "Pandemonic Planet"
+comment6_en = "It was someone's hair.　They were worshiping a bunch of hair. A hair cult! Isn't that gross?　I betcha the guy who founded the whole thing was going bald. *laugh*"
+comment6_jp = "それは誰かの髪の毛だったんだよ。　髪の毛を拝んでいたんだよ、髪の毛教だよ。気持ち悪いだろ？　恐らく、開祖は髪が薄かったんだろうな（笑）"
+comment5_en = "What's so weird about that, you say?　Well, the object of their worship wasn't a god or a Buddha. There was this black material on the altar at all the hokoras scattered about..."
+comment5_jp = "それの何処がおかしいのかって？　それがさ、祈っている対象が神か仏じゃなくて、あちこちの祠に納められていたのは、何やら黒い物体だったんだ……。"
+comment4_en = "Apparently, the villagers hadn't been living there since a long time ago or anything; they were these outlaws who'd settled down in an abandoned village they found. But it was weird, is what I'm saying.　They had this religion I'd never seen before. All day long, whenever they had spare time, they went to pray to the hokora."
+comment4_jp = "どうも村民も昔から住んでいたのでは無く、廃村を見つけてアウトロー達が住み着いたようだったんだが、とにかく変なんだよ。　見た事も無い宗教が広まっていて、一日中空いでいる時間があれば必ず祠に向かって祈っていたんだ。"
+comment3_en = "But, did you know that there's still some regions with settlements maintained in the mountains, even now?　I make a regular routine of searching for and visiting these sorts of villages; this happened just a few months ago. Found this bizarre village in that prefecture with all the mountains."
+comment3_jp = "しかし、僅かながら今も山奥に村を維持している地域がある事を知っているかい？　俺はこういう村を探して訪ねるのが日課となっているんだが、つい\n数ヶ月前の事だ。山の多いあの県で、奇妙な村を見つけてな。"
+comment2_en = "---I imagine you're all aware of how a lot of mountain villages have been abandoned nowadays, since populations have gone down, and the principles of natural settlement separation are dominant."
+comment2_jp = "――人口が減って、人村自然分離の原則が支配している現在、山村の多くが廃村になった事は当然知っていると思う。"
+
+
+[07]
+name_jp = "旧世界の冒険酒場"
+name_en = "Adventurer's Tavern of the Old World"
+comment6_en = "Apparently Renko believed nearly everyone's stories."
+comment6_jp = "蓮子は殆どみんなの話を信じているようだった。"
+comment5_en = "\"---Faith in hair has been around since ancient times, just like with snakes.　Regeneration's got to have some involvement in the processes of human faith, huh?\""
+comment5_jp = "「――蛇と同じで髪の毛の信仰は原始からあるね。　　再生性が何か人間の信仰プロセスに関わっているんだわ」"
+comment4_en = "She briefly wondered why Renko believed her accounts.　\"It must be because I'm such a good storyteller, after all,\" Merry thought bashfully."
+comment4_jp = "ふと、何故蓮子は私の体験談を信じるのだろう、と思った。　やっぱり、私の話が上手いからかな、とメリーは照れた。"
+comment3_en = "Merry knew that her own mysterious experiences were undoubtedly truth.　However, she was somehow unable to believe these other extravagant stories. They just seemed like they were trying to con people."
+comment3_jp = "メリーは自らの不思議な体験は、紛れもない真実だと判っている。　しかし、他人の不思議体験は何故か信じられなかった。人を誑かそうとしているとしか思えなかった。"
+comment2_en = "\"Huh.　Is this a ghost story convention?\"　\"Looks like something pretty close.　Don't know if they're true or not, but they seem to be framed as accounts of the narrator's personal experiences.\"　\"This'll probably sound rude, but we're watching a bunch of grown adults tell stories in this bar like it's a secret clubhouse...\"　\"My, really? You're going to be sharing your story afterwards too, Merry.\"　\"Augh. I knew this was coming...\""
+comment2_jp = "「うーん。　　これって怪談大会？」　「どうやら、それに近いわねぇ。　　真偽はわからないけど、一応本人の不思議な体験談って形をとっているね」　「こういっちゃあ何だけど、秘密倶楽部みたいなバーで、いい大人達が……」　「あら、後でメリーも体験を語るのよ」　「うえー、やっぱり、そうなるよねー」"
+
+
+[08]
+name_jp = "魔界地方都市エソテリア"
+name_en = "Rural Makai City Esoteria"
+comment10_en = "\"Those are all stories from Swallowstone Naturalis Historia, you know.　You're supposed to tell us about your own experiences here.\""
+comment10_jp = "「それはすべて、燕石博物誌に書いてある話だな。　　ここでは、自身の体験を語って貰う約束だ」"
+comment9_en = "The reason for that became obvious with a single utterance from the man claiming to be Dr. Latency."
+comment9_jp = "その理由はＤr.レイテンシーと名乗った男のひと言で判った。"
+comment8_en = "A tale of otherworldly adventure, perfectly fitting for this venue.　However, the bar's atmosphere was subtly heavy."
+comment8_jp = "この場にふさわしい、異世界の冒険談だ。　しかし何故か微妙に場の空気が重かった。"
+comment7_en = "Of always being attacked by bizarre creatures in these other worlds.　And finally, of awakening just as she was saved by someone, and having returned to the world she came from."
+comment7_jp = "異世界ではいつも異形の怪物に襲われた事。　そして、誰かに助けられた瞬間、目が覚めて元の世界に戻る事。"
+comment6_en = "Of peeking into another world from a graveyard.　Of wandering in an otherworldly bamboo forest.　Of looking out at the cosmos from a satellite eroded by greenery."
+comment6_jp = "墓場から異世界を覗き見た事。　異世界の竹林を彷徨った事。　緑に侵食された衛星から宇宙を見た事。"
+comment5_en = "Merry told tales of her various experiences."
+comment5_jp = "メリーは色んな体験談を話した。"
+comment4_en = "A murmur went up from the audience.　Was it the otherworldly aura Merry emitted,　or simply surprise at the fact that this young girl was the one speaking?"
+comment4_jp = "辺りが少しざわついた。　メリーの放つ異世界のオーラなのか、　それとも若い女の子が話すので驚いただけなのか。"
+comment3_en = "\"Oh, yes.　My name is Maribel.　Everything I'm about to tell you is a mysterious,　abnormal experience that I've really had.\""
+comment3_jp = "「あ、はい。　　マエリベリーと申します。　　今からお話する内容は、全て私が体験した　　不思議で特異な体験談です」"
+comment2_en = "\"Next is a young lady who's participating with us for the first time today.　Do you have any stories of mysterious, unprecedented experiences?\""
+comment2_jp = "「では、本日は初めて参加するお嬢さん。　　何か不思議で、他に類を見ない体験談はあるかな？」"
+
+
+[09]
+name_jp = "亡失のエモーション"
+name_en = "The Lost Emotion"
+comment6_en = "Everyone there cast their thoughts to the scenes they'd read in Swallowstone Naturalis Historia.　Perhaps because of the alcohol amplifying their emotions, some even shed tears."
+comment6_jp = "誰もが燕石博物誌で読んだ情景に思いを馳せた。　お酒が感情を増幅させるのか、涙を流す者もいた。"
+comment5_en = "A mad sprawl of green.　A mountain sending up smoke.　A worn, age-old shrine."
+comment5_jp = "狂おしい緑。　煙を上げる山。　永らく侘びた神社。"
+comment4_en = "Renko took out a hand mirror and passed it to Merry, who showed it to each person in turn.　Thanks to Merry's ability, that same mirror began displaying the scenery of those other worlds."
+comment4_jp = "蓮子は手鏡を取り出してメリーに渡し、順番に見せてまわった。　その鏡はメリーの能力により、異世界の風景を写し出していた。"
+comment3_en = "\"My apologies. She was simply testing everyone's knowledge.　In order to experience what's about to occur, you must have knowledge of that book's contents.　You see, we have obtained a magic item that allows one to experience part of the other worlds that book describes."
+comment3_jp = "「申し訳ないです。彼女は皆さんの知識を試しただけです。　　これから起こる出来事を体験するには、あの本の内容を知っている事が前提ですので。　　実は、本に書かれていた異世界の一部を体験できるマジックアイテムを入手したのです」"
+comment2_en = "Merry glanced over at Renko.　Renko nodded briefly."
+comment2_jp = "メリーは蓮子の顔を見る。　蓮子は軽く頷いた。"
+
+
+[10]
+name_jp = "二日酔いの同床異夢"
+name_en = "Hangover of Bedfellows Dreaming Differently"
+comment9_en = "Merry, still hung over from the old-style liquor, immediately refused."
+comment9_jp = "旧型酒の二日酔いが残るメリーは、キッパリと断った。"
+comment8_en = "\"The stories about the snakes and hair cult were true, by the way.\"　\"Oh, I know, right?　Those two stories weren't told anywhere near skillfully enough to be lies.　It's decided, then!\"　\"What is?\"　\"What do you mean, what? We're headed to Mount Miwa!\""
+comment8_jp = "「ちなみに蛇の話と髪の毛教は本物だったわ」　「やっぱり？　　あの二つの話は何か嘘にしては話が整っていなかったからねぇ。　　じゃあ、決まりね！」　「何が？」　「何が、ってそりゃあ、これから行くのよ三輪山に！」"
+comment7_en = "Merry was deeply impressed by how Renko had come up with all that on the spot.　Yes, Renko truly was intelligent and a quick thinker."
+comment7_jp = "メリーは、よくとっさにそんなこと思いつくなぁ、と感心した。　そう、蓮子はとても聡明で頭の回転が速いのだ。"
+comment6_en = "\"How'd it go?\"　\"Mmm. About half of the stories were just made-up.\"　\"It went really well, though.　My plan to have you show each of them the other side of the barrier through the mirror,　and at the same time make contact with them to figure out if they really had been to another world.\""
+comment6_jp = "「どうだった？」　「うーん、半分くらいはつくり話だったわね」　「でも、上手くいったわね。　　メリーが鏡で結界の向こう側を見せると同時に、　　相手に触れて本当に異世界を見たのか探る作戦」"
+comment5_en = "What Merry had done was to take other people's personal accounts, and make them their own."
+comment5_jp = "メリーのした事、それは、他人の体験談を自分達の物にする事だった。"
+comment4_en = "However, it wasn't as if Merry had simply used her ability and boasted about it.　Most people probably assumed something of that level was just a magic trick, or a mirror that had that sort of function."
+comment4_jp = "しかし、メリーはただ能力を使って自慢したわけでは無い。　あんな物は殆どの人は手品か、そういう機能のある手鏡か何かだと思っただろう。"
+comment3_en = "In the end, the visions of other worlds that Merry had shown were the biggest highlight of the night."
+comment3_jp = "結局、メリーが見せた異世界の姿が一番盛り上がりを見せた。"
+comment2_en = "The next day, following their experience in the bar.　Though there had been such excitement when they were drinking, they were somehow tired and listless. So this was what people called 'being hung over'."
+comment2_jp = "バーでの体験を終え、次の日。　お酒のあった時はあんなに盛り上がっていたのに、何だか疲れて元気が無い。これが二日酔いという奴だろうか。"
+

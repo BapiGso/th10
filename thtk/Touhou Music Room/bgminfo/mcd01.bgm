@@ -1,0 +1,128 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "蓬莱人形 ～ Dolls in Pseudo Paradise"
+name_en = "Hourai Doll ~ Dolls in Pseudo Paradise"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2002
+gamenum = "01"
+
+packmethod = 0
+
+tracks = 13
+
+[update]
+wikipage = "Dolls_in_Pseudo_Paradise/Story"
+wikirev = 358896
+
+[01]
+name_jp = "蓬莱伝説"
+comment2_en = "As the most curious one of our group, I rushed straight into the depths of the forest.\nThere, I was stopped by a mysterious pierrot, which seemed to happily hand over the Branch of Hourai. The moment I attempted to take hold of it, my head was instantly separated from my body. I could neither move nor make sound, so I was never able to see the others again.\nAfter that, there were seven honest men left."
+comment2_jp = "最も好奇心の高い僕は、先を急ぎ森の奥を目指した。\n\n奥で謎のピエロに呼び止められ、なにやら嬉しそうに蓬莱\n\nの玉の枝を手渡されたんだ。受け取ろうとしたら一瞬で首\n\nと体が離れたようだ。僕は動く事も喋る事も出来なくなっ\n\nて、二度と仲間に会うことが出来なかった。\n\n残りの正直者は七人になった。"
+comment_en = "They say that even the servants to the Emperor Qin Shi Huang couldn't find the elixir of immortality, yet...\nWhat is Princess Kaguya thinking?\n...Does she really think we can find things like the Jeweled Branch of Hourai?"
+name_en = "Legend of Hourai"
+comment_jp = "不死の薬は、あの始皇帝の使いですら見つけることが出来なかったというのに...\nかぐやは何を考えているのか？\n...蓬莱の玉の枝などみつかるものか。"
+
+[02]
+name_jp = "二色蓮花蝶 ～ Red And White"
+comment2_en = "In the morning, I could see a shrine maiden in red and white dancing above the lake.\nAs the earliest riser among our group, I was long entranced by that most vigorous of dances.\nEventually, it began to rain, and by the time I came to my senses, the shrine maiden had disappeared."
+comment2_jp = "朝は、池の上に紅と白の二色の巫女が踊ってるのが見えた。\n\n最も早起きな僕は、その無慈悲で過激な舞に長い間魅了さ\n\nれていたんだ。やがて雨が降り始め、僕は我にかえった時、\n\nもう巫女の姿は無かった。"
+comment_en = "It looks like some strange person has slipped through again.\nI'd better do something before she gets to the shrine...\nOh, that girl... doesn't look like a human nor a youkai."
+name_en = "Dichromatic Lotus Butterfly ~ Red and White"
+comment_jp = "また、変な人が紛れこんで来た見たいね。\n神社まで来る前に何とかしないと...\nあら、あの娘...　人間でも妖怪でもないみたい"
+
+[03]
+name_jp = "桜花之恋塚 ～ Japanese Flower"
+comment2_en = "I didn't notice when it stopped raining. The shrine maiden had been soaked completely through, and it was as if she was melting into the rain. \nAs I had been watching her, the rain had become a frightful storm, and I, the most beautiful one, was taken captive by a pierrot. I disappeared into the storm along with it, and I was unable to return to where the others were.\nAfter that, there were six honest men left."
+comment2_jp = "雨は止むことを知らなかった。巫女はしっとりと全身を濡\n\nらしたまま、雨に溶け込む様に消えていく。巫女に見とれ\n\nているうちに雨は恐ろしい嵐になり、最も美しいボクはピ\n\nエロに捕らわれたのだ。そのままピエロは嵐の中に消え、\n\nもう僕らの所へ帰る事は出来なかった。\n\n残りの正直者は六人になった。"
+comment_en = "I wonder if ＊ is still sleeping under that cherry tree.\nThe flower petals were once so crimson, but they get paler year by year.\nThere may no longer be anything remaining beneath the soil."
+name_en = "Lovely Mound of Cherry Blossoms ~ Japanese Flower"
+comment_jp = "あの桜の木の下には、今も＊が眠っているのだろうか。\nあんなに紅くなった花びらが、年々、薄くなっていく。\nもう、土の中には何も残っていないのかも知れない。"
+
+[04]
+name_jp = "明治十七年の上海アリス"
+comment2_en = "That night, the six men held a party in a style from a foreign country. I, the youngest, could not yet imbibe alcohol nor smoke opium, so I found it all to be terribly boring.\nI secretly snuck away from where the party was, but in the darkness I was caught by a sinister pierrot. I was immediately beheaded.\nI will never again be capable of feeling even boredom.\nAfter that, there were five honest men left."
+comment2_jp = "夜、六人は異国風のパーティを開催した。最も幼い僕はま\n\nだお酒も阿片も飲めなかったのでひどく退屈だったんだ。\n\n僕は一人でこっそりその場から抜け出したんだけど、暗闇\n\nで不吉なピエロに捕まってしまったんだ。僕は、あっさり\n\n首を切られた。もう退屈することも二度と出来なかった。\n\n残りの正直者は五人になった。"
+comment_en = "Opium smoke lingers over the town in a cloud, flowing into every nook and cranny.\nI am in the settlement. The people dance a waltz in clothes of the most brilliant colours.\nThe magic won't reach me here."
+name_en = "Shanghai Alice of Meiji 17"
+comment_jp = "阿片の煙が雲と棚引き、街のあらゆる場所に流れ込んでいた。\n私は租界にいる。　ワルツを踊る極彩色の衣装の人々。\nここにはその魔法は届かないわ。"
+
+[05]
+name_jp = "東方怪奇談"
+comment2_en = "I ran until I couldn't breathe anymore. Being the most cowardly of the group, I was so afraid of this paradise. This was only to be expected, but no matter how far I ran, I couldn't find a way back to our home.\nAll the people I cared about had disappeared, and I thought I had no more reason to live, so in my despondence I threw a rope over a branch and hanged myself.\n...Yet somehow, I'm still conscious. Was the rope too weak...?\nI, the most cowardly of the group, had been reborn. I have nothing to lose, so why don't I try pretending to be human just once more?"
+comment2_jp = "僕は息が切れるまで走った。最も臆病な僕は、この楽園が\n\n怖くなったのさ。この位予想していたことだけど、いくら\n\n走っても帰り道を見つけることは出来なかったのだ。もう\n\n僕の想い人も消えてしまっている、生きていても仕方が無\n\nい、僕は失意の後に太い枝に縄を縛りつけ首を掛けた。\n\n...僕はなぜか意識がある。縄が脆かったのか？...\n\n最も臆病な僕は生まれ変わった。もう失うものは何も無い、\n\n僕はもう一度だけ人間の真似をしてみることにしよう。"
+comment_en = "\"Youkai? That's pretty uncommon sense.\"\nBut, I know. That the youkai would live in peace if the humans would let them.\nThat youkai are more peaceful and pragmatic than humans."
+name_en = "Strange Oriental Discourse"
+comment_jp = "「妖怪？いまどき非常識な。」\nしかし、僕は知っている。妖怪達は、人間にそう思わせとけば平和に暮らせるという事を。\n妖怪は人間よりずっと平和で現実的だという事を。"
+
+[06]
+name_jp = "エニグマティクドール"
+comment2_en = "When we awoke, the five of us found ourselves in darkness. According to one of them, we seemed to have been captured by a mysterious pierrot.\nThe other four were coming up with childish escape plans. As the wisest of the group, I knew we shouldn't try to, but I found myself unable to say anything.\nThe four carried out their plans as I thought, but contrary to my expectations they were successful. After that, I was never able to escape.\nI killed some time alone in an endless darkness and I suddenly sensed a presence of something behind me, but I don't resist. Then something hot prodded into my back."
+comment2_jp = "目が覚めたら僕ら五人は暗闇に居たんだ。一人の言うこと\n\nには、僕らは謎のピエロにさらわれたらしい。四人は幼稚\n\nな脱出計画を立てている。最も聡明な僕は、止めとけばい\n\nいのにと見ていたがとうとう口に出さなかったのだ。\n\n四人の予定通り計画は実行され、一人の予想に反し成功に\n\n終わったんだ。そして僕は永遠に逃亡出来なかった。\n\n永い暗闇の中で暇を潰していると、すぐに僕らの中にピエ\n\nロがいたことに気づいてしまった。ふと後ろに気配を感じ\n\nたが、身を任せた。熱いものが背中を伝った。"
+comment_en = "Oh, and I wanted to get rid of this doll as soon as possible, too.\nBut, those blue eyes. Sometimes a black crow carries them away and eats them. Those are real eyes.\nBecause I always put in new eyes."
+name_en = "Enigmatic Doll"
+comment_jp = "ああ、あの人形、どうにかして早く捨てたいのに。\nだって、あの蒼い目。時折黒い鴉がくわえて持ってっちゃうのよ？　あの目は本物の目よ。\nいつも、私が新しい目を入れるんだから。"
+
+[07]
+name_jp = "サーカスレヴァリエ"
+comment2_en = "Our escape was a great success. We thought we were amazingly clever, and decided to head back to our new abode in this paradise.\nIt never occurred to us to distrust any of the others in our group.\nWe were all honest men. We all got along so well..."
+comment2_jp = "僕らは見事脱出に成功したんだ。僕らは何て賢いんだろう\n\nと感心し、楽園に見つけた住みかに帰ろうとした。\n\n誰もお互いを疑う事なんて考えたことは無かったのさ。\n\nみんな正直者だったんだ。みんな仲良しだったんだ..."
+comment_en = "Alright, next on stage is a bird man.\nThis bird man was somehow born from the union of a human and a rare bird of paradise that only lives far to the south.\nHis parents had died a long time ago, so we took pity on the poor orphan and brought him into our troupe. Isn't that kind of us?"
+name_en = "Circus Reverie"
+comment_jp = "さて、お次は鳥人間の登場だよ。\nこの鳥人間、なんと人間と、遥か南の国にしかいない世にも珍しい、ゴクラクチョウとの間に生まれた子供だよ。\n親はとっくに死んじまって、可哀そうな孤児だったのを、うちの劇団で助けてあげたって訳だ。　えらいだろう？"
+
+[08]
+name_jp = "人形の森"
+comment2_en = "This paradise had erected a perfect building to act as our home.\nAn old-looking, western style building deep within the forest always happily served us. But there's always a lot of food waiting for us, and we can only ever go through half of it.\nOur group of honest men had fallen to half strength at some point."
+comment2_jp = "楽園は、僕らが住むにちょうど良い建物を用意してくれた。\n\n森の奥にある古びた洋館は、いつでも僕らを受け入れてく\n\nれる。でもいつもなら大量に用意する食事も、いつもの\n\n半分で済んだ。\n\n正直者の僕らはいつのまにか半分になっていたのだ。"
+comment_en = "It won't stop raining.\nI haven't seen the sun once since I wandered into this house.\nI wonder how many days it's been.\nThe doll continuously talks to me.\nI cut off the doll's head. It looks like the rain has stopped."
+name_en = "Forest of Dolls"
+comment_jp = "雨が止まない。\n私がこの家に迷い込んでから、一度も太陽を見ていない。\nもう何日経つんだろう。\n人形はしきりに話し掛けてくれる。\n僕は、人形の首をはねた。　雨が止んだかの様にみえた。"
+
+[09]
+name_jp = "Witch of Love Potion"
+comment2_en = "In the afternoon, we'd have our usual tea time. And every time I'd have bitter coffee, but today it seems to be sweeter.\nMaybe that's because of the love potion...\nI, the most mature of our group, fell in love with a beautiful pierrot, and fell asleep in a state of bliss.\nAfter that, there were three honest men left."
+comment2_jp = "午後は、いつもお茶の時間と決めていた。いつもならだた\n\n苦いだけの珈琲が、今日は僅かに甘く感じたんだ。\n\nそれが惚れ薬－Love Potion－入りだったとは...\n\n最も大人びた僕は、美しきピエロに恋し幸福のままに眠り\n\nに落ちた。\n\n残りの正直者は三人になった。"
+comment_en = "No way. I'm not stupid, you know.\nMy friends would just laugh at me if I told them.\nThey wouldn't believe they sell a love potion at that store.\nSo, I broke open my piggy bank without telling anyone."
+name_en = "Witch of Love Potion"
+comment_jp = "まさかね。　もちろん僕も馬鹿じゃない。\n友達に言ったって笑われるだけさ。\nあそこの店に惚れ薬が売ってたなんて。\nだから、僕は誰にも言わず豚の貯金箱を壊したのさ。"
+
+[10]
+name_jp = "リーインカーネイション"
+comment2_en = "I saw my friend, who had very clearly been poisoned. There's no way it was suicide. After all, I picked out the right coffee and brought it to everyone's rooms. I didn't tell the other two about his death.\nBeing the most wary of our group, I never ate nor drank anything I didn't prepare myself.\nI desperately tried to stay awake until they were both asleep.\nWe slept in separate rooms and locked the doors. Yes, there was one of the two I suspected in particular.\nThe sound of a spike being pounded into a tree rang out from somewhere close by. Just which of them is doing it? My face contorted in terror in the darkness.\nMy hands and feet throbbed in pain in time to the sound. It was just like they were being nailed to something. I thought I should talk to a medium, but then I realized something.\nThat's right, I realized I was being nailed to a tree, and I couldn't move. Just who was doing this to me?\nThen, the final nail went through my forehead.\nAt that moment, I saw the face I expected to see.\nAll light completely vanished, with no time for me to cry out."
+comment2_jp = "僕は明らかに毒で殺された仲間を見てしまったんだ。あれ\n\nは自殺のはずがない。珈琲は僕が適当に選んで皆の部屋に\n\n配ったんだからな。他の二人には彼の死を伝えなかった。\n\n最も警戒心の強い僕は、自分で用意した食事以外は口に入\n\nれなかった。他の二人が寝静まるまで必死に起きていた。\n\n僕らは別々に部屋に入って鍵をかけた。そう僕は二人のう\n\nちある一人を疑っていたんだ。\n\nどこからか、すぐ近くで木に釘を打つような音が響いて\n\nいたんだ。一体どっちの仕業だろう？　暗闇の中恐怖に顔\n\nが歪む。音に合わせ僕の手足が痛む。まるで五寸もある釘\n\nで打たれたかのようだったんだ。霊媒師にでも相談しよう\n\nとも考えたが、ある事に気付いてしまったんだ。\n\nそうだった、僕が木に打ち付けられていて動けないんだ\n\nった。どっちが僕を木に打ち付けてるのだろうか？\n\nそして最後の釘が眉間に当てられた。\n\nそこには予想通りの顔が見えた。\n\n声を出す間も無く、光は完全に途絶えた。"
+comment_en = "It's strange that there's a Western-style mansion in the middle of a roadless forest to begin with. The girl who lived there hardly ever came into town. But, lately, I've seen a girl who looks like her daughter.\nHow do I know she had a daughter?\nWell, since the girl looks like she did when she was young..."
+name_en = "Reincarnation"
+comment_jp = "そもそも、道の無い森の中に洋館が建ってるだけでも不思議なのだ。あそこに住んでいた彼女は滅多に街に出てこない。　でも、最近、彼女の娘らしき人を見た。\n何で娘って分かったか？\nそりゃ、あれだけ幼少時代の彼女に似ていれば。。。"
+
+[11]
+name_jp = "U.N.オーエンは彼女なのか？"
+comment2_en = "I, the earliest riser of the group, was having a hard time breathing. There was something in this morning's ham and eggs. I must be pretty dense for the group to have gotten down to just the two of us without catching on. It must have all been that person's doing. One of us should have killed him when he went mad.\nWell, anyway, it's already too late ...\nSeems like I saw a shrine maiden at some point. Was I just imagining it?\nOr was her hair really that blonde?\nIn exchange for my life, I wished to see that vision again.\n\nHowever, only the first part of the wish came true."
+comment2_jp = "最も早起きな僕の意識は、すでに虫の息だったんだ。今朝\n\nのハムエッグに何か盛られてたんだろうな。なんて僕は頭\n\nが悪いのだろう、二人になるまで全てが分からなかったな\n\nんて。全部あいつの仕業だったんだ、気違いになった時点\n\nで殺しておくべきだったんだ。\n\nいずれにしても、もう遅すぎたな...\n\nいつかの巫女が見えた気がした。僕の幻覚なのか？\n\nそれにしても髪の色はあんなブロンドだっただろうか。\n\n僕の命と引き換えに、もうしばらく幻覚を見せて欲しいと\n\n言う願いは、前者だけ叶ったようだ。"
+comment_en = "You need more imagination.\nYou can easily fall into its trap.\nA criminal with as much imagination as U.N. Owen could easily have a rope around your neck."
+name_en = "U.N. Owen was Her?"
+comment_jp = "君は想像力をかけている。\n罠に落とそうと思えばわけはない。\nU.N.オーエンほど想像力豊かな犯人なら、　君の頚に縄をまく事ぐらい朝食前だろう。"
+
+[12]
+name_jp = "永遠の巫女"
+comment3_en = "And then, there were no honest men left."
+comment3_jp = "そして正直者は全員消えた。"
+comment2_en = "After that, I, who have been reborn, was assailed by intense drowsiness yesterday evening. My head felt like it was being split open. I can't remember anything about yesterday evening, but it feels like I had a long dream. It would have been even better if I didn't have to face the reality before me...\nWhat does it all mean? One was poisoned with coffee, one was nailed to a tree, another was beheaded... I can't believe it.\nI got the chair and rope ready, and mumbled to myself one last time.\nSince he had died last, then it could only have been the one who was poisoned by the coffee.\nIn other words... is that how it is?\nThat must be it.\nThere must have been something in my dinner.\n But it doesn't matter anymore, I'm the last one left.\nI don't have any attachments left to such a world full of liars.\nThis time I tied a good, strong rope to the ceiling and kicked away the chair.\nThis time, my body didn't fall all the way down to the ground."
+comment2_jp = "あれから生まれ変わった僕は、昨日は夕食後、強烈な睡魔\n\nの襲われたんだ。頭が割れる様に痛い。昨夜のことが何に\n\nも思い出せない、永い夢を見ていたような気がする。目の\n\n前の現実さえ見なければもっと良かったのに...\n\n何てことだ、一人は珈琲に毒、一人は木に打ち付けられ\n\nていて、そしてもう一人は首をはねられてたなんて...\n\n僕は椅子と縄を用意し最後に呟いた。\n\n最後に死んだとしたら、珈琲で死んだ奴しかありえない。\n\nつまり、そういうことなのか？\n\nそういうことなのだろう。\n\n僕の夕食にも何か盛られていたようだな。\n\nそんなことはもうどうでもいい、僕は一人だけなんだ。\n\nもうこんな嘘つきだらけの世に未練など、無い。\n\n今度は丈夫な縄を天井に縛り、僕は高い椅子を蹴った。\n\n今度こそ、二度と体が地面に着くことは無かった。"
+comment_en = "Nothing happened at all today.\nI was promised nothing at all would happen tomorrow.\nNobody comes here. Not humans, not even gods.\nYoukai? Oh, they come everyday."
+name_en = "Eternal Shrine Maiden"
+comment_jp = "今日も何事も無い一日だった。\n明日も何事も無い事が約束されている。\nここには誰も来ない。　人間も神も。\n妖怪？ああ、毎日来るわ。"
+
+[13]
+name_jp = "空飛ぶ巫女の不思議な毎日"
+comment4_en = "There are eight less people in this paradise, \"Gensokyo\", and seven corpses were carried off by youkai. Gensokyo has lost these honest men forever. It's just a change in the population count.\nNot important news in the least."
+comment4_jp = "この楽園「幻想郷」から人間の数が八人ほど減り、七人の\n\n遺体は無事妖怪たちに持っていかれた。幻想郷は正直者を\n\n永遠に失った。ただの数値の変化だ。\n\nそんなことは、大したニュースでも無い。"
+comment3_en = "August X\nToday's incident started when I met a beautiful blonde girl walking from the neglected western-style building deep in the forest.\nI feel like I've seen her somewhere before, but I don't remember every little detail like that. The girl mischeiveously stuck out her tongue and quickly bowed as she walked towards the exit to paradise, laughing loudly. Such an odd girl.\nCome to think of it, that girl was the only woman of the eight honest men, not that it really matters.\nOh, today was just another boring day..."
+comment3_jp = "８月〇日\n\n今日遭った出来事といえば、森の廃洋館のある方から歩\n\nいてくる美しいブロンドの少女に遭ったこと位ね。その\n\n少女をどこかで見たような気がしたけど、私はそんな瑣\n\n末な事に頭を使おうとはしないの。その娘はいたずらに\n\n舌を出しながらぺこりと頭を下げて、大笑いしながら楽\n\n園の出口の方に向かっていったわ。変な娘ね。\n\nそういえば、あの娘は正直者八人組の唯一の女の子だっ\n\nたわね、そんなことはどうでもいいけど。\n\nあーあ、今日もまた退屈な一日だったわ..."
+comment2_en = "The shrine maiden of paradise spent a peaceful summer just like every other.\nOne summer day, this was written in the shrine maiden's diary."
+comment2_jp = "楽園の巫女は、いつもと変わらない平和な夏を送っていた。\n\nある夏の日、巫女の日記にはこう書かれていた。"
+comment_en = "Lately, a lot more people are ignorantly throwing out things like \"It's magic\" or \"It's a youkai\".\nSuch a sad state of affairs."
+name_en = "The Strange Everyday Life of the Flying Shrine Maiden"
+comment_jp = "最近、魔法だとか妖怪だとか今時無学なこという輩が増えてきたな。\n嘆かわしい。"

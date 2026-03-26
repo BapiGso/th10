@@ -1,3 +1,11 @@
 assets/img/*
 assets/ttf/*
 assets/wav/*
+
+# 第三方工具 / 旧代码
+thtk/
+mof/
+
+# IDE / 系统文件
+.*
+*.exe

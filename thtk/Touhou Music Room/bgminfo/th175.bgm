@@ -1,0 +1,178 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方剛欲異聞　～ 水没した沈愁地獄"
+name_en = "Touhou Gouyoku Ibun ~ Sunken Fossil World"
+circle = "黄昏フロンティア"
+circle_en = "Twilight Frontier"
+year = 2021
+gamenum = "17.5"
+
+packmethod = 7
+bgmfile = "data.cga"
+encryption = 6
+tracks = 26
+
+[composer]
+cmp1 = "ziki_7"
+cmp2 = "ZUN"
+
+[update]
+wikipage = "Sunken_Fossil_World/Music"
+wikirev = 0
+
+[01]
+name_jp = "水没した沈愁地獄"
+composer = 1
+name_en = "Submerged Hell of Sunken Sorrow"
+filename = "data/bgm/op"
+
+[02]
+name_jp = "東方剛欲異聞"
+composer = 1
+name_en = "Eastern Strange Tale of Avarice"
+filename = "data/bgm/staff_roll"
+
+[03]
+name_jp = "天理人欲"
+composer = 1
+name_en = "Laws of Heaven, Desires of Man"
+filename = "data/bgm/talk_ed"
+
+[04]
+name_jp = "魔法使いの憂鬱"
+composer = 1
+name_en = "Magician's Melancholy"
+filename = "data/bgm/talk_forest"
+
+[05]
+name_jp = "暗闇の風穴"
+composer = 1
+name_en = "The Dark Blowhole"
+filename = "data/bgm/talk_underground"
+
+[06]
+name_jp = "旧地獄街道を行く"
+composer = 1
+name_en = "Walking the Streets of a Former Hell"
+filename = "data/bgm/talk_town"
+
+[07]
+name_jp = "業火マントル"
+composer = 1
+name_en = "Hellfire Mantle"
+filename = "data/bgm/talk_Inferno"
+
+[08]
+name_jp = "御柱の墓場"
+composer = 1
+name_en = "Cemetery of Onbashira"
+filename = "data/bgm/talk_reactor"
+
+[09]
+name_jp = "大地の底、剛欲の海"
+composer = 1
+name_en = "Depths of the Earth, Ocean of Avarice"
+filename = "data/bgm/talk_oil"
+
+[10]
+name_jp = "不朽の曼珠沙華"
+composer = 1
+name_en = "Everlasting Red Spider Lily"
+filename = "data/bgm/talk_waterhell"
+
+[11]
+name_jp = "魔法少女達の百年祭"
+composer = 1
+name_en = "The Centennial Festival for Magical Girls"
+filename = "data/bgm/talk_scarlet"
+
+[12]
+name_jp = "少女綺想曲"
+composer = 1
+name_en = "Maiden's Capriccio"
+filename = "data/bgm/reimu1"
+
+[13]
+name_jp = "恋色マスタースパーク"
+composer = 1
+name_en = "Love-Colored Master Spark"
+filename = "data/bgm/marisa1"
+
+[14]
+name_jp = "封じられた妖怪"
+composer = 1
+name_en = "The Sealed-Away Youkai"
+filename = "data/bgm/yamame1"
+
+[15]
+name_jp = "万年置き傘にご注意を"
+composer = 1
+name_en = "Beware the Umbrella Left There Forever"
+filename = "data/bgm/kogasa1"
+
+[16]
+name_jp = "キャプテンムラサ"
+composer = 1
+name_en = "Captain Murasa"
+filename = "data/bgm/murasa1"
+
+[17]
+name_jp = "神さびた古戦場"
+composer = 1
+name_en = "The Venerable Ancient Battlefield"
+filename = "data/bgm/kanako1"
+
+[18]
+name_jp = "今宵は飄逸なエゴイスト　～ Egoistic Flowers"
+composer = 1
+name_en = "Tonight Stars an Easygoing Egoist ~ Egoistic Flowers"
+filename = "data/bgm/jyoon1"
+
+[19]
+name_jp = "華のさかづき大江山"
+composer = 1
+name_en = "A Flower-Studded Sake Dish on Mt. Ooe"
+filename = "data/bgm/yuugi1"
+
+[20]
+name_jp = "霊知の太陽信仰"
+composer = 1
+name_en = "Solar Sect of Mystic Wisdom"
+filename = "data/bgm/utuho1"
+
+[21]
+name_jp = "セラフィックチキン"
+composer = 1
+name_en = "Seraphic Chicken"
+filename = "data/bgm/niwatari1"
+
+[22]
+name_jp = "U.N.オーエンは彼女なのか？"
+composer = 1
+name_en = "U.N. Owen Was Her?"
+filename = "data/bgm/flandre1"
+
+[23]
+name_jp = "もうドアには入れない"
+composer = 1
+name_en = "No More Going Through Doors"
+filename = "data/bgm/talk_door"
+
+[24]
+name_jp = "秘神マターラ"
+composer = 1
+name_en = "Secret God Matara"
+filename = "data/bgm/okina1"
+
+[25]
+name_jp = "強欲な獣のメメント"
+composer = 2
+name_en = "Memento of the Avaricious Beast"
+filename = "data/bgm/toutetu1"
+
+[26]
+name_jp = "有機体全てのメメント　～ Memory of Fossil Energy."
+composer = 2
+name_en = "Memento of All Organisms ~ Memory of Fossil Energy."
+filename = "data/bgm/toutetu2"

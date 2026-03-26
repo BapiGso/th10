@@ -1,0 +1,242 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方心綺楼　～ Hopeless Masquerade"
+name_en = "Touhou Shinkirou ~ Hopeless Masquerade"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2013
+gamenum = "13.5"
+
+packmethod = 6
+encryption = 4
+bgmfile = "th135.pak"
+tracks = 31
+
+[composer]
+cmp1 = "あきやまうに"
+cmp1_en = "U2"
+cmp2 = "ZUN"
+
+[update]
+wikipage = "Hopeless_Masquerade/Music"
+wikirev = 370577
+
+[01]
+name_jp = "春色小径　～ Colorful Path"
+composer = 1
+name_en = "Spring Lane ~ Colorful Path"
+comment_jp = " この手のアレンジは、がんばってベースとか色々動かしちゃうとそれっぽくなら\nないので、演奏の力に頼って編曲自体はあんまりがんばらない方向で。\n――がんばったのはそう、過去最多のクラッシュシンバル数。　"
+filename = "data/bgm/reimu1"
+
+[02]
+name_jp = "メイガスナイト"
+composer = 1
+name_en = "Magus Night"
+comment_jp = "今回一番やる気だった曲。でもスウィングの比率の手動変更とか、生音の編集と\nか、面倒な作業が多くて大変。曲のコメント書くのはもっと大変。コメントが無\nかったら、なんとキャラクターカラーの種類が増えるくらい大変。"
+filename = "data/bgm/marisa1"
+
+[03]
+name_jp = "時代親父とハイカラ少女"
+composer = 1
+comment_en = "I knew what direction I wanted to go based on the intro, so this went relatively smoothly. I took the strings\ninto consideration for this piece and used a key with sharps, but I'm originally a brass player, so using sharps is tough\nfor me. This song was tough, too, with the Bs and Fs. Why did I write it in this key?"
+name_en = "The Traditional Old Man and the Stylish Girl"
+comment_jp = "イントロからして方向性がすぐ決まったので割とあっさりと。今回は全体的に弦\n楽器の演奏に配慮して♯系の調が多いけど、自分は金管出身なのでどうも♯は使\nいづらい。この曲もつらい。HとかFisとか。なぜこの調にしてしまったのか。"
+filename = "data/bgm/ichirin1"
+
+[04]
+name_jp = "感情の摩天楼　～ Cosmic Mind"
+composer = 1
+comment_en = "I used some easy-to-make instruments, so I'm not really sure what genre this arrangement ended up as.\nI guess maybe it's game music? This song has lots of motifs, so I thought it'd be easy\nto arrange, but I feel like I ended up running out of material at the end."
+name_en = "Emotional Skyscraper ~ Cosmic Mind"
+comment_jp = "作りやすい楽器で作ったら、どういうジャンルのアレンジか分からないことに。\nゲーム音楽らしいと言えばそうかもしれない。フレーズも多くてアレンジしやす\nいはずなのに、最後の方に作ったのでちょっとネタ切れ気味。　"
+filename = "data/bgm/hijiri1"
+
+[05]
+name_jp = "大神神話伝"
+composer = 1
+comment_en = "A laid-back, easygoing piece. I didn't really mean for it to end up that way. Maybe it's\nthe accordion's fault. This song doesn't have many of the motifs from the original, which is a problem. I don't have anything to write,\nwhich is a problem. I'll just have to fill space by saying Futo is cute. There, all filled."
+name_en = "Omiwa Legend"
+comment_jp = "今回のまったりゆっくり枠。そうするつもりは無かったのに、アコーディオンの\nせいだろうか。この曲、意外と元フレーズが少なくて困る。書くことも無くて困\nる。布都ちゃんはかわいいって書いて埋めるしかない。埋まった。　"
+filename = "data/bgm/futo1"
+
+[06]
+name_jp = "聖徳伝説　～ True Administrator"
+composer = 1
+comment_en = "I gave up on my original plan for this song, so the instrumentation feels a bit irregular. Basically,\nonly using a few instruments is nice. Just having the pad play whatever chords fit is soft!\nShifting up a minor third is soft! I'm out of time, so be soft on me!"
+name_en = "Shoutoku Legend ~ True Administrator"
+comment_jp = "当初予定してた演出を断念したため、楽器編成がちょっと歪な感じに。基本的に\n使う楽器は少ない方がいいね。てきとうにパッドを和音で鳴らすとか甘えだね！\n短３度上の転調とか甘えだね！！　時間が無いと甘えるよ！！！　"
+filename = "data/bgm/miko1"
+
+[07]
+name_jp = "芥川龍之介の河童　～ Candid Friend"
+composer = 1
+name_en = "Akutagawa Ryuunosuke's \"Kappa\" ~ Candid Friend"
+comment_jp = "アレンジした中で、一番最初に作って一番最後にできた曲がこちらになります。\n結構速くて運指が大変かと思ってたら意外といけてて、ブレスの位置の方が問題\nだったという。木管奏者への配慮が足りない。"
+filename = "data/bgm/nitori1"
+
+[08]
+name_jp = "ハルトマンの妖怪少女"
+composer = 1
+name_en = "Hartmann's Youkai Girl"
+comment_jp = "元曲フレーズ少ないのほんと勘弁なー。バイオリンさんは色々無茶言ってもなぜ\nか弾いてくれちゃうので特に配慮しないけど。でも今回はスウィングとか変拍子\nとか大変だったらしい。がんばってくれた！　曲数も多いしね。"
+filename = "data/bgm/koishi1"
+
+[09]
+name_jp = "佐渡の二ッ岩"
+composer = 1
+comment_en = "It was suggested that I made the intro a samba, so the arrangement ended up like this.\nI was kicking this one around in my head for a while before I actually started working on it, so I finished it right away!\nIt'd be nice if they were all like that!"
+name_en = "Futatsuiwa from Sado"
+comment_jp = "イントロが俺にサンバにしろと囁いていたため、このようなアレンジに。\n実際の作業に取り掛かるまで、ずっと頭の中で反芻してたのですぐできた！\nいつもこうだと楽なんだけどね！"
+filename = "data/bgm/mamizou1"
+
+[10]
+name_jp = "幻想郷の二ッ岩"
+composer = 2
+name_en = "Futatsuiwa from Gensokyo"
+comment_jp = "何か判った風で偉そうにしているマミゾウ。\nでもその実体は面白そうな事につい顔を出してしまうだけの妖怪です。\n曲にはストーリーとほぼ無関係であるというイメージを持たせました。"
+filename = "data/bgm/chuboss1"
+
+[11]
+name_jp = "亡失のエモーション"
+composer = 2
+comment_en = "Emotionless humans wander the village.\nThe ending has a bit of a horror feel to it, but the song is energetic.\nIt's not really what you'd call despair, in a number of ways."
+name_en = "The Lost Emotion"
+comment_jp = "感情が失われた丑三つ時。無表情の人間が里を徘徊する。\nラストはちょっぴりホラー展開ですが、曲はノリノリになりました。\n絶望って程じゃ無いよねぇ、色々と。"
+filename = "data/bgm/kokoro1"
+
+[12]
+name_jp = "塵界不変のペシミズム"
+composer = 1
+name_en = "This Dull World's Unchanging Pessimism"
+comment_jp = "メインテーマと見せかけて、他に一曲しかこのフレーズを使ってない謎曲。\n曲的に囃子じゃないけどそう言い張る構え。和太鼓入ってるしね！この曲はタ\nイトル以外で使ってる場所が、本来の用途かもしれない。"
+filename = "data/bgm/op"
+
+[13]
+name_jp = "心綺楼囃子"
+composer = 2
+name_en = "Shinkirou Orchestra"
+comment_jp = "おのけい先生の絵巻物スクロール演出とセットで作った曲。リアル巻物は例大祭\nで展示しているはずですがご覧頂けましたでしょうか？　自分はまだ巻物になっ\nた状態を見てないけど、きっと作ってくれているはず。"
+filename = "data/bgm/title"
+
+[14]
+name_jp = "人気のある場所"
+composer = 1
+name_en = "A Popular Location"
+comment_jp = "汎用的な曲として作ったら、なんか使い勝手がよすぎて他に曲がいらなくなって\nしまった。飽きるかもしれないけど勘弁な！　密かにちゃんとＡＢサビ的なとこ\nろまで作ってあるけど、そこまで聞かれることはあんまり無い会話曲の宿命。"
+filename = "data/bgm/kaiwa1"
+
+[15]
+name_jp = "人気のない場所"
+composer = 1
+comment_en = " It is like the part for a different feeling, with the triple time it goes a bit into a different feeling direction.\nThe title's \"popularity\", is it read as \"ninki\" or \"hitoke\"."
+name_en = "An Unpopular Location"
+comment_jp = "違った感じのところ用なので、三拍子にしてちょっと違った感じを演出。\n曲名の「人気」の読み方は「にんき」「ひとけ」どちらでも。"
+filename = "data/bgm/kaiwa3"
+
+[16]
+name_jp = "丑三つ時の里"
+composer = 1
+comment_en = "This one is kind of a creepy, unenthusiastic pre-boss theme. I tried to\nmake it so that it'd sound okay no matter where the song cut out, but there's a silent period between\nsongs, so I really didn't need to trouble myself with it at all. What a sad memory."
+name_en = "The Village in the Dead of Night"
+comment_jp = "今回は気持ち悪い感じで、あんまり盛り上げないボス前曲。どこからボス曲に切\nり替わっても、そこそこ大丈夫なように作っておいたのに、結局無音が曲の間に\n挟まれたので、別にそういう配慮はいらなかったという悲しい思い出。"
+filename = "data/bgm/kaiwa5"
+
+[17]
+name_jp = "本日の一面記事"
+composer = 1
+comment_en = "The newspapers displayed during VS mode have various random parts,\nso it's hard to see them all! After they're displayed, the characters appear and it's hard to see,\nso try to time it right and take a screenshot to check what they say!"
+name_en = "Today's Front-Page Headline"
+comment_jp = "ＶＳモード時に表示される新聞の見出しは、ランダムでそこそこ種類あるから、\n全部見るのは大変だぞ！　表示された後、キャラが出てきて見にくくなるので、\nいい感じのタイミングでがんばってスクリーンショットを撮って確認しよう！"
+filename = "data/bgm/win"
+
+[18]
+name_jp = "暁雲"
+composer = 1
+comment_en = "An ending theme in the usual, docile form.\nAs far as position within the game goes, this is the low point of the excitement curve.\nPlaying a song with a slow tempo really has a big effect. Delicious."
+name_en = "Morning Clouds"
+comment_jp = "いつもの通りの系統の素直なエンディング曲。\nポジション的に、ゲーム全体の盛り上がり曲線の谷に当たる場所。\n遅いテンポの曲は演奏してもらうと効果が大きい。おいしい。　Vc. 荒井英理也"
+filename = "data/bgm/ed"
+
+[19]
+name_jp = "官板黄昏新聞"
+composer = 1
+comment_en = "5/8 time is fun! Producing the staff roll is fun! It feels like making the images was harder than doing the song,\nbut I'm satisfied. The newspapers in this part don't have any random parts, but they're only on-screen for about 3 seconds\neach, so try to time it right an—"
+name_en = "Officially-Sanctioned Twilight Newspaper"
+comment_jp = "五拍子たのしい！　スタッフロール演出たのしい！　曲よりも画像作る方が大変\nだった気もするけど満足。こちらの新聞にランダム要素はありません。でも３秒\nくらいしか表示されないので、中身が気になる人はいい感じのタ　"
+filename = "data/bgm/staffroll"
+
+[20]
+name_jp = "演者選択"
+composer = 1
+name_en = "Performer Selection"
+filename = "data/bgm/charasel"
+
+[21]
+name_jp = "人気爆発／博麗霊夢"
+composer = 1
+name_en = "Popularity Boom / Reimu Hakurei"
+filename = "data/bgm/reimu2"
+
+[22]
+name_jp = "人気爆発／霧雨魔理沙"
+composer = 1
+name_en = "Popularity Boom / Marisa Kirisame"
+filename = "data/bgm/marisa2"
+
+[23]
+name_jp = "人気爆発／雲居一輪＆雲山"
+composer = 1
+name_en = "Popularity Boom / Ichirin Kumoi & Unzan"
+filename = "data/bgm/ichirin2"
+
+[24]
+name_jp = "人気爆発／聖白蓮"
+composer = 1
+name_en = "Popularity Boom / Byakuren Hijiri"
+filename = "data/bgm/hijiri2"
+
+[25]
+name_jp = "人気爆発／物部布都"
+composer = 1
+name_en = "Popularity Boom / Mononobe no Futo"
+filename = "data/bgm/futo2"
+
+[26]
+name_jp = "人気爆発／豊聡耳神子"
+composer = 1
+name_en = "Popularity Boom / Toyosatomimi no Miko"
+filename = "data/bgm/miko2"
+
+[27]
+name_jp = "人気爆発／河城にとり"
+composer = 1
+name_en = "Popularity Boom / Nitori Kawashiro"
+filename = "data/bgm/nitori2"
+
+[28]
+name_jp = "人気爆発／古明地こいし"
+composer = 1
+name_en = "Popularity Boom / Koishi Komeiji"
+filename = "data/bgm/koishi2"
+
+[29]
+name_jp = "人気爆発／二ッ岩マミゾウ"
+composer = 1
+name_en = "Popularity Boom / Mamizou Futatsuiwa"
+filename = "data/bgm/mamizou2"
+
+[30]
+name_jp = "人気爆発／秦こころ"
+composer = 1
+name_en = "Popularity Boom / Hata no Kokoro"
+filename = "data/bgm/kokoro2"
+
+[31]
+name_jp = "ラストワード発動"
+composer = 1
+name_en = "Last Word Unleashed"
+comment_en = "Everyone will instantly die in last word, isn't that good!"
+comment_jp = "ラストワードはみんな即死でもいいんじゃないですかね！　"
+filename = "data/bgm/maxwaza"

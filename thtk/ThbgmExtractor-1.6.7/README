@@ -1,0 +1,16 @@
+ThbgmExtractor
+https://smdn.jp/works/tools/ThbgmExtractor/
+
+* LICENSE
+ThbgmExtractor is licensed under the terms of the GPL version 2.
+See 'COPYING.GPLv2' for the full GPL license text.
+
+** Libraries (core/* directory)
+These libraries are licensed under the terms of the MIT X11.
+The complete text of the MIT X11 is in the 'LICENSE' file in each directory.
+
+** TagLib#
+TagLib# is licensed under the LGPL version 2.1.
+The complete text of the LGPL v2.1 is in the 'COPYING.LGPLv2.1' file.
+
+See https://github.com/mono/taglib-sharp for more info.

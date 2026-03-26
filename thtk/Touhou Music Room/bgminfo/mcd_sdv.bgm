@@ -1,0 +1,98 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方紫香花　～ Seasonal Dream Vision"
+name_en = "Touhou Shikoubana ~ Seasonal Dream Vision"
+circle = "とらのあな"
+circle_en = "Tora no Ana"
+year = 2005
+
+packmethod = 0
+
+tracks = 13
+
+[update]
+wikipage = "Seasonal_Dream_Vision_(CD)"
+wikirev = 352598
+
+[composer]
+cmp1 = "S.S.H"
+cmp2 = "にょ"
+cmp3 = "岸田"
+cmp4 = "山西利治\\なみへい"
+cmp5 = "ESTi"
+cmp6 = "setzer"
+cmp7 = "矢鴇つかさ"
+cmp8 = "下田祐"
+cmp9 = "ビートまりお"
+cmp10 = "椎名治美"
+cmp11 = "どぶウサギ"
+cmp12 = "九十九百太郎"
+cmp13 = "ZUN"
+
+[01]
+name_jp = "卯月の正月"
+name_en = "New Year's in April"
+composer = 1
+
+[02]
+name_jp = "五月魔人形"
+name_en = "Magic May Dolls"
+composer = 2
+
+[03]
+name_jp = "本物の雨を見抜け"
+name_en = "See Through the Genuine Rainfall"
+composer = 3
+
+[04]
+name_jp = "全ては織姫の為に"
+name_en = "All For Orihime"
+composer = 4
+
+[05]
+name_jp = "幻想の夏、妖怪の夏"
+name_en = "A Fantastic Summer of Youkai"
+composer = 5
+
+[06]
+name_jp = "彼岸街道"
+name_en = "Higan Roadway"
+composer = 6
+
+[07]
+name_jp = "蓬莱の冠雪に何を思うか"
+name_en = "What Do You Think is on Snowcapped Mt. Hourai?"
+composer = 7
+
+[08]
+name_jp = "11月の雨"
+name_en = "November Rain"
+composer = 8
+
+[09]
+name_jp = "過ぎ去る年は柔らかい幻想を運ぶ"
+name_en = "The Past Year Carries a Tender Fantasy"
+composer = 9
+
+[10]
+name_jp = "幻想元旦"
+name_en = "New Year's Fantasy"
+composer = 10
+
+[11]
+name_jp = "八方恵方大胆無敵"
+name_en = "Bold and Untouchable from All Sides"
+composer = 11
+
+[12]
+name_jp = "幻想の桜、三月の紫色"
+name_en = "Cherry Blossoms of Fantasy, Purple of March"
+composer = 12
+
+[13]
+name_jp = "六十年目の東方裁判"
+comment_en = "Twelve \"months\" have come and gone with the arrangers' songs, and finally we return to Gensokyo.\nSomewhat nostalgic, somewhat cute, and leaving no unpleasant feelings behind.\nOut of all my songs, I don't think there are many that are this \"Touhou-like\".\nThis is a song that is fitting for a one-year gap. The story is like that too. :-)"
+name_en = "Eastern Judgement in the Sixtieth Year"
+comment_jp = "アレンジャーの曲で十二ヶ月を一巡りしてきて、最後に幻想郷は元に戻る。どこ\nか懐かしく、どこか可愛らしく、そして嫌な気分を残さない。私の曲の中でもここ\nまで\"東方\"らしい曲は数少ないと思います。これは一年の外に置くのに相応し\nい曲です。小説もあんなだし:-)"
+composer = 13

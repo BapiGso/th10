@@ -1,0 +1,29 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方鈴奈庵　～Forbidden Scrollery"
+name_en = "Touhou Suzunaan ~ Forbidden Scrollery"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2016
+
+packmethod = 0
+
+tracks = 3
+
+[update]
+wikipage = "Forbidden_Scrollery_(CD)"
+wikirev = 366299
+
+[01]
+name_jp = "判読眼のビブロフィリア"
+name_en = "Bibliophile with a Deciphering Eye"
+
+[02]
+name_jp = "運河を行き交う人妖"
+name_en = "Humans and Youkai Traversing the Canal"
+
+[03]
+name_jp = "兎は舞い降りた"
+name_en = "The Rabbit Has Landed"

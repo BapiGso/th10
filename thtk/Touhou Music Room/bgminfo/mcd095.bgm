@@ -1,0 +1,30 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "虹色のセプテントリオン"
+name_en = "Rainbow-Colored Septentrion"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2021
+gamenum = "09.5"
+
+packmethod = 0
+
+tracks = 3
+
+[update]
+wikipage = "Rainbow-Colored_Septentrion"
+wikirev = 0
+
+[01]
+name_jp = "七ツ石の狼、雲を取りに駆ける"
+name_en = "The Wolves of Nanatsuishi Dash to Seize the Clouds"
+
+[02]
+name_jp = "幻想のホワイトトラベラー"
+name_en = "Illusionary White Traveler"
+
+[03]
+name_jp = "あの賑やかな市場は今どこに　〜 Immemorial Marketeers"
+name_en = "Where Is That Bustling Marketplace Now ~ Immemorial Marketeers"

@@ -1,0 +1,223 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方深秘録　～ Urban Legend in Limbo"
+name_en = "Touhou Shinpiroku ~ Urban Legend in Limbo"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2015
+gamenum = "14.5"
+
+packmethod = 6
+encryption = 5
+bgmfile = "th145.pak"
+tracks = 30
+
+[composer]
+cmp1 = "あきやまうに"
+cmp1_en = "U2"
+cmp2 = "ZUN"
+cmp3 = "コンプ"
+cmp3_en = "Comp"
+cmp4 = "oiko"
+cmp5 = "しゃばだば"
+cmp5_en = "ShavaDava"
+cmp6 = "NYO"
+cmp7 = "鯛の小骨"
+cmp7_en = "Tai no Kobone"
+cmp8 = "鷹"
+cmp8_en = "Taka"
+cmp9 = "ゆうゆ"
+cmp9_en = "Yuuyu"
+cmp10 = "岸田"
+cmp10_en = "Kishida"
+cmp11 = "秀三"
+cmp11_en = "Shuzou"
+cmp12 = "どぶウサギ"
+cmp12_en = "Dobu Usagi"
+cmp13 = "ziki_7"
+
+[update]
+wikipage = "Urban_Legend_in_Limbo/Music"
+wikirev = 347742
+
+[01]
+name_jp = "二色蓮花蝶　～ Red and White"
+composer = 3
+name_en = "Dichromatic Lotus Butterfly ~ Red and White"
+filename = "data/bgm/reimu1"
+
+[02]
+name_jp = "恋色マスタースパーク"
+composer = 4
+name_en = "Love-Coloured Master Spark"
+filename = "data/bgm/marisa1"
+
+[03]
+name_jp = "時代親父とハイカラ少女"
+composer = 5
+name_en = "The Traditional Old Man and the Stylish Girl"
+filename = "data/bgm/ichirin1"
+
+[04]
+name_jp = "感情の摩天楼　～ Cosmic Mind"
+composer = 6
+name_en = "Emotional Skyscraper ~ Cosmic Mind"
+filename = "data/bgm/hijiri1"
+
+[05]
+name_jp = "大神神話伝"
+composer = 7
+name_en = "Omiwa Legend"
+filename = "data/bgm/futo1"
+
+[06]
+name_jp = "聖徳伝説　～ True Administrator"
+composer = 8
+name_en = "Shoutoku Legend ~ True Administrator"
+filename = "data/bgm/miko1"
+
+[07]
+name_jp = "芥川龍之介の河童　～ Candid Friend"
+composer = 9
+name_en = "Akutagawa Ryuunosuke's \"Kappa\" ~ Candid Friend"
+filename = "data/bgm/nitori1"
+
+[08]
+name_jp = "ハルトマンの妖怪少女"
+composer = 10
+name_en = "Hartmann's Youkai Girl"
+filename = "data/bgm/koishi1"
+
+[09]
+name_jp = "幻想郷の二ッ岩"
+composer = 11
+name_en = "Futatsuiwa from Gensokyo"
+filename = "data/bgm/mamizou1"
+
+[10]
+name_jp = "亡失のエモーション"
+composer = 12
+name_en = "The Lost Emotion"
+filename = "data/bgm/kokoro1"
+
+[11]
+name_jp = "月まで届け、不死の煙"
+composer = 13
+name_en = "Reach for the Moon, Immortal Smoke"
+filename = "data/bgm/mokou1"
+
+[12]
+name_jp = "輝く針の小人族　～ Little Princess"
+composer = 1
+name_en = "Inchlings of the Shining Needle ~ Little Princess"
+filename = "data/bgm/sinmyoumaru1"
+
+[13]
+name_jp = "心揺さぶる都市伝説"
+composer = 1
+name_en = "Heart-Stirring Urban Legends"
+filename = "data/bgm/title"
+
+[14]
+name_jp = "幻想郷ふしぎ発見"
+composer = 1
+name_en = "Gensokyo Mystery Discovery"
+filename = "data/bgm/select"
+
+[15]
+name_jp = "ボールのある日常"
+composer = 1
+name_en = "An Everyday Life with Balls"
+filename = "data/bgm/ta02"
+
+[16]
+name_jp = "顕現した伝承の形"
+composer = 1
+name_en = "Forms of Manifested Folklore"
+filename = "data/bgm/ta01"
+
+[17]
+name_jp = "時代の風の訪れ"
+composer = 1
+name_en = "Arrival of the Winds of the Era"
+filename = "data/bgm/ta04"
+
+[18]
+name_jp = "価値がわからない"
+composer = 1
+name_en = "The Value Is Unrealized"
+filename = "data/bgm/ta03"
+
+[19]
+name_jp = "可能性を信じて"
+composer = 1
+name_en = "Believe in Possibilities"
+filename = "data/bgm/ta06"
+
+[20]
+name_jp = "真実を知る者"
+composer = 1
+name_en = "Those Who Know the Truth"
+filename = "data/bgm/ta05"
+
+[21]
+name_jp = "外界フォークロア"
+composer = 1
+name_en = "Outside World Folklore"
+filename = "data/bgm/ta07"
+
+[22]
+name_jp = "各々の結末"
+composer = 1
+name_en = "Each Ending"
+filename = "data/bgm/ed"
+
+[23]
+name_jp = "明かされる深秘"
+composer = 1
+name_en = "The Arcane Is Revealed"
+filename = "data/bgm/staffroll"
+
+[24]
+name_jp = "オカルトアラカルト"
+composer = 1
+name_en = "Occult à la Carte"
+filename = "data/bgm/st02_1"
+
+[25]
+name_jp = "七玉蒐集ショウダウン"
+composer = 1
+name_en = "Seven-Orb Collection Showdown"
+filename = "data/bgm/st01_1"
+
+[26]
+name_jp = "公正なる奪い合い"
+composer = 1
+name_en = "Fair Scramble"
+filename = "data/bgm/st03_1"
+
+[27]
+name_jp = "対蹠地の鐘"
+composer = 1
+name_en = "Bell of the Antipodes"
+filename = "data/bgm/st04_1"
+
+[28]
+name_jp = "竹林インフレイム"
+composer = 1
+name_en = "Bamboo Forest in Flames"
+filename = "data/bgm/st05_1"
+
+[29]
+name_jp = "華狭間のバトルフィールド"
+composer = 2
+name_en = "Battlefield of the Flower Threshold"
+filename = "data/bgm/kasen1"
+
+[30]
+name_jp = "ラストオカルティズム　～ 現し世の秘術師"
+composer = 2
+name_en = "Last Occultism ~ Esotericist of the Present World"
+filename = "data/bgm/usami1"

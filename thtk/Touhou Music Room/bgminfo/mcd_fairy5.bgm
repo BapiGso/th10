@@ -1,0 +1,29 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方三月精 ～ Oriental Sacred Place 1"
+name_en = "Touhou Sangetsusei ~ Oriental Sacred Place 1"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+artist = "ZUN"
+year = 2010
+
+packmethod = 0
+
+tracks = 2
+
+[update]
+wikipage = "Oriental_Sacred_Place_1_(CD)"
+wikirev = 342498
+
+[01]
+name_jp = "神域のかくれんぼ暮らし"
+name_en = "The Hide-and-Seek Lifestyle at the Shrine"
+comment_jp = "漫画に合わせて神社に隠れ住む妖精をイメージしました。\n隠れるという行為は本来非常に緊張感のある物ですが、\n妖精達のおっちょこちょいな感じを混ぜて軽快さ多めな曲になってると思います。\n三妖精にしてはちょっとかっこつけすぎたかな。"
+comment_en = "A song made in the image of the manga's setting with the fairies living near the shrine.\nWhile most would be highly nervous while concealing themselves, I tried to blend in the lighter nature that comes with the fairies' short attention span.\nI guess they're trying to show off a bit."
+
+[02]
+name_jp = "妖怪モダンコロニー"
+name_en = "Youkai Modern Colony"
+comment_jp = "古典的な妖怪達の新しい拠り所としての幻想郷をイメージしました。\n地中からわいてきた妖怪達が地上で楽しく遊ぶ、そんなイメージです。\nこれは別のゲームの為に書いた曲のフルバージョンなので、\n三妖精のイメージとはちょっと異なるかも。"
+comment_en = "A song made in the image of the youkai of old establishing new roots in Gensokyo.\nSomething like youkai from underground coming up to the surface to enjoy themselves.\nThis is the full version of a song I made for a different game, so it might not fit the fairies' situation entirely."

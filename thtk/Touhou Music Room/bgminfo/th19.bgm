@@ -1,0 +1,190 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方獣王園　〜 Unfinished Dream of All Living Ghost"
+name_en = "Touhou Juuouen ~ Unfinished Dream of All Living Ghost"
+artist = "ZUN"
+circle = "上海アリス幻樂団"
+circle_en = "Team Shanghai Alice"
+year = 2023
+gamenum = "19"
+
+packmethod = 2
+bgmfile = "thbgm.dat"
+zwavid_08 = 0x00
+zwavid_09 = 0x19
+
+tracks = 24
+
+[thvorbis]
+patchclass = "generic"
+
+[update]
+wikipage = "Unfinished_Dream_of_All_Living_Ghost/Music"
+wikirev = 0
+
+[01]
+name_jp = "獣の知性"
+name_en = "Beasts' Intelligence"
+position = "0x00000010, 0x00032000, 0x019443C0"
+comment_jp = "タイトル画面のテーマです。\n\n獣っぽく力強いタイトル画面にしました。\n重厚さと儚さ、力強さと無力さ、そういった矛盾する要素が\n同居した獣の知性を表現しています。"
+comment_en = "The title screen theme.\n\nI decided to give the title screen some strong, beast-like energy.\nProfoundness and fleetingness, strength and powerlessness;\nthese contradicting elements express the intelligence of the co-existing beasts."
+
+[02]
+name_jp = "世界は可愛く出来ている"
+name_en = "The World's Adorable Artistry"
+position = "0x019443D0, 0x0000F100, 0x01EFF6E8"
+comment_jp = "博麗 霊夢 ＆ ストーリーモード序盤ののテーマです。\n\n霊夢のイメージに寄せつつ、このゲームの雰囲気を\n決定する曲です。\n軽快で楽しく可愛い、この世がこんな世界だったら良いなぁ、\nという思いで作りました。"
+comment_en = "Reimu Hakurei's and the Story Mode's opening theme.\n\nReminiscent of Reimu, this is the song that sets the tone of the game.\nFun, fluffy and cute — wouldn't it be nice if the world was made like that?\n...is what was on my mind when I composed this song."
+
+[03]
+name_jp = "魔獣スクランブル"
+name_en = "Magical Beast Scramble"
+position = "0x03843AB8, 0x0003D520, 0x01524740"
+comment_jp = "霧雨 魔理沙 ＆ ストーリーモード中盤ののテーマです。\n\n疾走感を持ちつつ、怪しい感じの曲にしました。\n魔理沙のイメージを保ちつつ、どんなキャラでもあう様に\nなっていると思います。\nちょっと不気味なくらいがこのゲームっぽいです。"
+comment_en = "Marisa Kirisame's and the Story Mode's midpoint theme.\n\nWith a suspicious feel to it, this song makes you feel like you're dashing.\nIt's meant to fit pretty much any character while retaining Marisa's image.\nIt's a little ominous, but that's also the way this game is."
+
+[04]
+name_jp = "鬼は悠久の山に"
+name_en = "Oni on the Eternal Mountain"
+position = "0x085D4A78, 0x00238040, 0x01AE8B80"
+comment_jp = "伊吹 萃香 ＆ ストーリーモード終盤のテーマです。\n\n山を登るイメージで作りました。\n別に山を登るゲームでは無いんですけどね。\n当初は東風谷早苗のテーマにしようと思って作ったけど\n余りにもキャラのイメージに合わなくて……（笑）"
+comment_en = "Suika Ibuki's and the Story Mode's late game theme.\n\nI composed it with the image of climbing a mountain.
+This game is not a mountain climbing game at all.\nThis song was originally composed to be the theme of Kochiya Sanae.\nIt doesn't match the character's image... (lol)"
+
+[05]
+name_jp = "タイニーシャングリラ"
+name_en = "Tiny Shangri-La"
+position = "0x0A0BD5F8, 0x00235B00, 0x01CCE800"
+comment_jp = "孫 美天のテーマです。\n\n自分の事を孫悟空の生まれ変わりだと思っている猿です。\n定期的に西遊記のようなファンタジーに憧れます。\nこのゲームの世界観をあえて無視して、西遊記をイメージして\n作りました。曲は大変美しく出来て満足です。"
+comment_en = "Son Biten's theme.\n\nShe is a monkey who thinks of herself as Sun Wukong's reincarnation.\nI regularly admire fantasies like 'Journey to the West.'\nI made it by imagining 'Journey to the West', ignoring the universe of this game.\nI am satisfied that the song is very beautifully made."
+
+[06]
+name_jp = "勇敢で有閑な妖獣"
+name_en = "A Brave and Leisurely Beast"
+position = "0x0BD8BDF8, 0x00043000, 0x01BFA200"
+comment_jp = "三頭 慧ノ子のテーマです。\n\n力強さと切なさを持った曲になりました。\n後半ちょっとニヒルな感じも相まって、何ともカッコいい\nと思ってます。それが慧ノ子のイメージに合っているかというと、\nなんとも言えませんが…… "
+comment_en = "Enoko Mitsugashira's theme.\n\nIt became a song with strength and sadness.\nIt's a bit nihilistic in the second half, so I think it sounds cool.\nIf you ask if it fits Enoko's image, I couldn't tell you, though..."
+
+[07]
+name_jp = "吸血怪獣チュパカブラ"
+name_en = "Vampiric Monster Chupacabra"
+position = "0x0D985FF8, 0x0003D400, 0x0172C680"
+comment_jp = "天火人ちやりのテーマです。\n\n彼女はチュパカブラではありません。ありませんが、完全に
+チュパカブラをイメージして曲を作りました。\nチュパカブラって、滑稽な響きと愛らしい（？）見た目が憎めない\n良い妖怪ですよね。彼女はチュパカブラではありませんが。 "
+comment_en = "Chiyari Tenkajin's theme.\n\nShe is not a chupacabra. However, I made a song with a complete image of chupacabra.\nI can't hate Chupacabra's funny sound and lovely(?) appearance, so it's a good youkai.\nShe's not a chupacabra though."
+
+[08]
+name_jp = "振り向かない黄泉の道"
+name_en = "The Path to Yomi Where None Turn Back"
+position = "0x0F0B2678, 0x00179100, 0x01AE0F00"
+comment_jp = "豫母都 日狭美のテーマです。\n\n変拍子がずいずいっと背中を押して、気付いたら\n引き返せない所まで行ってしまいそうな曲です。\n不気味さが美しく、そして儚い曲になりました。\n判りやすく言うと、イメージとしては５面道中ですね（笑）。"
+comment_en = "Hisami Yomotsu's theme.\n\nIt's a song that seems to go to a place where there's no turning back\nif the strange beat pushes your back all the way.\nThe eerie became a beautiful and it became a fleeting song.\nTo put it simply, it's in the middle of stage 5 as an image (lol)."
+
+[09]
+name_jp = "逸脱者達の無礙光　～ Kingdam of Nothingness."
+name_en = "The Unobstructed Light of the Deviants ~ Kingdom of Nothingness"
+position = "0x10B93578, 0x00075600, 0x0240D200"
+comment_jp = "日白 残無のテーマです。\n\nかっこよさと不思議さをエキゾチックに味付けしました。\n同じ強いフレーズを何度も繰り返しているうちに、感情が\nコロコロと変わってく面白い曲です。\nそれは見え方がコロコロと変わる彼女の魅力でもあります。"
+comment_en = "Zanmu Nippaku's theme.\n\nIt is exoticly flavored with coolness and wonder.\nIt's an interesting song that changes emotions by repeating the same strong phrase several times.\nThat's her charm as well, with one's viewpoint changing at every turn."
+
+[10]
+name_jp = "少女が見た日本の原風景"
+name_en = "The Primal Scene of Japan the Girl Saw"
+position = "0x12FA0778, 0x00059680, 0x01CEA840"
+comment_jp = "東風谷 早苗のテーマです。\n\n風神録の曲のアレンジです。"
+comment_en = "Sanae Kochiya's theme.\n\nAn arrange of the Stage 5 theme from Mountain of Faith."
+
+[11]
+name_jp = "妖々跋扈　～ Who done it!"
+name_en = "Spiritual Domination ~ Who done it!"
+position = "0x14C8AFB8, 0x00290380, 0x015EA400"
+comment_jp = "八雲 藍のテーマです。\n\n妖々夢の曲のアレンジです。"
+comment_en = "Ran Yakumo's theme.\n\nAn arrange of the Extra Stage theme from Perfect Cherry Blossom."
+
+[12]
+name_jp = "一対の神獣"
+name_en = "A Pair of Divine Beasts"
+position = "0x06FF7E78, 0x0009D000, 0x015DCC00"
+comment_jp = "高麗野 あうんのテーマです。\n\n天空璋の曲のアレンジです。"
+comment_en = "Aunn Komano's theme.\n\nAn arrange of her theme from Hidden Star in Four Seasons."
+
+[13]
+name_jp = "春の湊に"
+name_en = "At the Harbor of Spring"
+position = "0x04D681F8, 0x00234C80, 0x01056C80"
+comment_jp = "ナズーリンのテーマです。\n\n星蓮船の曲のアレンジです。"
+comment_en = "Nazrin's theme.\n\nAn arrange of the Stage 1 theme from Undefined Fantastic Object."
+
+[14]
+name_jp = "忘れがたき、よすがの緑"
+name_en = "Unforgettable, the Nostalgic Greenery"
+position = "0x05DBEE78, 0x00047000, 0x01239000"
+comment_jp = "清蘭のテーマです。\n\n紺珠伝の曲のアレンジです。"
+comment_en = "Seiran's theme.\n\nAn arrange of the Stage 1 theme from Legacy of Lunatic Kingdom."
+
+[15]
+name_jp = "死体旅行　～ Be of good cheer!"
+name_en = "Corpse Voyage ~ Be of good cheer!"
+position = "0x162753B8, 0x00078180, 0x01105080"
+comment_jp = "火焔猫 燐のテーマです。\n\n地霊殿の曲のアレンジです。"
+comment_en = "Rin Kaenbyou's theme.\n\nAn arrange of her theme from Subterranean Animism."
+
+[16]
+name_jp = "待ちわびた逢魔が時"
+name_en = "The Long-Awaited Oumagatoki"
+position = "0x1737A438, 0x0001F280, 0x01CB0800"
+comment_jp = "菅牧 典のテーマです。\n\n虹龍洞の曲のアレンジです。"
+comment_en = "Tsukasa Kudamaki's theme.\n\nAn arrange of the Stage 5 theme from Unconnected Marketeers."
+
+[17]
+name_jp = "佐渡の二ッ岩"
+name_en = "Futatsuiwa from Sado"
+position = "0x1902AC38, 0x00228A80, 0x0183AA00"
+comment_jp = "二ッ岩マミゾウのテーマです。\n\n神霊廟の曲のアレンジです。"
+comment_en = "Mamizou Futatsuiwa's theme.\n\nAn arrange of her theme from Ten Desires."
+
+[18]
+name_jp = "トータスドラゴン　～ 幸運と不運"
+name_en = "Tortoise Dragon ~ Fortune and Misfortune"
+position = "0x1A865638, 0x0003B980, 0x01C3D000"
+comment_jp = "二ッ岩マミゾウのテーマです。\n\n鬼形獣の曲のアレンジです。\n"
+comment_en = "Yachie Kicchou's theme.\n\nAn arrange of her theme from Wily Beast and Weakest Creature."
+
+[19]
+name_jp = "聖徳太子のペガサス　～ Dark Pegasus"
+name_en = "Prince Shoutoku's Pegasus ~ Dark Pegasus"
+position = "0x1C4A2638, 0x003F9E00, 0x0262D600"
+comment_jp = "驪駒 早鬼のテーマです。\n\n鬼形獣の曲のアレンジです。"
+comment_en = "Saki Kurokoma's theme.\n\nAn arrange of her theme from Wily Beast and Weakest Creature."
+
+[20]
+name_jp = "強欲な獣のメメント"
+name_en = "Memento of an Avaricious Beast"
+position = "0x1EACFC38, 0x0003C800, 0x02AC6000"
+comment_jp = "驪駒 早鬼のテーマです。\n\n剛欲異聞の曲のアレンジです。"
+comment_en = "Yuuma Toutetsu's theme.\n\nAn arrange of her theme from Sunken Fossil World."
+
+[21]
+name_jp = "獣王達の休息"
+name_en = "The Beast Kings' Rest"
+position = "0x21595C38, 0x0004E520, 0x00504F20"
+comment_jp = "エンディングのテーマです。\n\nまあ、いつもの感じです。\nちょっと心落ち着きます。"
+comment_en = "This is the ending theme.\n\nWell, it's the usual feeling.\nIt calms me down."
+
+[22]
+name_jp = "獣に知性はあるか"
+name_en = "Do Beasts Have Intelligence?"
+position = "0x21A9AB58, 0x00D42A00, 0x00F5F200"
+comment_jp = "スタッフロールのテーマです。\n\nタイトル画面のアレンジです。\nここで言う獣って開発スタッフのことですね。"
+comment_en = "This is the staff roll theme.\n\nThis is the arrangement of the title screen.\nThe beasts here means the development staff."
+
+[23]
+name_jp = "曲名不明1(会話シーンBGM1)"
+name_en = "Pre-Battle Conversation theme 1"
+position = "0x229F9D58, 0x00079200, 0x00482D00"
+
+[24]
+name_jp = "曲名不明2(会話シーンBGM2)"
+name_en = "Pre-Battle Conversation theme 2"
+position = "0x22E7CA58, 0x000409E0, 0x0044A1E0"

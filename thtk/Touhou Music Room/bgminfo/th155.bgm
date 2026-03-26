@@ -1,0 +1,401 @@
+﻿# Music Room Interface Info
+
+[game]
+name = "東方憑依華　～ Antinomy of Common Flowers"
+name_en = "Touhou Hyouibana ~ Antinomy of Common Flowers"
+circle = "黄昏フロンティア"
+circle_en = "Twilight Frontier"
+year = 2017
+gamenum = "15.5"
+
+packmethod = 6
+encryption = 5
+bgmfile = "th155.pak"
+tracks = 58
+
+[composer]
+cmp1 = "コンプ"
+cmp1_en = "Comp"
+cmp2 = "oiko"
+cmp3 = "しゃばだば"
+cmp3_en = "ShavaDava"
+cmp4 = "NYO"
+cmp5 = "鯛の小骨"
+cmp5_en = "Tai no Kobone"
+cmp6 = "鷹"
+cmp6_en = "Taka"
+cmp7 = "ゆうゆ"
+cmp7_en = "Yuuyu"
+cmp8 = "岸田"
+cmp8_en = "Kishida"
+cmp9 = "秀三"
+cmp9_en = "Shuzou"
+cmp10 = "どぶウサギ"
+cmp10_en = "Dobu Usagi"
+cmp11 = "ziki_7"
+cmp12 = "ぴずや"
+cmp12_en = "pizuya"
+cmp13 = "Kou Ogata"
+cmp14 = "ARM"
+cmp15 = "ビートまりお"
+cmp15_en = "BeatMario"
+cmp16 = "狐夢想"
+cmp16_en = "Komso"
+cmp17 = "紅い流星"
+cmp17_en = "Akai Ryuusei"
+cmp18 = "ELEMENTAS"
+cmp19 = "あきやまうに"
+cmp19_en = "U2"
+cmp20 = "ZUN"
+
+[update]
+wikipage = "Antinomy_of_Common_Flowers/Music"
+wikirev = 385465
+
+[01]
+name_jp = "二色蓮花蝶　～ Red and White"
+composer = 1
+name_en = "Dichromatic Lotus Butterfly ~ Red and White"
+filename = "data/bgm/155reimu1"
+
+[02]
+name_jp = "恋色マスタースパーク"
+composer = 2
+name_en = "Love-Coloured Master Spark"
+filename = "data/bgm/155marisa1"
+
+[03]
+name_jp = "時代親父とハイカラ少女"
+composer = 3
+name_en = "The Traditional Old Man and the Stylish Girl"
+filename = "data/bgm/155ichirin1"
+
+[04]
+name_jp = "感情の摩天楼　～ Cosmic Mind"
+composer = 4
+name_en = "Emotional Skyscraper ~ Cosmic Mind"
+filename = "data/bgm/155hijiri1"
+
+[05]
+name_jp = "大神神話伝"
+composer = 5
+name_en = "Omiwa Legend"
+filename = "data/bgm/155futo1"
+
+[06]
+name_jp = "聖徳伝説　～ True Administrator"
+composer = 6
+name_en = "Shoutoku Legend ~ True Administrator"
+filename = "data/bgm/155miko1"
+
+[07]
+name_jp = "芥川龍之介の河童　～ Candid Friend"
+composer = 7
+name_en = "Akutagawa Ryuunosuke's \"Kappa\" ~ Candid Friend"
+filename = "data/bgm/155nitori1"
+
+[08]
+name_jp = "ハルトマンの妖怪少女"
+composer = 8
+name_en = "Hartmann's Youkai Girl"
+filename = "data/bgm/155koishi1"
+
+[09]
+name_jp = "幻想郷の二ッ岩"
+composer = 9
+name_en = "Futatsuiwa from Gensokyo"
+filename = "data/bgm/155mamizou1"
+
+[10]
+name_jp = "亡失のエモーション"
+composer = 10
+name_en = "The Lost Emotion"
+filename = "data/bgm/155kokoro1"
+
+[11]
+name_jp = "月まで届け、不死の煙"
+composer = 11
+name_en = "Reach for the Moon, Immortal Smoke"
+filename = "data/bgm/155mokou1"
+
+[12]
+name_jp = "輝く針の小人族　～ Little Princess"
+composer = 12
+name_en = "Inchlings of the Shining Needle ~ Little Princess"
+filename = "data/bgm/155sinmyoumaru1"
+
+[13]
+name_jp = "華狭間のバトルフィールド"
+composer = 13
+name_en = "Battlefield of the Flower Threshold"
+filename = "data/bgm/155kasen1"
+
+[14]
+name_jp = "ラストオカルティズム　～ 現し世の秘術師"
+composer = 14
+name_en = "Last Occultism ~ Esotericist of the Present World"
+filename = "data/bgm/155usami1"
+
+[15]
+name_jp = "狂気の瞳　～ Invisible Full Moon"
+composer = 15
+name_en = "Lunatic Eyes ~ Invisible Full Moon"
+filename = "data/bgm/155udonge1"
+
+[16]
+name_jp = "永遠の春夢"
+composer = 16
+name_en = "Eternal Spring Dream"
+filename = "data/bgm/155doremy1"
+
+[17]
+name_jp = "有頂天変　～ Wonderful Heaven"
+composer = 17
+name_en = "Catastrophe in Bhavaagra ~ Wonderful Heaven"
+filename = "data/bgm/155tenshi1"
+
+[18]
+name_jp = "夜が降りてくる　～ Evening Star"
+composer = 18
+name_en = "Night Falls ~ Evening Star"
+filename = "data/bgm/155yukari1"
+
+[19]
+name_jp = "地の色は黄色　～ Primrose"
+composer = 19
+name_en = "The Ground's Color is Yellow ~ Primrose"
+filename = "data/bgm/bgst01"
+
+[20]
+name_jp = "マッシュルーム・ワルツ"
+composer = 19
+name_en = "Mushroom Waltz"
+filename = "data/bgm/bgst02"
+
+[21]
+name_jp = "聖輦船空を往く"
+composer = 19
+name_en = "The Palanquin Ship Flies in the Sky"
+filename = "data/bgm/bgst03"
+
+[22]
+name_jp = "法力の下の平等"
+composer = 19
+name_en = "Equality Under the Law of Dharma"
+filename = "data/bgm/bgst04"
+
+[23]
+name_jp = "恒常不変の参廟祀"
+composer = 19
+name_en = "Constant and Unchanging Temple of Worship"
+filename = "data/bgm/bgst05"
+
+[24]
+name_jp = "光輝く天球儀"
+composer = 19
+name_en = "Shining Armillary Sphere"
+filename = "data/bgm/bgst06"
+
+[25]
+name_jp = "沢の河童の技術力"
+composer = 19
+name_en = "The Ravine Kappa's Technological Prowess"
+filename = "data/bgm/bgst07"
+
+[26]
+name_jp = "地底に咲く薔薇"
+composer = 19
+name_en = "A Rose Blooming in the Underworld"
+filename = "data/bgm/bgst08"
+
+[27]
+name_jp = "深緑の狸森にて"
+composer = 19
+name_en = "In the Deep-Green Tanuki Forest"
+filename = "data/bgm/bgst09"
+
+[28]
+name_jp = "心綺楼演舞"
+composer = 19
+name_en = "Shinkirou Theatrical"
+filename = "data/bgm/bgst10"
+
+[29]
+name_jp = "不滅のレッドソウル"
+composer = 19
+name_en = "Immortal Red Soul"
+filename = "data/bgm/bgst11"
+
+[30]
+name_jp = "落日に映える逆さ城"
+composer = 19
+name_en = "The Inverted Castle Lit by the Setting Sun"
+filename = "data/bgm/bgst12"
+
+[31]
+name_jp = "千の試練を超えて"
+composer = 19
+name_en = "Overcome a Thousand Trials"
+filename = "data/bgm/bgst13"
+
+[32]
+name_jp = "夢世界フォークロア"
+composer = 19
+name_en = "Dream World Folklore"
+filename = "data/bgm/bgst14"
+
+[33]
+name_jp = "永遠に続く回廊"
+composer = 19
+name_en = "Corridor Stretching to Eternity"
+filename = "data/bgm/bgst15"
+
+[34]
+name_jp = "スリープシープパレード"
+composer = 19
+name_en = "Sleep Sheep Parade"
+filename = "data/bgm/bgst16"
+
+[35]
+name_jp = "至る有頂天"
+composer = 19
+name_en = "Bhavaagra as Far as the Eye Can See"
+filename = "data/bgm/bgst17"
+
+[36]
+name_jp = "憑坐は夢と現の間に　～ Necro-Fantasia"
+composer = 20
+name_en = "Yorimashi Between Dreams and Reality ~ Necro-Fantasia"
+filename = "data/bgm/midboss"
+
+[37]
+name_jp = "今宵は飄逸なエゴイスト(Live ver)　～ Egoistic Flowers."
+composer = 20
+name_en = "Tonight Stars an Easygoing Egoist (Live ver.) ~ Egoistic Flowers."
+filename = "data/bgm/lastboss"
+
+[38]
+name_jp = "オカルトアトラクト"
+composer = 19
+name_en = "Occult Attract"
+filename = "data/bgm/145st01"
+
+[39]
+name_jp = "ネオ竹林インフレイム"
+composer = 19
+name_en = "Neo Bamboo Forest in Flames"
+filename = "data/bgm/145st02"
+
+[40]
+name_jp = "億万劫の鐘"
+composer = 19
+name_en = "Bell of Aeons"
+filename = "data/bgm/145st03"
+
+[41]
+name_jp = "アンノウンX　～ Occultly Madness"
+composer = 20
+name_en = "Unknown X ~ Occultly Madness"
+filename = "data/bgm/145st04"
+
+[42]
+name_jp = "憑依投合"
+composer = 19
+name_en = "Being Things Eye To Eye"
+filename = "data/bgm/story01"
+
+[43]
+name_jp = "連帯責人"
+composer = 19
+name_en = "The One Jointly Responsible"
+filename = "data/bgm/story02"
+
+[44]
+name_jp = "合縁奇縁"
+composer = 19
+name_en = "An Odd Couple"
+filename = "data/bgm/story03"
+
+[45]
+name_jp = "異心同体"
+composer = 19
+name_en = "Two Minds of One Body"
+filename = "data/bgm/story04"
+
+[46]
+name_jp = "壮言大語"
+composer = 19
+name_en = "Grandiloquence"
+filename = "data/bgm/story05"
+
+[47]
+name_jp = "知略縦横"
+composer = 19
+name_en = "Scheming Outside the Box"
+filename = "data/bgm/story06"
+
+[48]
+name_jp = "意気揚々"
+composer = 19
+name_en = "In High Spirits"
+filename = "data/bgm/story07"
+
+[49]
+name_jp = "開演間近"
+composer = 19
+name_en = "The Curtain Shall Rise Soon"
+filename = "data/bgm/story08"
+
+[50]
+name_jp = "天衣無縫　～ Yellow Lily"
+composer = 19
+name_en = "Flawless as Clothing of the Celestials ~ Yellow Lily"
+filename = "data/bgm/story09"
+
+[51]
+name_jp = "行雲流水"
+composer = 19
+name_en = "Floating with the Tide"
+filename = "data/bgm/ending"
+
+[52]
+name_jp = "異変の種子"
+composer = 19
+name_en = "Seeds of the Incident"
+filename = "data/bgm/th155op1"
+
+[53]
+name_jp = "疑惑の芽生え"
+composer = 19
+name_en = "Sprouts of Suspicion"
+filename = "data/bgm/th155op2"
+
+[54]
+name_jp = "未だ蕾む憑依華"
+composer = 19
+name_en = "Possession Flowers Yet to Bud"
+filename = "data/bgm/staffroll0"
+
+[55]
+name_jp = "真相へ繋がる枝葉"
+composer = 19
+name_en = "Branches Reaching to the Truth"
+filename = "data/bgm/th155op3"
+
+[56]
+name_jp = "咲き誇る憑依華"
+composer = 19
+name_en = "Possession Flowers in Full Bloom"
+filename = "data/bgm/staffroll1"
+
+[57]
+name_jp = "舞い散る憑依華吹雪"
+composer = 19
+name_en = "Blizzard of Scattering Possession Flowers"
+filename = "data/bgm/th155op4"
+
+[58]
+name_jp = "悠久の蒸気機関"
+composer = 13
+name_en = "The Eternal Steam Engine"
+filename = "data/bgm/staffroll2"
