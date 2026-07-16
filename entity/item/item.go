@@ -1,11 +1,8 @@
 package item
 
 import (
-	"th10/collision"
-	"th10/render"
 	"math"
-
-	"github.com/hajimehoshi/ebiten/v2"
+	"th10/collision"
 )
 
 // ItemType 道具类型
@@ -130,12 +127,4 @@ func (p *Pool) Each(fn func(it *Item)) {
 			fn(&p.items[i])
 		}
 	}
-}
-
-// DrawLayer 渲染层
-func (it *Item) DrawLayer() render.Layer { return render.LayerItem }
-
-// Draw 绘制道具
-func (it *Item) Draw(screen *ebiten.Image) {
-	// TODO: 根据 Type 绘制道具贴图
 }

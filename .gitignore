@@ -1,11 +1,34 @@
-assets/img/*
-assets/ttf/*
-assets/wav/*
-
 # 第三方工具 / 旧代码
 thtk/
 mof/
 
+.claude
+CLAUDE.md
+
+# 运行期产物
+data/*.json
+.tmp
+.tmp/
+tmp/
+uploads/
+
 # IDE / 系统文件
 .*
 *.exe
+*.log
+Thumbs.db
+Desktop.ini
+
+# 构建 / 测试产物
+bin/
+build/
+dist/
+*.test
+coverage.out
+
+# 原始大媒体文件
+*.wav
+*.WAV
+*.mkv
+*.mp4
+*.psd

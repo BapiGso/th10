@@ -49,3 +49,75 @@ var TH10Stages = [7]StageInfo{
 		MidBoss: "東風谷早苗", Boss: "洩矢諏訪子",
 	},
 }
+
+// 文本标签 ----------------------------------------------------------------
+
+var (
+	characterNames  = [2]string{"博丽灵梦", "雾雨魔理沙"}
+	characterTitles = [2]string{"乐园的巫女", "普通的魔法使"}
+
+	// 短名（HUD / 存档摘要用）
+	shotNames = [2][3]string{
+		{"灵符", "梦符", "神符"},
+		{"魔符", "恋符", "星符"},
+	}
+	// 长名（选机界面专用，含弹幕风格说明）
+	shotDescriptions = [2][3]string{
+		{"灵符（诱导弹）", "梦符（前方集中）", "神符（巫女敏符）"},
+		{"魔符（魔法导弹）", "恋符（Master Spark）", "星符（星屑光线）"},
+	}
+
+	difficultyNames = [5]string{"Easy", "Normal", "Hard", "Lunatic", "Extra"}
+)
+
+func CharacterName(id int) string {
+	if id < 0 || id >= len(characterNames) {
+		return "未知角色"
+	}
+	return characterNames[id]
+}
+
+// CharacterTitle 角色称号（"乐园的巫女" 等），仅选机界面用。
+func CharacterTitle(id int) string {
+	if id < 0 || id >= len(characterTitles) {
+		return ""
+	}
+	return characterTitles[id]
+}
+
+func ShotName(character, shotType int) string {
+	if character < 0 || character >= len(shotNames) {
+		return "未知装备"
+	}
+	row := shotNames[character]
+	if shotType < 0 || shotType >= len(row) {
+		return "未知装备"
+	}
+	return row[shotType]
+}
+
+// ShotDescription 装备长名（含弹幕风格描述），选机界面用。
+func ShotDescription(character, shotType int) string {
+	if character < 0 || character >= len(shotDescriptions) {
+		return "未知装备"
+	}
+	row := shotDescriptions[character]
+	if shotType < 0 || shotType >= len(row) {
+		return "未知装备"
+	}
+	return row[shotType]
+}
+
+func DifficultyName(id int) string {
+	if id < 0 || id >= len(difficultyNames) {
+		return "Unknown"
+	}
+	return difficultyNames[id]
+}
+
+func StageName(stage int) string {
+	if stage >= 1 && stage <= len(TH10Stages) {
+		return TH10Stages[stage-1].Name
+	}
+	return "Unknown Stage"
+}

@@ -2,14 +2,12 @@ package playerbullet
 
 import (
 	"th10/collision"
-	"th10/render"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // Bullet 自机子弹
 type Bullet struct {
 	X, Y   float64
+	VX     float64
 	VY     float64 // 向上飞，通常为负值
 	Damage int
 	Width  float64 // 判定宽
@@ -27,11 +25,11 @@ func NewPool(capacity int) *Pool {
 }
 
 // Fire 发射一颗自机子弹
-func (p *Pool) Fire(x, y, vy float64, damage int) {
+func (p *Pool) Fire(x, y, vx, vy float64, damage int) {
 	for i := range p.bullets {
 		if !p.bullets[i].Active {
 			p.bullets[i] = Bullet{
-				X: x, Y: y, VY: vy,
+				X: x, Y: y, VX: vx, VY: vy,
 				Damage: damage,
 				Width:  6, Height: 12,
 				Active: true,
@@ -48,6 +46,7 @@ func (p *Pool) Update() {
 		if !b.Active {
 			continue
 		}
+		b.X += b.VX
 		b.Y += b.VY
 		if b.Y < -20 {
 			b.Active = false
@@ -78,12 +77,4 @@ func (p *Pool) Each(fn func(b *Bullet)) {
 			fn(&p.bullets[i])
 		}
 	}
-}
-
-// DrawLayer 自机子弹层
-func (b *Bullet) DrawLayer() render.Layer { return render.LayerPlayerBullet }
-
-// Draw 绘制自机子弹（占位）
-func (b *Bullet) Draw(screen *ebiten.Image) {
-	// TODO: 绘制自机子弹贴图
 }

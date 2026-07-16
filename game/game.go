@@ -1,17 +1,19 @@
 package game
 
 import (
+	"fmt"
 	thaudio "th10/audio"
 	"th10/input"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 const (
 	ScreenWidth  = 640
 	ScreenHeight = 480
-	SampleRate   = 44100
+	SampleRate   = 48000
 
 	// 游戏区域（左侧留给弹幕，右侧留给 HUD）
 	FieldLeft   = 32
@@ -34,14 +36,21 @@ type Game struct {
 	audioContext *audio.Context
 	audioMgr     *thaudio.Manager
 	Config       *Config
+	Save         *SaveData
 }
 
 func New() *Game {
 	ctx := audio.NewContext(SampleRate)
+	cfg := LoadConfig()
+	save := LoadSaveData()
+	audioMgr := thaudio.NewManager(ctx)
+	audioMgr.SetBGMVolume(cfg.BGMVolume)
+	audioMgr.SetSEVolume(cfg.SEVolume)
 	g := &Game{
 		audioContext: ctx,
-		audioMgr:     thaudio.NewManager(ctx),
-		Config:       DefaultConfig(),
+		audioMgr:     audioMgr,
+		Config:       cfg,
+		Save:         save,
 	}
 	return g
 }
@@ -53,6 +62,9 @@ func (g *Game) SetScene(s Scene) {
 func (g *Game) Update() error {
 	// 每帧最先采集输入（文章第10篇：输入采集在数据处理之前）
 	input.Global.Update()
+	if g.audioMgr != nil {
+		g.audioMgr.Update()
+	}
 
 	if g.nextSet {
 		g.current = g.next
@@ -69,6 +81,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.current != nil {
 		g.current.Draw(screen)
 	}
+	// 全局 FPS 显示（右下角）
+	fps := fmt.Sprintf("%.0f FPS", ebiten.ActualFPS())
+	ebitenutil.DebugPrintAt(screen, fps, ScreenWidth-70, ScreenHeight-16)
 }
 
 func (g *Game) Layout(_, _ int) (int, int) {

@@ -1,0 +1,6 @@
+frame 0600 hash dcb733c8cc4b7e0a enemies 6 bullets 0
+frame 1200 hash 3771ac300f2bdc62 enemies 11 bullets 38
+frame 1800 hash 39bd3110eb3273b6 enemies 20 bullets 10
+frame 2400 hash 33c5a80143b080cc enemies 24 bullets 41
+frame 3000 hash 73de32728d390b33 enemies 3 bullets 95
+frame 3600 hash 7deffa1085fb97e6 enemies 6 bullets 212

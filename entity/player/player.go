@@ -5,9 +5,6 @@ import (
 	"th10/entity/playerbullet"
 	"th10/game"
 	"th10/input"
-	"th10/render"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // AnimState 行走图动画状态
@@ -75,8 +72,8 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 		X: centerX, Y: fieldB - 48,
 		Speed: 4.5, FocusSpeed: 2,
 		HitboxRadius: 2, GrazeRadius: 16,
-		GS:    gs,
-		State: StateNormal,
+		GS:        gs,
+		State:     StateNormal,
 		FieldLeft: fieldL, FieldTop: fieldT,
 		FieldRight: fieldR, FieldBottom: fieldB,
 		Bullets: playerbullet.NewPool(256),
@@ -174,14 +171,177 @@ func (p *Player) move(in *input.State) {
 }
 
 func (p *Player) shoot(in *input.State) {
-	if in.IsPressed(input.KeyShot) {
-		p.ShootTimer++
-		if p.ShootTimer%shootInterval == 0 {
-			p.Bullets.Fire(p.X-8, p.Y-16, -12, 10)
-			p.Bullets.Fire(p.X+8, p.Y-16, -12, 10)
-		}
-	} else {
+	if !in.IsPressed(input.KeyShot) {
 		p.ShootTimer = 0
+		return
+	}
+	p.ShootTimer++
+	if p.ShootTimer%shootInterval != 0 {
+		return
+	}
+
+	focused := in.IsPressed(input.KeyFocus)
+	switch p.GS.Character {
+	case game.CharMarisa:
+		switch p.GS.ShotType {
+		case game.ShotA:
+			p.shootMarisaA(focused)
+		case game.ShotB:
+			p.shootMarisaB(focused)
+		default:
+			p.shootMarisaC(focused)
+		}
+	default:
+		switch p.GS.ShotType {
+		case game.ShotA:
+			p.shootReimuA(focused)
+		case game.ShotB:
+			p.shootReimuB(focused)
+		default:
+			p.shootReimuC(focused)
+		}
+	}
+}
+
+func (p *Player) powerTier() int {
+	tier := p.GS.Power / 100
+	if tier < 0 {
+		return 0
+	}
+	if tier > 5 {
+		return 5
+	}
+	return tier
+}
+
+func (p *Player) fireShot(dx, dy, vx, vy float64, damage int) {
+	p.Bullets.Fire(p.X+dx, p.Y+dy, vx, vy, damage)
+}
+
+func (p *Player) shootReimuA(focused bool) {
+	tier := p.powerTier()
+	side := 1.8
+	if focused {
+		side = 0.7
+	}
+	p.fireShot(-8, -16, 0, -12, 8)
+	p.fireShot(8, -16, 0, -12, 8)
+	if tier >= 1 {
+		p.fireShot(-18, -10, -side, -11, 5)
+		p.fireShot(18, -10, side, -11, 5)
+	}
+	if tier >= 3 {
+		p.fireShot(-4, -20, -side*0.6, -13, 7)
+		p.fireShot(4, -20, side*0.6, -13, 7)
+	}
+	if tier >= 5 {
+		p.fireShot(-24, -8, -side*1.3, -10, 4)
+		p.fireShot(24, -8, side*1.3, -10, 4)
+	}
+}
+
+func (p *Player) shootReimuB(focused bool) {
+	tier := p.powerTier()
+	spread := 0.8
+	if focused {
+		spread = 0.2
+	}
+	p.fireShot(-6, -16, -spread, -13, 10)
+	p.fireShot(6, -16, spread, -13, 10)
+	if tier >= 1 {
+		p.fireShot(-2, -18, 0, -14, 7)
+		p.fireShot(2, -18, 0, -14, 7)
+	}
+	if tier >= 3 {
+		p.fireShot(-12, -14, -spread*0.5, -13, 8)
+		p.fireShot(12, -14, spread*0.5, -13, 8)
+	}
+	if tier >= 5 {
+		p.fireShot(-1, -22, 0, -15, 12)
+		p.fireShot(1, -22, 0, -15, 12)
+	}
+}
+
+func (p *Player) shootReimuC(focused bool) {
+	tier := p.powerTier()
+	spread := 2.0
+	if focused {
+		spread = 0.9
+	}
+	p.fireShot(-10, -16, -spread, -11.5, 7)
+	p.fireShot(0, -18, 0, -13, 9)
+	p.fireShot(10, -16, spread, -11.5, 7)
+	if tier >= 2 {
+		p.fireShot(-20, -12, -spread*1.2, -10.5, 5)
+		p.fireShot(20, -12, spread*1.2, -10.5, 5)
+	}
+	if tier >= 4 {
+		p.fireShot(-5, -20, -spread*0.4, -13, 7)
+		p.fireShot(5, -20, spread*0.4, -13, 7)
+	}
+}
+
+func (p *Player) shootMarisaA(focused bool) {
+	tier := p.powerTier()
+	spread := 0.5
+	if !focused {
+		spread = 1.0
+	}
+	p.fireShot(-7, -14, -spread, -11, 12)
+	p.fireShot(7, -14, spread, -11, 12)
+	if tier >= 1 {
+		p.fireShot(-15, -10, -spread*1.4, -10, 8)
+		p.fireShot(15, -10, spread*1.4, -10, 8)
+	}
+	if tier >= 3 {
+		p.fireShot(-2, -18, -spread*0.4, -12, 11)
+		p.fireShot(2, -18, spread*0.4, -12, 11)
+	}
+	if tier >= 5 {
+		p.fireShot(-22, -8, -spread*1.7, -9.5, 6)
+		p.fireShot(22, -8, spread*1.7, -9.5, 6)
+	}
+}
+
+func (p *Player) shootMarisaB(focused bool) {
+	tier := p.powerTier()
+	spread := 0.35
+	if !focused {
+		spread = 0.8
+	}
+	p.fireShot(-10, -14, -spread, -14.5, 8)
+	p.fireShot(-3, -16, -spread*0.3, -15, 8)
+	p.fireShot(3, -16, spread*0.3, -15, 8)
+	p.fireShot(10, -14, spread, -14.5, 8)
+	if tier >= 2 {
+		p.fireShot(-16, -10, -spread*0.8, -13.5, 7)
+		p.fireShot(16, -10, spread*0.8, -13.5, 7)
+	}
+	if tier >= 4 {
+		p.fireShot(0, -20, 0, -16, 14)
+	}
+}
+
+func (p *Player) shootMarisaC(focused bool) {
+	tier := p.powerTier()
+	spread := 2.4
+	if focused {
+		spread = 1.1
+	}
+	p.fireShot(-6, -15, -spread*0.7, -12, 8)
+	p.fireShot(0, -18, 0, -13.5, 10)
+	p.fireShot(6, -15, spread*0.7, -12, 8)
+	if tier >= 1 {
+		p.fireShot(-18, -11, -spread, -10.5, 6)
+		p.fireShot(18, -11, spread, -10.5, 6)
+	}
+	if tier >= 3 {
+		p.fireShot(-10, -20, -spread*0.35, -13, 8)
+		p.fireShot(10, -20, spread*0.35, -13, 8)
+	}
+	if tier >= 5 {
+		p.fireShot(-26, -6, -spread*1.1, -9.5, 5)
+		p.fireShot(26, -6, spread*1.1, -9.5, 5)
 	}
 }
 
@@ -242,16 +402,5 @@ func (p *Player) AddPower(n int) {
 	p.GS.Power = int(math.Min(float64(p.GS.Power+n), 500))
 }
 
-// DrawLayer 渲染层
-func (p *Player) DrawLayer() render.Layer { return render.LayerPlayer }
-
-// Draw 绘制自机
-func (p *Player) Draw(screen *ebiten.Image) {
-	if p.State == StateRespawn && p.InvincTimer%6 < 3 {
-		return
-	}
-	if p.State == StateDead {
-		return
-	}
-	// TODO: 根据 AnimState/AnimFrame/FaceRight 从 spritesheet 切图绘制
-}
+// BombDuration 返回符卡持续帧数，供 UI（如 Bomb 闪光）计算进度。
+func BombDuration() int { return bombDuration }

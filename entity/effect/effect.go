@@ -1,31 +1,25 @@
 package effect
 
-import (
-	"th10/render"
-
-	"github.com/hajimehoshi/ebiten/v2"
-)
-
 // Type 特效类型
 type Type int
 
 const (
-	TypeExplosion Type = iota // 爆炸
-	TypeGraze                 // 擦弹火花
-	TypePlayerDead            // 自机被弹
-	TypeBulletCancel          // 子弹消除
-	TypePowerUp               // 升级闪光
+	TypeExplosion    Type = iota // 爆炸
+	TypeGraze                    // 擦弹火花
+	TypePlayerDead               // 自机被弹
+	TypeBulletCancel             // 子弹消除
+	TypePowerUp                  // 升级闪光
 )
 
 // Effect 视觉特效
 type Effect struct {
-	X, Y     float64
-	Type     Type
-	Age      int
-	MaxAge   int
-	Scale    float64
-	Alpha    float64
-	Active   bool
+	X, Y   float64
+	Type   Type
+	Age    int
+	MaxAge int
+	Scale  float64
+	Alpha  float64
+	Active bool
 }
 
 // Pool 特效对象池
@@ -76,12 +70,4 @@ func (p *Pool) Each(fn func(e *Effect)) {
 			fn(&p.effects[i])
 		}
 	}
-}
-
-// DrawLayer 特效层
-func (e *Effect) DrawLayer() render.Layer { return render.LayerEffect }
-
-// Draw 绘制特效（占位）
-func (e *Effect) Draw(screen *ebiten.Image) {
-	// TODO: 根据 Type 和 Age/Alpha/Scale 绘制特效动画
 }

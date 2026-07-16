@@ -30,22 +30,25 @@ const (
 
 // GameState 一局游戏的共享状态，Stage 场景持有，HUD 读取绘制
 type GameState struct {
-	Score      int64
-	HiScore    int64
-	Life       int // 剩余残机
-	Bomb       int // 剩余符卡（灵击）
-	Power      int // 火力 0-500（显示为 0.00~5.00）
-	MaxPower   int
-	Graze      int
-	Point      int   // 得点
-	Faith      int64 // 信仰值（影响得分倍率）
-	MaxFaith   int64 // 信仰值上限
-	Difficulty int   // 0=Easy 1=Normal 2=Hard 3=Lunatic 4=Extra
-	Character  int   // 0=灵梦 1=魔理沙
-	ShotType   int   // 0=A 1=B 2=C
-	Stage      int   // 当前关卡编号（1~6, 7=Extra）
-	Frame      int   // 当前关卡已运行帧数
-	Paused     bool
+	Score         int64
+	HiScore       int64
+	Life          int // 剩余残机
+	Bomb          int // 剩余符卡（灵击）
+	Power         int // 火力 0-500（显示为 0.00~5.00）
+	MaxPower      int
+	Graze         int
+	Point         int   // 得点
+	Faith         int64 // 信仰值（影响得分倍率）
+	MaxFaith      int64 // 信仰值上限
+	Difficulty    int   // 0=Easy 1=Normal 2=Hard 3=Lunatic 4=Extra
+	Character     int   // 0=灵梦 1=魔理沙
+	ShotType      int   // 0=A 1=B 2=C
+	Stage         int   // 当前关卡编号（1~6, 7=Extra）
+	Frame         int   // 当前关卡已运行帧数
+	Paused        bool
+	ExtraUnlocked bool
+	SingleStage   bool
+	DebugMode     bool
 }
 
 func NewState(character, shotType, difficulty int) *GameState {
@@ -59,12 +62,15 @@ func NewState(character, shotType, difficulty int) *GameState {
 		Difficulty: difficulty,
 		Character:  character,
 		ShotType:   shotType,
-		HiScore:    10000000,
+		HiScore:    0,
 	}
 }
 
 // AddScore 加分（受信仰倍率影响）
 func (s *GameState) AddScore(v int64) {
+	if v > 0 {
+		v = int64(float64(v)*s.FaithMultiplier() + 0.5)
+	}
 	s.Score += v
 	if s.Score > s.HiScore {
 		s.HiScore = s.Score
@@ -74,6 +80,9 @@ func (s *GameState) AddScore(v int64) {
 // AddFaith 增加信仰值
 func (s *GameState) AddFaith(v int64) {
 	s.Faith += v
+	if s.Faith < 0 {
+		s.Faith = 0
+	}
 	if s.Faith > s.MaxFaith {
 		s.Faith = s.MaxFaith
 	}
@@ -95,8 +104,7 @@ func (s *GameState) FaithMultiplier() float64 {
 
 // IsExtraUnlocked 是否解锁 Extra 面（需通关 Normal 以上）
 func (s *GameState) IsExtraUnlocked() bool {
-	// TODO: 读取存档判断
-	return false
+	return s.ExtraUnlocked
 }
 
 // NextStage 返回下一关编号，Stage 6 之后返回 0 表示通关

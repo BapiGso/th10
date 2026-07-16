@@ -2,9 +2,6 @@ package enemy
 
 import (
 	"th10/collision"
-	"th10/render"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // Type 敌人类型
@@ -18,17 +15,28 @@ const (
 
 // Enemy 敌人实体
 type Enemy struct {
-	X, Y      float64
-	HP        int
-	MaxHP     int
-	HitWidth  float64 // 被弹判定宽
-	HitHeight float64 // 被弹判定高
-	Active    bool
-	Type      Type
-	Age       int
-	DropPower int // 击破掉落P点数
-	DropPoint int // 击破掉落得点数
-	SpriteID  int // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）
+	X, Y         float64
+	HP           int
+	MaxHP        int
+	HitWidth     float64 // 被弹判定宽
+	HitHeight    float64 // 被弹判定高
+	BodyWidth    float64 // 敌机本体判定宽，ECL setHitbox 使用
+	BodyHeight   float64 // 敌机本体判定高，ECL setHitbox 使用
+	Active       bool
+	Type         Type
+	Age          int
+	DropPower    int // 击破掉落P点数
+	DropPoint    int // 击破掉落得点数
+	DropLife     int // 生命碎片
+	DropBomb     int // 符卡碎片
+	DropAreaW    float64
+	DropAreaH    float64
+	SpriteID     int // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）
+	FairyKind    int // 杂兵 sprite 种类（enemy.anm 行索引，回退用）
+	MainScript   int // ECL anmSetMain layer-0 的 enemy.anm 脚本 id（-1=未设置）
+	AnmSlot      int // ECL anmSelect 选择的 ANM 文件槽位
+	ECLFlags     int // 原作 ECL flagSet/flagClear 的保守记录
+	InvulnFrames int // ECL setInvuln 设置的无敌帧
 
 	// Boss 专用（杂兵不使用）
 	Boss *BossData
@@ -46,10 +54,10 @@ type PathNode struct {
 
 // SpellCard 符卡定义
 type SpellCard struct {
-	Name      string  // 符卡名称（显示用）
-	HP        int     // 此阶段血量
-	TimeLimit int     // 时限（帧），0=无限
-	Bonus     int64   // 基础奖分
+	Name      string                    // 符卡名称（显示用）
+	HP        int                       // 此阶段血量
+	TimeLimit int                       // 时限（帧），0=无限
+	Bonus     int64                     // 基础奖分
 	Update    func(e *Enemy, frame int) // 弹幕逻辑（每帧调用）
 }
 
@@ -68,8 +76,10 @@ func New(x, y float64, hp int, t Type) *Enemy {
 	return &Enemy{
 		X: x, Y: y, HP: hp, MaxHP: hp,
 		HitWidth: 24, HitHeight: 24,
+		BodyWidth: 24, BodyHeight: 24,
 		Active: true, Type: t,
 		DropPower: 3, DropPoint: 1,
+		MainScript: -1,
 	}
 }
 
@@ -82,8 +92,10 @@ func NewBoss(x, y float64, phases []SpellCard) *Enemy {
 	e := &Enemy{
 		X: x, Y: y, HP: totalHP, MaxHP: totalHP,
 		HitWidth: 48, HitHeight: 48,
+		BodyWidth: 32, BodyHeight: 32,
 		Active: true, Type: TypeBoss,
 		DropPower: 30, DropPoint: 20,
+		MainScript: -1,
 		Boss: &BossData{
 			Phases:       phases,
 			DialogBefore: -1,
@@ -109,6 +121,9 @@ func (e *Enemy) Update() {
 		return
 	}
 	e.Age++
+	if e.InvulnFrames > 0 {
+		e.InvulnFrames--
+	}
 	e.movePath()
 
 	// Boss 阶段逻辑
@@ -159,7 +174,7 @@ func (e *Enemy) TakeDamage(dmg int) bool {
 	if !e.Active {
 		return false
 	}
-	if e.Boss != nil && e.Boss.Invincible {
+	if e.InvulnFrames > 0 || (e.Boss != nil && e.Boss.Invincible) {
 		return false
 	}
 
@@ -203,6 +218,17 @@ func (e *Enemy) EndInvincible() {
 	}
 }
 
+// MaybeEndInvincible 阶段切换 2 帧后自动解除 Boss 无敌。
+// nil/非 Boss/已解除时 no-op，方便 stage 脚本每帧无差别调用。
+func (e *Enemy) MaybeEndInvincible() {
+	if e == nil || !e.Active || e.Boss == nil || !e.Boss.Invincible {
+		return
+	}
+	if e.Boss.PhaseFrame > 2 {
+		e.Boss.Invincible = false
+	}
+}
+
 // CurrentPhaseName 返回当前阶段名称
 func (e *Enemy) CurrentPhaseName() string {
 	if e.Boss == nil || e.Boss.PhaseIdx >= len(e.Boss.Phases) {
@@ -235,15 +261,4 @@ func (e *Enemy) HitRect() (x, y, w, h float64) {
 // InBounds 检查是否在游戏区域内
 func (e *Enemy) InBounds(left, top, right, bottom float64) bool {
 	return collision.InBounds(e.X, e.Y, 64, left, top, right, bottom)
-}
-
-// DrawLayer 渲染层
-func (e *Enemy) DrawLayer() render.Layer { return render.LayerEnemy }
-
-// Draw 绘制敌人
-func (e *Enemy) Draw(screen *ebiten.Image) {
-	if !e.Active {
-		return
-	}
-	// TODO: 根据 Type 绘制对应贴图
 }
