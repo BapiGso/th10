@@ -28,12 +28,21 @@ const (
 	StageExtra = 7 // Extra 面
 )
 
+// Power uses hundredths of displayed power here. The original stores units
+// of 0.05; see docs/player_truth.md for the binary-to-project conversion.
+const (
+	PowerMax        = 500
+	BombPowerCost   = 100
+	DeathPowerLoss  = 320
+	SmallPowerValue = 5
+	BigPowerValue   = 100
+)
+
 // GameState 一局游戏的共享状态，Stage 场景持有，HUD 读取绘制
 type GameState struct {
 	Score         int64
 	HiScore       int64
 	Life          int // 剩余残机
-	Bomb          int // 剩余符卡（灵击）
 	Power         int // 火力 0-500（显示为 0.00~5.00）
 	MaxPower      int
 	Graze         int
@@ -54,9 +63,8 @@ type GameState struct {
 func NewState(character, shotType, difficulty int) *GameState {
 	return &GameState{
 		Life:       2,
-		Bomb:       3,
 		Power:      0,
-		MaxPower:   500,
+		MaxPower:   PowerMax,
 		Faith:      50000,
 		MaxFaith:   100000,
 		Difficulty: difficulty,
@@ -71,6 +79,12 @@ func (s *GameState) AddScore(v int64) {
 	if v > 0 {
 		v = int64(float64(v)*s.FaithMultiplier() + 0.5)
 	}
+	s.AddScoreRaw(v)
+}
+
+// AddScoreRaw adds an already-valued reward without applying the legacy faith
+// multiplier. Point items use faith as their value, not as a second multiplier.
+func (s *GameState) AddScoreRaw(v int64) {
 	s.Score += v
 	if s.Score > s.HiScore {
 		s.HiScore = s.Score

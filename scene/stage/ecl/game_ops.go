@@ -288,7 +288,8 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		}
 	case opDropClear:
 		if t.owner != nil {
-			t.owner.DropPower, t.owner.DropPoint, t.owner.DropLife, t.owner.DropBomb = 0, 0, 0, 0
+			t.owner.DropPower, t.owner.DropPoint, t.owner.DropLife = 0, 0, 0
+			t.owner.DropBigPower, t.owner.DropBigPoint = 0, 0
 			t.owner.DropAreaW, t.owner.DropAreaH = 0, 0
 			vm.actorFor(t.owner).dropArea = eclRect{}
 		}
@@ -703,9 +704,11 @@ func (vm *VM) addDrop(e *enemy.Enemy, dropType, count int) {
 	case 2:
 		e.DropPoint += count
 	case 4:
-		e.DropLife += count
+		e.DropBigPower += count
 	case 5:
-		e.DropBomb += count
+		e.DropBigPoint += count
+	case 7:
+		e.DropLife += count
 	default:
 		e.DropPoint += count
 	}
@@ -733,8 +736,10 @@ func (vm *VM) spawnDrops(ctx *stage.Context, e *enemy.Enemy) {
 	spawn(e.DropPower, item.PowerItem)
 	spawn(e.DropPoint, item.PointItem)
 	spawn(e.DropLife, item.LifeFragment)
-	spawn(e.DropBomb, item.BombFragment)
-	e.DropPower, e.DropPoint, e.DropLife, e.DropBomb = 0, 0, 0, 0
+	spawn(e.DropBigPower, item.BigPower)
+	spawn(e.DropBigPoint, item.BigPoint)
+	e.DropPower, e.DropPoint, e.DropLife = 0, 0, 0
+	e.DropBigPower, e.DropBigPoint = 0, 0
 }
 
 func (vm *VM) playStageSound(ctx *stage.Context, id int) {
@@ -743,11 +748,11 @@ func (vm *VM) playStageSound(ctx *stage.Context, id int) {
 	}
 	switch id {
 	case 7:
-		ctx.Audio.PlaySE(audio.SEEnemy)
+		ctx.PlaySE(audio.SEEnemy)
 	case 15, 16:
-		ctx.Audio.PlaySE(audio.SEShoot)
+		ctx.PlaySE(audio.SEShoot)
 	case 18:
-		ctx.Audio.PlaySE(audio.SECancel)
+		ctx.PlaySE(audio.SECancel)
 	}
 }
 

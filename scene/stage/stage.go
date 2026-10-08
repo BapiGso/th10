@@ -43,8 +43,8 @@ type Context struct {
 	Effects *effect.Pool
 	Enemies []*enemy.Enemy // 活跃敌人列表
 	Emitter *danmaku.Emitter
-	Audio   *audio.Manager // 音频管理器
-	stage   *Stage         // 反向引用（用于触发对话等）
+	Audio   Sound // 音频管理器；无头模拟（sim 包）保持 nil
+	stage   *Stage // 反向引用（用于触发对话等）
 }
 
 // AddEnemy 脚本用：添加敌人
@@ -131,6 +131,21 @@ const (
 )
 
 func New(g *game.Game, state *game.GameState, script Script) *Stage {
+	s := newStage(state, script)
+	s.ctx.Audio = g.Audio()
+	script.Init(s.ctx)
+	return s
+}
+
+// NewHeadless 构造不接音频的 Stage，供 sim 包的逐帧差分模拟使用。
+// script.Init 在 Audio 为 nil 时运行，所有音效/BGM 调用静默。
+func NewHeadless(state *game.GameState, script Script) *Stage {
+	s := newStage(state, script)
+	script.Init(s.ctx)
+	return s
+}
+
+func newStage(state *game.GameState, script Script) *Stage {
 	bulletPool := bullet.NewPool(2048)
 	s := &Stage{
 		script:     script,
@@ -144,11 +159,9 @@ func New(g *game.Game, state *game.GameState, script Script) *Stage {
 		Items:   item.NewPool(256),
 		Effects: effect.NewPool(512),
 		Emitter: danmaku.NewEmitter(bulletPool),
-		Audio:   g.Audio(),
 		stage:   s,
 	}
 	s.hud = newHud(state)
-	script.Init(s.ctx)
 	return s
 }
 
@@ -156,21 +169,61 @@ func loadFrontFrame() *ebiten.Image {
 	return render.LoadImage("anm/front/front00s.png")
 }
 
+// UpdateHeadless 用调用方提供的输入快照推进一帧，不读全局键盘、不刷新 HUD。
+// 供 sim 包的逐帧差分模拟使用；真实游戏走 Update。
+func (s *Stage) UpdateHeadless(in *input.State) {
+	s.update(in)
+}
+
+// FinishedHeadless 报告脚本是否已结束（无头模拟的终止条件）。
+func (s *Stage) FinishedHeadless() bool { return s.script.Finished() }
+
+// ExportContext 暴露内部 Context 给 sim 包（无头模拟需要直接读写实体池）。
+func ExportContext(s *Stage) *Context { return s.ctx }
+
 func (s *Stage) Update(g *game.Game) error {
 	in := &input.Global
-	ctx := s.ctx
 
 	// HUD 每帧同步（含 paused/dialog 时也保持，避免暂停画面 HUD 卡在切换瞬间）
 	s.hud.refresh()
 
 	// 暂停切换
 	if in.JustPressed(input.KeyPause) {
-		ctx.State.Paused = !ctx.State.Paused
-		ctx.Audio.PlaySE(audio.SEPause)
+		s.ctx.State.Paused = !s.ctx.State.Paused
+		s.ctx.PlaySE(audio.SEPause)
 	}
-	if ctx.State.Paused {
+	if s.ctx.State.Paused {
 		return nil
 	}
+
+	if err := s.update(in); err != nil {
+		return err
+	}
+
+	// 关卡结束/Game Over 时切换场景
+	ctx := s.ctx
+	if ctx.State.Life < 0 {
+		g.MarkGameOver(ctx.State)
+		if s.OnGameOver != nil {
+			g.GoTo(s.OnGameOver(g, ctx.State))
+		} else {
+			g.GoTo(resultscene.New(ctx.State, resultscene.ModeGameOver, nil))
+		}
+		return nil
+	}
+	if s.script.Finished() {
+		if s.NextScene != nil {
+			g.GoTo(s.NextScene(g, ctx.State))
+		} else {
+			g.GoTo(resultscene.New(ctx.State, resultscene.ModeStageClear, nil))
+		}
+	}
+	return nil
+}
+
+// update 推进一帧世界状态。不涉及场景切换，供 Update 与无头模拟共用。
+func (s *Stage) update(in *input.State) error {
+	ctx := s.ctx
 
 	// 对话覆盖层：暂停实体更新，只推进对话
 	if s.dialog != nil {
@@ -186,12 +239,12 @@ func (s *Stage) Update(g *game.Game) error {
 	ctx.State.DecayFaith()
 
 	// 1. 玩家
-	ctx.Player.Update()
+	s.updatePlayer(in)
 
 	// 1b. Bomb 起爆沿：进入 Bomb 态的第一帧播放符卡音效、信仰惩罚、屏幕全屏闪光
 	bombing := ctx.Player.State == player.StateBomb
 	if bombing && !s.wasBombing {
-		ctx.Audio.PlaySE(audio.SEBomb)
+		ctx.PlaySE(audio.SEBomb)
 		ctx.State.AddFaith(-15000) // 使用符卡折损信仰倍率
 		ctx.Effects.Spawn(ctx.Player.X, ctx.Player.Y, effect.TypeExplosion, 40)
 	}
@@ -221,26 +274,26 @@ func (s *Stage) Update(g *game.Game) error {
 	// 8. 清理
 	s.cleanEnemies()
 
-	// 9. Game Over
-	if ctx.State.Life < 0 {
-		g.MarkGameOver(ctx.State)
-		if s.OnGameOver != nil {
-			g.GoTo(s.OnGameOver(g, ctx.State))
-		} else {
-			g.GoTo(resultscene.New(ctx.State, resultscene.ModeGameOver, nil))
-		}
-		return nil
-	}
-	if s.script.Finished() {
-		if s.NextScene != nil {
-			g.GoTo(s.NextScene(g, ctx.State))
-		} else {
-			g.GoTo(resultscene.New(ctx.State, resultscene.ModeStageClear, nil))
-		}
-		return nil
-	}
-
 	return nil
+}
+
+// updatePlayer keeps confirmed deaths separate from the deathbomb window.
+func (s *Stage) updatePlayer(in *input.State) {
+	p := s.ctx.Player
+	x, y, life := p.X, p.Y, p.GS.Life
+	p.SetHomingCandidates(s.ctx.Enemies)
+	p.UpdateInput(in)
+	if p.GS.Life < life {
+		// FUN_00425730 emits 4 small P + 3 large P. The original delayed
+		// radial ejection and respawn animation are not yet reproduced.
+		for i := 0; i < 7; i++ {
+			kind := item.PowerItem
+			if i%2 == 1 {
+				kind = item.BigPower
+			}
+			s.ctx.Items.Spawn(x, y, kind)
+		}
+	}
 }
 
 // ---------- 碰撞检测 ----------
@@ -279,7 +332,7 @@ func (s *Stage) checkCollisions() {
 				b.Active = false
 				st.AddFaith(-8000)
 				ctx.Effects.Spawn(px, py, effect.TypePlayerDead, 30)
-				ctx.Audio.PlaySE(audio.SEDead)
+				ctx.PlaySE(audio.SEDead)
 			}
 		})
 	}
@@ -296,19 +349,19 @@ func (s *Stage) checkCollisions() {
 			}
 		})
 		if grazed {
-			ctx.Audio.PlaySE(audio.SEGraze)
+			ctx.PlaySE(audio.SEGraze)
 		}
 	}
 
 	// 道具拾取
 	ctx.Items.CollectCallback(px, py, func(t item.ItemType) {
-		ctx.Audio.PlaySE(audio.SEItem)
+		ctx.PlaySE(audio.SEItem)
 		switch t {
 		case item.PowerItem:
-			p.AddPower(1)
+			p.AddPower(game.SmallPowerValue)
 			st.AddFaith(8)
 		case item.BigPower:
-			p.AddPower(8)
+			p.AddPower(game.BigPowerValue)
 			st.AddFaith(20)
 		case item.PointItem:
 			st.Point++
@@ -317,11 +370,11 @@ func (s *Stage) checkCollisions() {
 		case item.LifeFragment:
 			st.Life++
 			st.AddFaith(100)
-		case item.BombFragment:
-			st.Bomb++
-			st.AddFaith(80)
+		case item.BigPoint:
+			st.Point++
+			st.AddScoreRaw(st.Faith)
 		case item.FullPower:
-			st.Power = 500
+			st.Power = st.MaxPower
 			st.AddFaith(50)
 		}
 	})
@@ -340,7 +393,7 @@ func (s *Stage) checkCollisions() {
 func (s *Stage) defeatEnemy(e *enemy.Enemy) {
 	ctx := s.ctx
 	st := ctx.State
-	totalDrops := e.DropPower + e.DropPoint + e.DropLife + e.DropBomb
+	totalDrops := e.DropPower + e.DropPoint + e.DropLife + e.DropBigPower + e.DropBigPoint
 	dropIndex := 0
 	spawnDrop := func(t item.ItemType) {
 		x, y := defeatDropPosition(e, dropIndex, totalDrops)
@@ -360,8 +413,11 @@ func (s *Stage) defeatEnemy(e *enemy.Enemy) {
 	for i := 0; i < e.DropLife; i++ {
 		spawnDrop(item.LifeFragment)
 	}
-	for i := 0; i < e.DropBomb; i++ {
-		spawnDrop(item.BombFragment)
+	for i := 0; i < e.DropBigPower; i++ {
+		spawnDrop(item.BigPower)
+	}
+	for i := 0; i < e.DropBigPoint; i++ {
+		spawnDrop(item.BigPoint)
 	}
 	if e.Type != enemy.TypeFairy {
 		ctx.Items.Spawn(e.X, e.Y, item.BigPower)
@@ -417,6 +473,8 @@ func (s *Stage) cleanEnemies() {
 		if e.Active && e.InBounds(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom) {
 			s.ctx.Enemies[n] = e
 			n++
+		} else {
+			e.Active = false // release sticky homing targets when an enemy leaves the stage
 		}
 	}
 	for i := n; i < len(s.ctx.Enemies); i++ {
@@ -440,6 +498,7 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 	s.drawPlayerBullets(s.field)
 	s.drawEnemies(s.field)
 	s.drawBullets(s.field)
+	s.drawPlayerOptions(s.field)
 	s.drawPlayer(s.field)
 	s.drawEffects(s.field)
 
@@ -504,8 +563,35 @@ func (s *Stage) drawPlayerBullets(field *ebiten.Image) {
 	s.ctx.Player.Bullets.Each(func(b *playerbullet.Bullet) {
 		x := float32(b.X - fl)
 		y := float32(b.Y - ft)
+		if b.ScriptID >= 0 && sprite.Global != nil && sprite.Global.ReimuAnm != nil {
+			if img := sprite.Global.ReimuAnm.ScriptSprite(b.ScriptID, max(b.Age-1, 0)); img != nil {
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(-float64(img.Bounds().Dx())/2, -float64(img.Bounds().Dy())/2)
+				op.GeoM.Rotate(b.Angle)
+				op.GeoM.Translate(float64(x), float64(y))
+				op.ColorScale.ScaleAlpha(128.0 / 255) // pl00.anm scripts 5/7
+				field.DrawImage(img, op)
+				return
+			}
+		}
 		vector.FillRect(field, x-3, y-6, 6, 12, color.RGBA{255, 255, 255, 230}, false)
 	})
+}
+
+func (s *Stage) drawPlayerOptions(field *ebiten.Image) {
+	for _, option := range s.ctx.Player.Options() {
+		x, y := option.X-game.FieldLeft, option.Y-game.FieldTop
+		if sprite.Global != nil && sprite.Global.ReimuAnm != nil {
+			// Script 17's sprite; its spawn/interrupt transforms await the ANM VM.
+			if img := sprite.Global.ReimuAnm.ScriptSprite(17, 0); img != nil {
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(x-float64(img.Bounds().Dx())/2, y-float64(img.Bounds().Dy())/2)
+				field.DrawImage(img, op)
+				continue
+			}
+		}
+		vector.FillCircle(field, float32(x), float32(y), 5, color.RGBA{255, 128, 160, 255}, false)
+	}
 }
 
 func (s *Stage) drawEnemies(field *ebiten.Image) {

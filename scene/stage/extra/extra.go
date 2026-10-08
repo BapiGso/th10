@@ -40,7 +40,7 @@ func (s *ScriptExtra) loadBg() {
 }
 
 func (s *ScriptExtra) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMExtra)
+	ctx.PlayBGM(audio.BGMExtra)
 	ch := ctx.State.Character
 	s.dlg = stage.NewDialogQueue(ctx,
 		dialog.MidPreC("extra", ch), dialog.BossPreC("extra", ch), dialog.PostC("extra", ch))
@@ -55,7 +55,7 @@ func (s *ScriptExtra) Update(ctx *stage.Context) {
 		s.vm.Update(ctx)
 		if !s.bossBGM && s.vm.BossActive() {
 			s.bossBGM = true
-			ctx.Audio.PlayBGM(audio.BGMExtraBoss)
+			ctx.PlayBGM(audio.BGMExtraBoss)
 		}
 		if s.vm.MainDone() {
 			s.finished = true

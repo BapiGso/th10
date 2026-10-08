@@ -40,7 +40,7 @@ func (s *Script3) loadBg() {
 }
 
 func (s *Script3) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMStage3)
+	ctx.PlayBGM(audio.BGMStage3)
 	// Stage 3 has a mid-boss: dialog events are midPre, bossPre, post.
 	ch := ctx.State.Character
 	s.dlg = stage.NewDialogQueue(ctx,
@@ -56,7 +56,7 @@ func (s *Script3) Update(ctx *stage.Context) {
 		s.vm.Update(ctx)
 		if !s.bossBGM && s.vm.BossActive() {
 			s.bossBGM = true
-			ctx.Audio.PlayBGM(audio.BGMStage3Boss)
+			ctx.PlayBGM(audio.BGMStage3Boss)
 		}
 		if s.vm.MainDone() {
 			s.finished = true

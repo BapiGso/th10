@@ -40,7 +40,7 @@ func (s *Script4) loadBg() {
 }
 
 func (s *Script4) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMStage4)
+	ctx.PlayBGM(audio.BGMStage4)
 	// Stage 4 mid-boss shares the boss (文): dialog events are bossPre, post.
 	ch := ctx.State.Character
 	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage4", ch), dialog.PostC("stage4", ch))
@@ -55,7 +55,7 @@ func (s *Script4) Update(ctx *stage.Context) {
 		s.vm.Update(ctx)
 		if !s.bossBGM && s.vm.BossActive() {
 			s.bossBGM = true
-			ctx.Audio.PlayBGM(audio.BGMStage4Boss)
+			ctx.PlayBGM(audio.BGMStage4Boss)
 		}
 		if s.vm.MainDone() {
 			s.finished = true

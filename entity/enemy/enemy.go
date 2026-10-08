@@ -28,7 +28,8 @@ type Enemy struct {
 	DropPower    int // 击破掉落P点数
 	DropPoint    int // 击破掉落得点数
 	DropLife     int // 生命碎片
-	DropBomb     int // 符卡碎片
+	DropBigPower int // 大火力
+	DropBigPoint int // 大得点
 	DropAreaW    float64
 	DropAreaH    float64
 	SpriteID     int // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）

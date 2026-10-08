@@ -51,7 +51,7 @@ func (s *eclScript) loadBg() {
 }
 
 func (s *eclScript) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMStage1)
+	ctx.PlayBGM(audio.BGMStage1)
 }
 
 func (s *eclScript) Update(ctx *stage.Context) {

@@ -42,7 +42,7 @@ func (s *Script6) loadBg() {
 }
 
 func (s *Script6) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMStage6)
+	ctx.PlayBGM(audio.BGMStage6)
 	// Stage 6 mid-boss (諏訪子) shares dialog: events are bossPre, post.
 	ch := ctx.State.Character
 	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage6", ch), dialog.PostC("stage6", ch))
@@ -57,7 +57,7 @@ func (s *Script6) Update(ctx *stage.Context) {
 		s.vm.Update(ctx)
 		if !s.bossBGM && s.vm.BossActive() {
 			s.bossBGM = true
-			ctx.Audio.PlayBGM(audio.BGMStage6Boss)
+			ctx.PlayBGM(audio.BGMStage6Boss)
 		}
 		if s.vm.MainDone() {
 			s.finished = true

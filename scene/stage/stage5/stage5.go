@@ -37,7 +37,7 @@ func (s *Script5) loadBg() {
 }
 
 func (s *Script5) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMStage5)
+	ctx.PlayBGM(audio.BGMStage5)
 	ch := ctx.State.Character
 	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage5", ch), dialog.PostC("stage5", ch))
 	s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
@@ -51,7 +51,7 @@ func (s *Script5) Update(ctx *stage.Context) {
 		s.vm.Update(ctx)
 		if !s.bossBGM && s.vm.BossActive() {
 			s.bossBGM = true
-			ctx.Audio.PlayBGM(audio.BGMStage5Boss)
+			ctx.PlayBGM(audio.BGMStage5Boss)
 		}
 		if s.vm.MainDone() {
 			s.finished = true

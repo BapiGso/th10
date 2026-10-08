@@ -272,7 +272,13 @@ func buildStage(g *game.Game, state *game.GameState, back game.Scene) *stage.Sta
 
 // NewDebugStage 为 go test 的手动调试入口创建直接进入关卡的场景。
 func NewDebugStage(g *game.Game, back game.Scene, stageNum, character, shotType, difficulty int) game.Scene {
+	return NewDebugStageWithPower(g, back, stageNum, character, shotType, difficulty, 0)
+}
+
+// NewDebugStageWithPower starts a reproducible shot test without changing normal-run defaults.
+func NewDebugStageWithPower(g *game.Game, back game.Scene, stageNum, character, shotType, difficulty, power int) game.Scene {
 	state := game.NewState(character, shotType, difficulty)
+	state.Power = max(0, min(power, game.PowerMax))
 	state.Stage = stageNum
 	state.SingleStage = true
 	state.DebugMode = true

@@ -15,6 +15,7 @@ var Global *Resources
 // Resources 全部 sprite 资源
 type Resources struct {
 	Player      [2]*PlayerSprite // 0=灵梦, 1=魔理沙
+	ReimuAnm    *AnmSheet        // original pl00.anm shot/option scripts
 	Bullets     *BulletSprite
 	Enemies     *EnemySprite
 	EnemyAnm    *AnmSheet             // enemy.anm: 真实杂兵 sprite/脚本（ECL anmSetMain 驱动）
@@ -32,6 +33,7 @@ func Load() {
 				LoadPlayer("anm/player/pl00/pl00.png"),
 				LoadPlayer("anm/player/pl01/pl01.png"),
 			},
+			ReimuAnm:    LoadAnmSheet("anm/pl00.anm"),
 			Bullets:     LoadBullets("anm/bullet/etama.png"),
 			Enemies:     LoadEnemies("anm/enemy/enemy.png"),
 			EnemyAnm:    LoadAnmSheet("anm/enemy.anm"),

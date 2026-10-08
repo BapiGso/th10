@@ -13,7 +13,7 @@ const (
 	PointItem                    // 蓝·点符
 	BigPower                     // 大火力
 	LifeFragment                 // 生命碎片
-	BombFragment                 // 符卡碎片
+	BigPoint                     // 原作 type 5，大得点（不提供独立 Bomb 库存）
 	FullPower                    // 最大火力
 )
 
@@ -127,4 +127,15 @@ func (p *Pool) Each(fn func(it *Item)) {
 			fn(&p.items[i])
 		}
 	}
+}
+
+// ActiveCount 当前活跃道具数（供无头模拟的 trace 采样）。
+func (p *Pool) ActiveCount() int {
+	n := 0
+	for i := range p.items {
+		if p.items[i].Active {
+			n++
+		}
+	}
+	return n
 }

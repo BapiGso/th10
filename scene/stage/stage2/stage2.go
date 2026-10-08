@@ -38,7 +38,7 @@ func (s *Script2) loadBg() {
 }
 
 func (s *Script2) Init(ctx *stage.Context) {
-	ctx.Audio.PlayBGM(audio.BGMStage2)
+	ctx.PlayBGM(audio.BGMStage2)
 	// Stage 2 has no mid-boss dialog: the two ECL dialog events are bossPre, post.
 	ch := ctx.State.Character
 	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage2", ch), dialog.PostC("stage2", ch))
@@ -55,7 +55,7 @@ func (s *Script2) Update(ctx *stage.Context) {
 		// Switch to boss music the first frame a boss is alive.
 		if !s.bossBGM && s.vm.BossActive() {
 			s.bossBGM = true
-			ctx.Audio.PlayBGM(audio.BGMStage2Boss)
+			ctx.PlayBGM(audio.BGMStage2Boss)
 		}
 
 		// Stage clears when the ECL main task finishes (boss defeated → main

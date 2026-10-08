@@ -1,10 +1,13 @@
 package player
 
 import (
+	"fmt"
 	"math"
+	"th10/assets"
 	"th10/entity/playerbullet"
 	"th10/game"
 	"th10/input"
+	"th10/sht"
 )
 
 // AnimState 行走图动画状态
@@ -28,11 +31,12 @@ const (
 
 // Player 玩家实体
 type Player struct {
-	X, Y         float64 // 位置
-	Speed        float64 // 移动速度（非集中）
-	FocusSpeed   float64 // 集中移动速度
-	HitboxRadius float64 // 判定圈半径
-	GrazeRadius  float64 // 擦弹范围
+	X, Y                              float64 // 位置
+	Speed                             float64 // 移动速度（非集中）
+	FocusSpeed                        float64 // 集中移动速度
+	DiagonalSpeed, FocusDiagonalSpeed float64 // SHT 转换后的百分之一像素步长
+	HitboxRadius                      float64 // 判定圈半径
+	GrazeRadius                       float64 // 擦弹范围
 
 	// 直接引用游戏状态，消除双源同步
 	GS *game.GameState
@@ -54,49 +58,75 @@ type Player struct {
 
 	// 自机子弹池引用
 	Bullets *playerbullet.Pool
+	reimuA  *reimuAShot
 }
 
 const (
-	shootInterval   = 3   // 射击频率：每3帧1发（文章第15篇）
-	invincTime      = 300 // 复活无敌时间：300帧=5秒
-	deathBombWindow = 16  // 决死时间：16帧（取中间值）
-	bombInvincTime  = 60  // Bomb无敌时间
-	bombDuration    = 300 // 魔炮持续时间
+	shootInterval   = 3   // Legacy shot approximation; SHT firing records not yet executed.
+	invincTime      = 300 // Legacy respawn timing; original entry animation is not yet modeled.
+	deathBombWindow = 8   // FUN_00425730 state 4: timer 0..7 permits deathbomb
+	bombInvincTime  = 60  // Legacy post-bomb approximation.
+	bombDuration    = 300 // Placeholder until the original ANM-controlled lifecycle is wired.
 	frontFrameTime  = 8   // 正面/侧身动画帧间隔
 	transFrameTime  = 6   // 转身过渡动画帧间隔
 )
 
 func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 	centerX := (fieldL + fieldR) / 2
-	return &Player{
+	path := fmt.Sprintf("sht/pl%02d%c.sht", gs.Character, 'a'+gs.ShotType)
+	data, err := assets.Assets.ReadFile(path)
+	if err != nil {
+		panic(fmt.Sprintf("load player movement %s: %v", path, err))
+	}
+	movement, err := sht.ParseMovement(data)
+	if err != nil {
+		panic(fmt.Sprintf("load player movement %s: %v", path, err))
+	}
+	p := &Player{
 		X: centerX, Y: fieldB - 48,
-		Speed: 4.5, FocusSpeed: 2,
-		HitboxRadius: 2, GrazeRadius: 16,
+		Speed: float64(movement.Fast) / 100, FocusSpeed: float64(movement.Slow) / 100,
+		DiagonalSpeed:      float64(movement.FastDiagonal) / 100,
+		FocusDiagonalSpeed: float64(movement.SlowDiagonal) / 100,
+		HitboxRadius:       2, GrazeRadius: 16,
 		GS:        gs,
 		State:     StateNormal,
 		FieldLeft: fieldL, FieldTop: fieldT,
 		FieldRight: fieldR, FieldBottom: fieldB,
 		Bullets: playerbullet.NewPool(256),
 	}
+	if gs.Character == game.CharReimu && gs.ShotType == game.ShotA {
+		shots, err := sht.Parse(data)
+		if err != nil {
+			panic(fmt.Sprintf("load Reimu A shots: %v", err))
+		}
+		if err = shots.ValidateReimuA(); err != nil {
+			panic(err)
+		}
+		p.reimuA = &reimuAShot{file: shots, clock: -1, optionCount: -1}
+		p.Bullets = playerbullet.NewPool(128) // original player+0x49c: 128 slots
+	}
+	return p
 }
 
 func (p *Player) Update() {
-	in := &input.Global
+	p.UpdateInput(&input.Global)
+}
 
+// UpdateInput advances one tick from an input snapshot, without polling the OS.
+func (p *Player) UpdateInput(in *input.State) {
+	if p.reimuA != nil {
+		defer p.updateReimuAShot(in)
+	}
 	switch p.State {
 	case StateDead:
 		p.DeathTimer++
-		if p.DeathTimer <= deathBombWindow && in.JustPressed(input.KeyBomb) && p.GS.Bomb > 0 {
-			p.GS.Bomb--
-			p.State = StateBomb
-			p.BombTimer = bombDuration
-			p.InvincTimer = bombDuration + bombInvincTime
+		if p.DeathTimer <= deathBombWindow && in.IsPressed(input.KeyBomb) && p.tryBomb() {
 			return
 		}
 		if p.DeathTimer > deathBombWindow {
 			p.GS.Life--
-			p.GS.Power = int(math.Max(float64(p.GS.Power-64), 0))
-			p.GS.Bomb = 3
+			// Original power is in 0.05 units: 0x40 lost = 3.20 displayed.
+			p.GS.Power = max(p.GS.Power-game.DeathPowerLoss, 0)
 			p.State = StateRespawn
 			p.InvincTimer = invincTime
 			p.X = (p.FieldLeft + p.FieldRight) / 2
@@ -105,6 +135,9 @@ func (p *Player) Update() {
 		return
 
 	case StateRespawn:
+		if in.IsPressed(input.KeyBomb) && p.tryBomb() {
+			return
+		}
 		p.InvincTimer--
 		if p.InvincTimer <= 0 {
 			p.State = StateNormal
@@ -128,11 +161,7 @@ func (p *Player) Update() {
 		if p.InvincTimer > 0 {
 			p.InvincTimer--
 		}
-		if in.JustPressed(input.KeyBomb) && p.GS.Bomb > 0 {
-			p.GS.Bomb--
-			p.State = StateBomb
-			p.BombTimer = bombDuration
-			p.InvincTimer = bombDuration + bombInvincTime
+		if in.IsPressed(input.KeyBomb) && p.tryBomb() {
 			return
 		}
 		p.move(in)
@@ -140,7 +169,21 @@ func (p *Player) Update() {
 	}
 
 	p.updateAnim(in)
-	p.Bullets.Update()
+	if p.reimuA == nil {
+		p.Bullets.Update()
+	}
+}
+
+func (p *Player) tryBomb() bool {
+	if p.State == StateBomb || p.GS.Power < game.BombPowerCost {
+		return false
+	}
+	p.GS.Power -= game.BombPowerCost
+	p.State = StateBomb
+	p.DeathTimer = 0
+	p.BombTimer = bombDuration
+	p.InvincTimer = bombDuration + bombInvincTime
+	return true
 }
 
 func (p *Player) move(in *input.State) {
@@ -162,15 +205,22 @@ func (p *Player) move(in *input.State) {
 		dx += 1
 	}
 	if dx != 0 && dy != 0 {
-		speed *= math.Sqrt2 / 2
+		speed = p.DiagonalSpeed
+		if in.IsPressed(input.KeyFocus) {
+			speed = p.FocusDiagonalSpeed
+		}
 	}
-	p.X += dx * speed
-	p.Y += dy * speed
+	p.X = math.Round((p.X+dx*speed)*100) / 100
+	p.Y = math.Round((p.Y+dy*speed)*100) / 100
+	// Original bounds: X [-184,184], Y [32,432], relative to field center/top.
 	p.X = math.Max(p.FieldLeft+8, math.Min(p.FieldRight-8, p.X))
-	p.Y = math.Max(p.FieldTop+16, math.Min(p.FieldBottom-16, p.Y))
+	p.Y = math.Max(p.FieldTop+32, math.Min(p.FieldBottom-16, p.Y))
 }
 
 func (p *Player) shoot(in *input.State) {
+	if p.reimuA != nil {
+		return
+	}
 	if !in.IsPressed(input.KeyShot) {
 		p.ShootTimer = 0
 		return
@@ -193,8 +243,6 @@ func (p *Player) shoot(in *input.State) {
 		}
 	default:
 		switch p.GS.ShotType {
-		case game.ShotA:
-			p.shootReimuA(focused)
 		case game.ShotB:
 			p.shootReimuB(focused)
 		default:
@@ -216,28 +264,6 @@ func (p *Player) powerTier() int {
 
 func (p *Player) fireShot(dx, dy, vx, vy float64, damage int) {
 	p.Bullets.Fire(p.X+dx, p.Y+dy, vx, vy, damage)
-}
-
-func (p *Player) shootReimuA(focused bool) {
-	tier := p.powerTier()
-	side := 1.8
-	if focused {
-		side = 0.7
-	}
-	p.fireShot(-8, -16, 0, -12, 8)
-	p.fireShot(8, -16, 0, -12, 8)
-	if tier >= 1 {
-		p.fireShot(-18, -10, -side, -11, 5)
-		p.fireShot(18, -10, side, -11, 5)
-	}
-	if tier >= 3 {
-		p.fireShot(-4, -20, -side*0.6, -13, 7)
-		p.fireShot(4, -20, side*0.6, -13, 7)
-	}
-	if tier >= 5 {
-		p.fireShot(-24, -8, -side*1.3, -10, 4)
-		p.fireShot(24, -8, side*1.3, -10, 4)
-	}
 }
 
 func (p *Player) shootReimuB(focused bool) {
@@ -399,7 +425,7 @@ func (p *Player) IsInvincible() bool {
 
 // AddPower 增加火力
 func (p *Player) AddPower(n int) {
-	p.GS.Power = int(math.Min(float64(p.GS.Power+n), 500))
+	p.GS.Power = max(0, min(p.GS.Power+n, p.GS.MaxPower))
 }
 
 // BombDuration 返回符卡持续帧数，供 UI（如 Bomb 闪光）计算进度。

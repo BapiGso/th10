@@ -31,7 +31,6 @@ type hud struct {
 	hiScore *widget.Text
 	score   *widget.Text
 	player  *widget.Text
-	bomb    *widget.Text
 	power   *widget.Text
 	graze   *widget.Text
 	point   *widget.Text
@@ -47,7 +46,6 @@ func newHud(state *game.GameState) *hud {
 	h.hiScore = hudLabel(bodyFace, theme.HighColor)
 	h.score = hudLabel(bodyFace, theme.TextColor)
 	h.player = hudLabel(bodyFace, theme.TextColor)
-	h.bomb = hudLabel(bodyFace, theme.TextColor)
 	h.power = hudLabel(bodyFace, theme.TextColor)
 	h.graze = hudLabel(bodyFace, theme.TextColor)
 	h.point = hudLabel(bodyFace, theme.TextColor)
@@ -67,7 +65,7 @@ func newHud(state *game.GameState) *hud {
 	)
 	for _, t := range []*widget.Text{
 		h.hiScore, h.score,
-		h.player, h.bomb,
+		h.player,
 		h.power, h.graze, h.point,
 	} {
 		right.AddChild(t)
@@ -110,7 +108,6 @@ func (h *hud) refresh() {
 	h.hiScore.Label = fmt.Sprintf("HiScore %012d", st.HiScore)
 	h.score.Label = fmt.Sprintf("Score   %012d", st.Score)
 	h.player.Label = "Player  " + strings.Repeat("*", max(st.Life, 0))
-	h.bomb.Label = "Bomb    " + strings.Repeat("#", max(st.Bomb, 0))
 	h.power.Label = fmt.Sprintf("Power   %d.%02d / %d.%02d",
 		st.Power/100, st.Power%100, st.MaxPower/100, st.MaxPower%100)
 	h.graze.Label = fmt.Sprintf("Graze   %d", st.Graze)

@@ -14,9 +14,11 @@ import (
 //
 // 用法（播放第 1 首，即 index 0）：
 //
-//	go test -v -run TestPlayBGMLoop -timeout 0 -args 0
+//	TH10_TEST_AUDIO=1 go test -v -run TestPlayBGMLoop -timeout 0 -args 0
 func TestPlayBGMLoop(t *testing.T) {
-	return
+	if os.Getenv("TH10_TEST_AUDIO") != "1" {
+		t.Skip("set TH10_TEST_AUDIO=1 to run the interactive BGM listening test")
+	}
 	idx := 0
 	for i, a := range os.Args {
 		if a == "-args" && i+1 < len(os.Args) {
