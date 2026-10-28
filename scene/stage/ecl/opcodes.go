@@ -14,11 +14,11 @@ var th10Formats = map[uint16]string{
 
 	256: "mffSSS", 257: "mffSSS", 258: "S", 259: "SS", 260: "mffSSS", 261: "mffSSS",
 	262: "SS", 263: "SS", 264: "SS", 265: "mffSSS", 266: "mffSSS", 267: "mffSSS",
-	268: "mffSSS", 269: "S", 270: "mffSSSS", 271: "mffSSSS", 272: "SS", 273: "SSf",
+	268: "mffSSS", 269: "S", 270: "mfffSSS", 271: "mfffSSS", 272: "SS", 273: "SSf",
 
-	280: "ff", 281: "SSff", 282: "ff", 283: "SSfS", 284: "ff", 285: "SSff",
-	286: "ff", 287: "SSff", 288: "ffff", 290: "ffff", 291: "SSfffS", 292: "SSf",
-	293: "SSf", 294: "", 295: "", 296: "SSf", 297: "ff", 298: "ff", 299: "ff",
+	280: "ff", 281: "SSff", 282: "ff", 283: "SSff", 284: "ff", 285: "SSff",
+	286: "ff", 287: "SSff", 288: "ffff", 289: "SSffff", 290: "ffff", 291: "SSffff",
+	292: "SSf", 293: "SSf", 294: "", 295: "", 296: "fff", 297: "fff", 298: "ff", 299: "ff",
 
 	320: "ff", 321: "ff", 322: "S", 323: "S", 324: "ffff", 325: "", 326: "",
 	327: "SS", 328: "ff", 329: "", 330: "S", 331: "S", 332: "S", 333: "",
@@ -102,90 +102,109 @@ const (
 	opSqrt     = 88
 
 	// Enemy / game opcodes (FUN_0040e770, 256-436).
-	opEnmCreate     = 256
-	opEnmCreateM    = 257
-	opAnmSelect     = 258
-	opAnmSetSprite  = 259
-	opEnmCreateAbs  = 260
-	opEnmCreateAbsM = 261
-	opAnmSetMain    = 262
-	opAnmPlay       = 263
-	opAnmPlayAbs    = 264
-	opAnmSelectPlay = 269
+	opEnmCreate   = 256 // mffSSS: (sub, x, y, hp, score, item) relative to the creator
+	opEnmCreateA  = 257 // absolute
+	opAnmSelect   = 258 // S: ANM file for the slot ops (0 = bullet.anm)
+	opAnmSetSlot  = 259 // SS: (slot, script)
+	opEnmCreateM  = 260 // relative, mirrored (flag 0x800)
+	opEnmCreateAM = 261 // absolute, mirrored
+	opAnmSetMain  = 262 // SS: (slot, script), also the direction base for 269
+	opAnmPlay     = 263
+	opAnmPlayAbs  = 264
+	opAnmSetDir5  = 269 // S: slot plays the 262 script + 5
+	opEnmCreate3D = 270 // mfffSSS: absolute with z (flag 0x40000)
 
-	opSetPos       = 280
-	opMovePosTime  = 281
-	opSetPosB      = 282
-	opMovePosTimeB = 283
-	opSetVel       = 284
-	opMoveVelTime  = 285
-	opSetVelB      = 286
-	opMoveVelTimeB = 287
-	opMoveCircle   = 288
-	opMoveCircleB  = 290
-	opMoveRand     = 292
-	opMoveRandB    = 293
-	opMoveStop     = 294 // (): halt motion on layer A
-	opMoveAdd      = 296
-	opMoveAddB     = 298
-	opMoveVel299   = 299 // ff: set layer-B heading/speed instantly
+	opSetPos        = 280 // ff
+	opMovePos       = 281 // SSff: (time, mode, x, y)
+	opSetPosB       = 282
+	opMovePosB      = 283
+	opSetVel        = 284 // ff: (angle, speed)
+	opMoveVel       = 285 // SSff: (time, mode, angle, speed)
+	opSetVelB       = 286
+	opMoveVelB      = 287
+	opSetCircle     = 288 // ffff: (angle, angular speed, radius, radial speed)
+	opMoveCircle    = 289 // SSffff: (time, mode, ...as 288)
+	opSetCircleB    = 290
+	opMoveCircleB   = 291
+	opMoveRand      = 292 // SSf: (time, mode, speed)
+	opMoveRandB     = 293
+	opPosToBoss     = 294 // (): layer A at boss 0
+	opPosToBossB    = 295 // (): layer B at boss 0
+	opPosAdd        = 296 // fff
+	opPosAddB       = 297
+	opCircleCentre  = 298 // ff: the layer's delta (centre), then A at boss 0
+	opCircleCentreB = 299
 
-	opSetHurtbox  = 320
-	opSetHitbox   = 321
-	opFlagSet     = 322
-	opFlagClear   = 323
-	opMoveLimit   = 324
-	opMoveLimitR  = 325
-	opDropClear   = 326
-	opDropExtra   = 327
-	opDropArea    = 328
-	opDropItems   = 329
-	opDropMain    = 330
-	opSetHP       = 331
-	opSetBoss     = 332
-	opTimerReset  = 333
-	opDelayedCall = 334
-	opSetInvuln   = 335
-	opPlaySound   = 336
-	opScreenShake = 337
-	opDialogRead  = 338
-	opDialogWait  = 339
-	opDeathWait   = 340
-	opSetTimeout  = 341
-	opSpellBg     = 342
-	opSpellEnd    = 343
-	opSetChapter  = 344
-	opLifeMarker  = 347
-	opAnmRank     = 348
-	opRankPickI   = 355
-	opRankPickF   = 356
-	opSpell       = 357
-	opSpell3      = 359
-	opStars       = 360
-	opWaitRank    = 368 // SSSS: difficulty-indexed wait (Easy,Normal,Hard,Lunatic)
+	opSetHurtbox   = 320
+	opSetHitbox    = 321
+	opFlagSet      = 322
+	opFlagClear    = 323
+	opMoveLimit    = 324
+	opMoveLimitR   = 325
+	opDropClear    = 326
+	opDropExtra    = 327
+	opDropArea     = 328
+	opDropItems    = 329
+	opDropMain     = 330
+	opSetHP        = 331
+	opSetBoss      = 332
+	opTimerReset   = 333
+	opSetInterrupt = 334
+	opSetInvuln    = 335
+	opPlaySound    = 336
+	opScreenShake  = 337
+	opDialogRead   = 338
+	opDialogWait   = 339
+	opBossWait     = 340
+	opSetTimeout   = 341
+	opSpellBg      = 342
+	opSpellEnd     = 343
+	opSetChapter   = 344
+	opLifeMarker   = 347
+	opAnmRank      = 348
+	opRankPickI    = 355
+	opRankPickF    = 356
+	opSpell        = 357
+	opSpell3       = 359
+	opStars        = 360
+	opWaitRank     = 368 // SSSS: difficulty-indexed wait (Easy,Normal,Hard,Lunatic)
 
-	opETNew        = 400
-	opETFire       = 401
-	opETSprite     = 402
-	opETOffset     = 403
-	opETAngle      = 404
-	opETSpeed      = 405
-	opETCount      = 406
-	opETAim        = 407
-	opETSound      = 408
-	opETEx         = 409
-	opETClearAll   = 410
-	opETCopy       = 411
-	opLaserOnA     = 412
-	opLaserStOn    = 413
-	opLaserOnB     = 428 // SSffSfSf: boss laser variant
-	opLaserStC     = 431 // SSffSfff: Extra-stage boss laser variant
-	opLaserStB     = 433 // SSffSfff: boss laser variant
-	opETCancel     = 420
-	opETClear      = 421
-	opETCountR3    = 425
-	opETCountR5    = 426
-	opETCountR2    = 427
-	opETSpeedRank4 = 435 // Sffffffff: slot + speed[4 diff] + speed2[4 diff]
-	opETCountRank4 = 436 // SSSSSSSSS: slot + ways[4 diff] + stacks[4 diff]
+	// Bullet and laser ops (bullet_ops.go).
+	opETNew       = 400 // S: reset a template
+	opETFire      = 401 // S: fire a template
+	opETSprite    = 402 // SSS: type, colour
+	opETOffset    = 403 // Sff: fire offset from the enemy
+	opETAngle     = 404 // Sff
+	opETSpeed     = 405 // Sff
+	opETCount     = 406 // SSS: per ring, rings
+	opETAim       = 407 // SS: the angle mode
+	opETSound     = 408 // SSS: fire sound, transform sound
+	opETEx        = 409 // SSSSSSff: one transform entry
+	opETClearAll  = 410 // rect clear with items, and every laser
+	opETCopy      = 411 // SS: dst, src
+	opLaserOnA    = 412 // SSffffff: line laser from slot 0's offset
+	opLaserStOn   = 413 // vSSfffSSSSfS: infinite laser, its handle into a var
+	opLaserPos    = 414 // Sff: 414-419 change the laser a handle names
+	opLaserMove   = 415 // Sff
+	opLaser416    = 416 // Sf
+	opLaser417    = 417 // Sf
+	opLaser418    = 418 // Sf
+	opLaser419    = 419 // Sf
+	opETCancel    = 420 // f: circle clear round the enemy, with items
+	opETClear     = 421 // f: the same without items
+	opETSpeedR3   = 422 // Sffffff: speeds by 3 rank tiers
+	opETSpeedR5   = 423 // Sffffffffff: speeds by 5 rank tiers
+	opETSpeedR2   = 424 // Sffff: speeds blended over rank
+	opETCountR3   = 425 // SSSSSSS
+	opETCountR5   = 426 // SSSSSSSSSSS
+	opETCountR2   = 427 // SSSSS
+	opLaserOnB    = 428 // 412 with laser flag 1 clear
+	opLaserStB    = 429 // 413 with laser flag 2 clear
+	opAimAt       = 430 // vff: the angle from (x, y) to the player
+	opLaserOnAEx  = 431 // 412, 413, 428, 429 taking slot 0's transforms
+	opLaserStOnEx = 432
+	opLaserOnBEx  = 433
+	opLaserStBEx  = 434
+	opETSpeedDiff = 435 // Sffffffff: speeds by difficulty
+	opETCountDiff = 436 // SSSSSSSSS: counts by difficulty
 )

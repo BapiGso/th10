@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"th10/entity/bullet"
-	"th10/game"
 )
 
 var updateGolden = flag.Bool("update-golden", false, "rewrite golden stage snapshots")
@@ -37,8 +36,8 @@ func stageDigest(eclPath string) []string {
 	var lines []string
 	var buf []byte
 	for f := 1; f <= goldenFrames; f++ {
-		vm.Update(ctx)
-		ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+		stepFrame(vm, ctx)
+		updateBullets(ctx)
 		for _, e := range ctx.Enemies {
 			if e == nil || !e.Active {
 				continue
@@ -47,12 +46,12 @@ func stageDigest(eclPath string) []string {
 			h.Write(buf)
 		}
 		ctx.Bullets.Each(func(b *bullet.Bullet) {
-			buf = fmt.Appendf(buf[:0], "b%.2f,%.2f,%.3f,%.2f,%d,%d;", b.X, b.Y, b.Angle, b.Speed, int(b.Type), b.Color)
+			buf = fmt.Appendf(buf[:0], "b%.2f,%.2f,%.3f,%.2f,%d,%d;", b.Pos[0], b.Pos[1], b.Angle, b.Speed, b.Type, b.Colour)
 			h.Write(buf)
 		})
 		if f%goldenCheckpoint == 0 {
 			lines = append(lines, fmt.Sprintf("frame %04d hash %016x enemies %d bullets %d",
-				f, h.Sum64(), activeEnemies(ctx), ctx.Bullets.ActiveCount()))
+				f, h.Sum64(), activeEnemies(ctx), ctx.Bullets.Live()))
 		}
 	}
 	return lines
@@ -76,7 +75,8 @@ func TestGoldenStages(t *testing.T) {
 			if err != nil {
 				t.Skipf("no golden file yet (%v); run with -update-golden", err)
 			}
-			want := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			// core.autocrlf may check the golden files out with CRLF.
+			want := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(raw), "\r\n", "\n")), "\n")
 			for i, g := range got {
 				if i >= len(want) {
 					t.Fatalf("golden has %d checkpoints, produced %d", len(want), len(got))

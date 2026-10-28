@@ -1,23 +1,21 @@
-// Package render 同时提供图像辅助：从 embed assets 解码 PNG、按瓦片纵向滚动。
+// Package render 同时提供图像辅助：经 gamedata 加载原作贴图（或自制 PNG）、按瓦片纵向滚动。
 //
 // 这里集中了原先散落在 scene/stage、scene/title、scene/loading、scene/select、
 // scene/dialog 各自重复的 PNG 加载逻辑。
 package render
 
 import (
-	"bytes"
-	"image"
-	_ "image/png" // PNG decoder
 	"math"
 	"sync"
-	"th10/assets"
+	"th10/gamedata"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 var imageCache sync.Map // path -> *ebiten.Image （nil 表示已尝试且失败，不重复读盘）
 
-// LoadImage 从 embed assets 加载 PNG 为 *ebiten.Image。
+// LoadImage 按资源路径加载图像为 *ebiten.Image："anm/<贴图名>" 取自 th10.dat
+// 中对应 .anm 的 THTX 数据，其余路径读嵌入的自制 PNG。
 // 失败返回 nil；调用方需要做 nil 检查（一般通过 vector.* 几何 fallback 兜底）。
 // 同一路径只解码一次。
 func LoadImage(path string) *ebiten.Image {
@@ -33,11 +31,7 @@ func LoadImage(path string) *ebiten.Image {
 }
 
 func decodeImage(path string) *ebiten.Image {
-	data, err := assets.Assets.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, err := gamedata.Image(path)
 	if err != nil {
 		return nil
 	}

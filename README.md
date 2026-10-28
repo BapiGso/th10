@@ -11,6 +11,24 @@
 通常认为，从本作起的一系列东方作品，和红魔乡到本作之前的东方作品有着一定的差异性。
 东方风神录的历史背景与部分角色是以日本神话中的诹访大战以及诹访神社的相关神明为基础进行改编而成的。
 
+### 资源与运行
+
+游戏为单一可执行文件：所需资源（原作文件、解码贴图、BGM、SE 及 HUD 字体）已嵌入二进制（`assets/`），
+运行时不读取任何外部文件，`go run ./cmd` 即可直接启动。
+
+资源按里程碑逐步加入，由开发工具 `tools/th10extract` 从你自己的东方风神录 v1.00a 安装目录（`th10.dat`、`thbgm.dat`）原样拷贝到 `assets/`：
+
+```bash
+go run ./tools/th10extract -list                    # 列出 th10.dat 内容，并标出已嵌入的文件
+go run ./tools/th10extract stage01.std 'se_*.wav'   # 复制匹配的文件（path.Match 通配符）
+go run ./tools/th10extract -bgm                     # 将 thbgm.dat 各曲编码为 Ogg Vorbis（需 libvorbis 版 ffmpeg），并复制 thbgm.fmt
+go run ./tools/th10extract -textures                # 用 th10.dat 的 THTX 数据重绘 assets/anm/**/*.png 中像素不同的贴图
+```
+
+安装目录查找顺序：`-dir` 参数 → 环境变量 `TH10_DIR` → 从工作目录向上查找 `.tmp/[th10]/`。
+
+`go test ./gamedata ./audio` 用于校验嵌入资源：`gamedata` 逐字节比对原始文件、逐像素比对贴图，`audio` 校验 BGM 与 thbgm.dat 对齐及循环点。找不到原作数据时自动跳过。
+
 ---
 
 ## 一.五、游戏设定
@@ -143,7 +161,10 @@ th10/
 │   └── ending/                  # ED
 │
 ├── audio/audio.go               # BGM / SE 管理（第 8 篇）
-├── assets/                      # embed 资源（图片/音频/字体）
+├── datfs/                       # th10.dat（THA1）只读 + thbgm.fmt；开发期提取/校验用
+├── gamedata/                    # 资源访问入口（只读嵌入资源）
+├── assets/                      # 嵌入资源：原作文件原样拷贝 + 解码贴图 + BGM(ogg) + HUD 字体
+├── tools/th10extract/           # 从 th10.dat 提取资源到 assets/
 └── data/                        # 存档 / 配置（第 16 篇）
 ```
 
@@ -255,9 +276,9 @@ if boss.Age%8 == 0 {
 
 ### 5.7 音频（第 8 篇）
 
-- **BGM**：WAV 解码 + `InfiniteLoopWithIntro` 实现无缝循环，需预设 loopStart / loopEnd
-- **SE**：每次播放创建新 Player 实例（允许重叠播放）
-- SE 全部 embed 为 WAV，启动时不额外加载
+- **BGM**：内嵌的 Ogg Vorbis 曲目（`assets/wav/bgm/`），由 `thbgm.dat` 的 44.1 kHz PCM 逐采样编码（与原作采样对齐）；循环点取自内嵌的 `thbgm.fmt`，`InfiniteLoopWithIntro` 先播 [0, Size) 再循环 [Intro, Size)
+- **SE**：原作 WAV 文件（内嵌于 `assets/wav/se/`），首次播放时解码并缓存；每次播放创建新 Player 实例（允许重叠播放）
+- 音频上下文 44100 Hz，与原作一致，无需重采样
 
 ### 5.8 信仰系统（风神录独有）
 

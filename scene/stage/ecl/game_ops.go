@@ -1,32 +1,51 @@
 package ecl
 
-// Game opcodes 256-368: enemy lifecycle, visuals, drops, and the two-layer
-// movement system, ported from FUN_0040e770. Bullet/laser opcodes (400-436)
+// Game opcodes 256-368 (FUN_0040e770): enemy creation, ANM slots, movement
+// (motion.go), state, drops and boss phases. Bullet/laser opcodes (400-436)
 // live in bullet_ops.go.
+//
+// Every handler reads its args in the binary's order: a var arg of -1 pops
+// the data stack, so the order is part of the semantics.
 
 import (
 	"math"
 	"strings"
+	"sync"
 
 	"golang.org/x/text/encoding/japanese"
 
-	"th10/audio"
+	"th10/anm"
+	"th10/entity/bullet"
 	"th10/entity/enemy"
 	"th10/entity/item"
+	"th10/gamedata"
 	"th10/scene/stage"
 )
 
-// eclActor holds the ECL movement/visual state for one enemy. Final position is
-// the sum of two independent movement layers (enemy+0x58 / +0x84 in the binary);
-// most enemies only use layer A.
+// eclActor is one enemy's ECL state (the EnemyData at enemy+0x103c).
 type eclActor struct {
-	layers    [2]moveLayer
-	moveLimit eclRect
-	hasLimit  bool
-	entered   bool // has been inside the field once (FUN_0040dc80 flag 0x100)
-	dropArea  eclRect
-	tpl       [16]eclTemplate // bullet emitter templates (bullet_ops.go)
-	markers   []lifeMarker
+	e      *enemy.Enemy
+	mv     motion
+	main   *eclTask   // the primary context (an interrupt retargets it)
+	asyncs []*eclTask // async contexts, newest first
+	// vars are I0-I3 and F0-F3 (special vars -9985..-9978, +0x1138), copied
+	// from the creator.
+	vars [8]uint32
+	// ANM state: the file ins_258 selected (+0xe8), the slot-0 script (+0xf0)
+	// and ins_262's script, which ins_269 offsets (+0xf4).
+	anmFile, curScript, dirScript int
+	ran                           bool // updated this frame (flag 0x400 was set)
+
+	dropArea eclRect
+	tpl      [16]bullet.Template // bullet emitter templates (+0x2c4, bullet_ops.go)
+	tplOff   [16][3]float32      // their fire offsets from the enemy (+0x1344)
+	fireR    float32             // ins_346's squared no-fire radius (+0x1454)
+	markers  []lifeMarker
+
+	slots   [8]interruptSlot // boss phase interrupts (interrupt.go)
+	phase   eclTimer         // phase timer, reset by ins_333 and each interrupt
+	invuln  eclTimer         // ins_335 invulnerability timer (+0x2458)
+	bossIdx int              // the boss slot ins_332 put this enemy in
 }
 
 type eclRect struct{ x, y, w, h float64 }
@@ -37,116 +56,49 @@ type lifeMarker struct {
 	raw   int32
 }
 
-type moveLayer struct {
-	x, y     float64 // position contribution, ECL coords (center/top relative)
-	speed    float64
-	angle    float64
-	accel    float64 // mode-7 continuous speed acceleration
-	angleVel float64 // continuous heading rotation (moveCircle 288/290), rad/frame
-	flip     bool    // mirror X movement (enemy spawned by a "flip" create opcode)
-	pos      *posTween
-	vel      *velTween
-}
-
-type posTween struct {
-	sx, sy, tx, ty float64
-	t, total       int
-	mode           int
-}
-
-type velTween struct {
-	sa, ss, ta, ts float64
-	t, total       int
-	mode           int
-}
-
-func (vm *VM) actorFor(e *enemy.Enemy) *eclActor {
-	a := vm.actors[e]
-	if a == nil {
-		a = &eclActor{}
-		vm.actors[e] = a
+func newActor(e *enemy.Enemy) *eclActor {
+	a := &eclActor{e: e}
+	for i := range a.slots {
+		a.slots[i].hp = -1
 	}
 	return a
 }
 
-// integrate advances both movement layers (tweens advance by `ticks` script
-// ticks; velocity integrates every real frame) and writes the enemy's world
-// position. With moveLimit active (flag 0x200) the final position is clamped
-// into the box each frame (FUN_0040dc80), the correction going into layer A.
-func (a *eclActor) integrate(e *enemy.Enemy, ticks int) {
-	for i := range a.layers {
-		a.layers[i].step(ticks)
+// actorFor returns e's actor, registering one for an enemy the VM did not
+// create (tests).
+func (vm *VM) actorFor(e *enemy.Enemy) *eclActor {
+	a := vm.actors[e]
+	if a == nil {
+		a = newActor(e)
+		vm.actors[e] = a
+		vm.order = append(vm.order, a)
 	}
-	sx := a.layers[0].x + a.layers[1].x
-	sy := a.layers[0].y + a.layers[1].y
-	if a.hasLimit {
-		hw, hh := math.Abs(a.moveLimit.w)*0.5, math.Abs(a.moveLimit.h)*0.5
-		nx := clampF(sx, a.moveLimit.x-hw, a.moveLimit.x+hw)
-		ny := clampF(sy, a.moveLimit.y-hh, a.moveLimit.y+hh)
-		a.layers[0].x += nx - sx
-		a.layers[0].y += ny - sy
-		sx, sy = nx, ny
-	}
-	e.X, e.Y = eclToWorld(sx, sy)
-
-	// Offscreen despawn (FUN_0040dc80): the ECL field is x in [-192,192],
-	// y in [0,448] (DAT_00470b3c/b40/b04/b38). Once an enemy has entered,
-	// leaving by more than its half sprite size deletes it silently, unless
-	// ECL flag bit2 (0x4, set via ins_322) keeps it alive. Bosses never
-	// despawn this way (they sit inside a moveLimit anyway).
-	const half = 16.0
-	outside := sx+half < -192 || sx-half > 192 || sy+half < 0 || sy-half > 448
-	if !outside {
-		a.entered = true
-	} else if a.entered && e.ECLFlags&0x4 == 0 && e.Type == enemy.TypeFairy {
-		e.Active = false
-	}
+	return a
 }
 
-func (l *moveLayer) step(ticks int) {
-	for k := 0; k < ticks; k++ {
-		if l.pos != nil {
-			l.pos.t++
-			f := easeFrac(l.pos.t, l.pos.total, l.pos.mode)
-			l.x = lerp(l.pos.sx, l.pos.tx, f)
-			l.y = lerp(l.pos.sy, l.pos.ty, f)
-			if l.pos.t >= l.pos.total {
-				l.x, l.y = l.pos.tx, l.pos.ty
-				l.pos = nil
-			}
-			continue
-		}
-		if l.vel != nil {
-			l.vel.t++
-			f := easeFrac(l.vel.t, l.vel.total, l.vel.mode)
-			l.angle = l.vel.sa + angDelta(l.vel.sa, l.vel.ta)*f
-			l.speed = lerp(l.vel.ss, l.vel.ts, f)
-			if l.vel.t >= l.vel.total {
-				l.angle, l.speed = l.vel.ta, l.vel.ts
-				l.vel = nil
-			}
-		}
-		if l.accel != 0 {
-			l.speed += l.accel
-		}
-	}
-	if l.pos != nil {
-		return // a position tween owns the position; no velocity integration
-	}
-	if l.angleVel != 0 {
-		l.angle += l.angleVel // moveCircle: heading rotates → curved path
-	}
-	dx := math.Cos(l.angle) * l.speed
-	if l.flip {
-		dx = -dx // mirrored enemy: negate X displacement (angle -> pi-angle)
-	}
-	l.x += dx
-	l.y += math.Sin(l.angle) * l.speed
+// syncPos publishes the final position to the enemy in world coordinates.
+func (a *eclActor) syncPos() {
+	a.e.X, a.e.Y = eclToWorld(float64(a.mv.final.pos[0]), float64(a.mv.final.pos[1]))
 }
 
-func (l *moveLayer) setVel(angle, speed float64) {
-	l.angle, l.speed, l.accel, l.angleVel = angle, speed, 0, 0
-	l.pos, l.vel = nil, nil
+// boss0 is the live enemy in boss slot 0 (DAT_00477704+0x10), or nil.
+func (vm *VM) boss0() *eclActor {
+	if b := vm.bossSlots[0]; b != nil && b.Active {
+		return vm.actors[b]
+	}
+	return nil
+}
+
+// set reports a float arg that is not the "keep the current value" sentinel.
+func set(v float32) bool { return float64(v) > unsetArg }
+
+// eclUnset is the sentinel test on an already-widened arg.
+func eclUnset(v float64) bool { return v <= unsetArg }
+
+// mirrorAngle reflects a heading about the vertical axis for a mirrored
+// enemy (flag 0x800): pi/2 - norm(a - pi/2).
+func mirrorAngle(a float32) float32 {
+	return normAngle(halfPi32 - normAngle(a-halfPi32))
 }
 
 // execGameOp dispatches opcodes >= 256.
@@ -156,107 +108,103 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		return
 	}
 	switch in.Opcode {
-	case opEnmCreate, opEnmCreateM, opEnmCreateAbs, opEnmCreateAbsM, 265, 266, 267, 268, 270, 271:
-		vm.spawn(ctx, t, in)
+	case opEnmCreate, opEnmCreateA, opEnmCreateM, opEnmCreateAM, 265, 266, 267, 268, opEnmCreate3D, 271:
+		vm.createOp(ctx, t, in)
 	case opAnmSelect:
-		// Selects which loaded ANM file subsequent anm ops target (enemy->0xe8).
 		if t.owner != nil && len(in.Params) >= 1 {
-			t.owner.AnmSlot = int(vm.resolveInt(t, in.Params[0]))
+			f := int(vm.resolveInt(t, in.Params[0]))
+			vm.actorFor(t.owner).anmFile = f
+			t.owner.AnmSlot = f
 		}
-	case opAnmSetMain:
-		// anmSetMain(layer, scriptID): play an ANM script on a layer. Layer 0 is
-		// the main body — record its enemy.anm script id for faithful rendering.
-		if t.owner != nil && len(in.Params) >= 2 {
-			layer := int(vm.resolveInt(t, in.Params[0]))
-			scriptID := int(vm.resolveInt(t, in.Params[1]))
-			if layer == 0 {
-				t.owner.MainScript = scriptID
-			}
-			vm.applyEnemyVisual(t.owner, scriptID)
-		}
-	case opAnmSetSprite:
-		if t.owner != nil && len(in.Params) >= 2 {
-			vm.applyEnemyVisual(t.owner, int(vm.resolveInt(t, in.Params[1])))
-		}
+	case opAnmSetSlot, opAnmSetMain:
+		vm.anmSetSlot(t, in)
 	case opAnmPlay, opAnmPlayAbs:
 		if t.owner != nil && len(in.Params) >= 2 {
+			t.owner.Hidden = false
 			vm.applyEnemyAnimation(t.owner, int(vm.resolveInt(t, in.Params[1])))
 		}
-	case opAnmSelectPlay:
+	case opAnmSetDir5: // the direction sprites (dirScript+5); visuals not modelled
 		if t.owner != nil && len(in.Params) >= 1 {
-			vm.applyEnemyAnimation(t.owner, int(vm.resolveInt(t, in.Params[0])))
+			a := vm.actorFor(t.owner)
+			if vm.resolveInt(t, in.Params[0]) == 0 {
+				a.mv.size = vm.scriptSize(a.anmFile, a.dirScript+5)
+			}
+			t.owner.Hidden = false
 		}
 
 	// --- movement ---
 	case opSetPos, opSetPosB:
 		vm.opSetPos(t, in, layerOf(in.Opcode, opSetPos))
-	case opMovePosTime, opMovePosTimeB:
-		vm.opMovePosTime(t, in, layerOf(in.Opcode, opMovePosTime))
+	case opMovePos, opMovePosB:
+		vm.opMovePos(t, in, layerOf(in.Opcode, opMovePos))
 	case opSetVel, opSetVelB:
 		vm.opSetVel(t, in, layerOf(in.Opcode, opSetVel))
-	case opMoveVelTime, opMoveVelTimeB:
-		vm.opMoveVelTime(t, in, layerOf(in.Opcode, opMoveVelTime))
-	case opMoveRand, opMoveRandB:
-		vm.opMoveRand(t, in, layerOf(in.Opcode, opMoveRand))
-	case opMoveAdd, opMoveAddB:
-		if t.owner != nil && len(in.Params) >= 2 {
-			a := vm.actorFor(t.owner)
-			l := &a.layers[layerOf(in.Opcode, opMoveAdd)]
-			dx := float64(vm.resolveFloat(t, in.Params[0]))
-			if l.flip {
-				dx = -dx
-			}
-			l.x += dx
-			l.y += float64(vm.resolveFloat(t, in.Params[1]))
-		}
+	case opMoveVel, opMoveVelB:
+		vm.opMoveVel(t, in, layerOf(in.Opcode, opMoveVel))
+	case opSetCircle, opSetCircleB:
+		vm.opSetCircle(t, in, layerOf(in.Opcode, opSetCircle))
 	case opMoveCircle, opMoveCircleB:
 		vm.opMoveCircle(t, in, layerOf(in.Opcode, opMoveCircle))
-	case opMoveStop: // 294: halt all motion on layer A (keep position)
+	case opMoveRand, opMoveRandB:
+		vm.opMoveRand(t, in, layerOf(in.Opcode, opMoveRand))
+	case opPosToBoss, opPosToBossB:
 		if t.owner != nil {
-			l := &vm.actorFor(t.owner).layers[0]
-			l.speed, l.accel, l.angleVel = 0, 0, 0
-			l.pos, l.vel = nil, nil
+			if b := vm.boss0(); b != nil {
+				vm.actorFor(t.owner).mv.layer[layerOf(in.Opcode, opPosToBoss)].pos = b.mv.final.pos
+			}
 		}
-	case opMoveVel299: // 299 ff: set layer-B heading/speed instantly (B-form of 297/298 family)
+	case opPosAdd, opPosAddB: // fff
+		if t.owner != nil && len(in.Params) >= 3 {
+			l := &vm.actorFor(t.owner).mv.layer[layerOf(in.Opcode, opPosAdd)]
+			x := vm.resolveFloat(t, in.Params[0])
+			y := vm.resolveFloat(t, in.Params[1])
+			z := vm.resolveFloat(t, in.Params[2])
+			l.pos[0] += x
+			l.pos[1] += y
+			l.pos[2] += z
+		}
+	case opCircleCentre, opCircleCentreB: // ff
 		if t.owner != nil && len(in.Params) >= 2 {
-			l := &vm.actorFor(t.owner).layers[1]
-			angle := float64(vm.resolveFloat(t, in.Params[0]))
-			speed := float64(vm.resolveFloat(t, in.Params[1]))
-			if !eclUnset(angle) {
-				l.angle = angle
+			a := vm.actorFor(t.owner)
+			l := &a.mv.layer[layerOf(in.Opcode, opCircleCentre)]
+			x := vm.resolveFloat(t, in.Params[0])
+			y := vm.resolveFloat(t, in.Params[1])
+			if set(x) {
+				l.delta[0] = x
 			}
-			if !eclUnset(speed) {
-				l.speed = speed
+			if set(y) {
+				l.delta[1] = y
 			}
-			l.accel, l.angleVel = 0, 0
-			l.pos, l.vel = nil, nil
+			// Then as 294, for either layer.
+			if b := vm.boss0(); b != nil {
+				a.mv.layer[0].pos = b.mv.final.pos
+			}
 		}
-	case opMoveLimit:
+	case opMoveLimit: // ffff: (x, y, w, h), flag 0x200
 		if t.owner != nil && len(in.Params) >= 4 {
 			a := vm.actorFor(t.owner)
-			a.moveLimit = eclRect{
-				x: float64(vm.resolveFloat(t, in.Params[0])),
-				y: float64(vm.resolveFloat(t, in.Params[1])),
-				w: float64(vm.resolveFloat(t, in.Params[2])),
-				h: float64(vm.resolveFloat(t, in.Params[3])),
+			for i := range a.mv.limit {
+				a.mv.limit[i] = vm.resolveFloat(t, in.Params[i])
 			}
-			a.hasLimit = true
+			t.owner.ECLFlags |= 0x200
 		}
 	case opMoveLimitR:
 		if t.owner != nil {
-			vm.actorFor(t.owner).hasLimit = false
+			t.owner.ECLFlags &^= 0x200
 		}
 
 	// --- enemy state ---
 	case opSetHurtbox:
 		if t.owner != nil && len(in.Params) >= 2 {
-			t.owner.HitWidth = math.Abs(float64(vm.resolveFloat(t, in.Params[0])))
-			t.owner.HitHeight = math.Abs(float64(vm.resolveFloat(t, in.Params[1])))
+			w := vm.resolveFloat(t, in.Params[0])
+			h := vm.resolveFloat(t, in.Params[1])
+			t.owner.HitWidth, t.owner.HitHeight = math.Abs(float64(w)), math.Abs(float64(h))
 		}
 	case opSetHitbox:
 		if t.owner != nil && len(in.Params) >= 2 {
-			t.owner.BodyWidth = math.Abs(float64(vm.resolveFloat(t, in.Params[0])))
-			t.owner.BodyHeight = math.Abs(float64(vm.resolveFloat(t, in.Params[1])))
+			w := vm.resolveFloat(t, in.Params[0])
+			h := vm.resolveFloat(t, in.Params[1])
+			t.owner.BodyWidth, t.owner.BodyHeight = math.Abs(float64(w)), math.Abs(float64(h))
 		}
 	case opFlagSet:
 		if t.owner != nil && len(in.Params) >= 1 {
@@ -266,25 +214,33 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		if t.owner != nil && len(in.Params) >= 1 {
 			t.owner.ECLFlags &^= int(vm.resolveInt(t, in.Params[0]))
 		}
-	case opSetHP:
+	case opSetHP: // 331 S: HP and max HP; the life-bar markers go
 		if t.owner != nil && len(in.Params) >= 1 {
-			if hp := int(vm.resolveInt(t, in.Params[0])); hp > 0 {
-				t.owner.HP, t.owner.MaxHP = hp, hp
-				vm.actorFor(t.owner).markers = nil
+			hp := int(vm.resolveInt(t, in.Params[0]))
+			t.owner.HP, t.owner.MaxHP = hp, hp
+			vm.actorFor(t.owner).markers = nil
+		}
+	case opSetBoss: // 332 S: take boss slot idx (flag 0x8000); idx < 0 leaves it
+		if t.owner != nil && len(in.Params) >= 1 {
+			a := vm.actorFor(t.owner)
+			if idx := int(vm.resolveInt(t, in.Params[0])); idx < 0 {
+				if t.owner.ECLFlags&0x8000 != 0 {
+					vm.bossSlots[a.bossIdx] = nil
+				}
+				t.owner.ECLFlags &^= 0x8000
+			} else if idx < len(vm.bossSlots) {
+				t.owner.ECLFlags |= 0x8000
+				vm.bossSlots[idx] = t.owner
+				a.bossIdx = idx
 			}
 		}
-	case opSetBoss:
-		// Boss/MidBoss type is decided at spawn; nothing extra needed here.
-	case opTimerReset:
+	case opTimerReset: // 333: the phase timer (FUN_00405410(0))
 		if t.owner != nil {
-			t.owner.Age = 0
+			vm.actorFor(t.owner).phase.set(0)
 		}
-	case opSetInvuln:
+	case opSetInvuln: // 335 S
 		if t.owner != nil && len(in.Params) >= 1 {
-			n := int(vm.resolveInt(t, in.Params[0]))
-			if n > t.owner.InvulnFrames {
-				t.owner.InvulnFrames = n
-			}
+			vm.actorFor(t.owner).invuln.set(vm.resolveInt(t, in.Params[0]))
 		}
 	case opDropClear:
 		if t.owner != nil {
@@ -293,15 +249,18 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 			t.owner.DropAreaW, t.owner.DropAreaH = 0, 0
 			vm.actorFor(t.owner).dropArea = eclRect{}
 		}
-	case opDropExtra:
+	case opDropExtra: // SS: (type, count)
 		if t.owner != nil && len(in.Params) >= 2 {
-			vm.addDrop(t.owner, int(vm.resolveInt(t, in.Params[0])), int(vm.resolveInt(t, in.Params[1])))
+			typ := int(vm.resolveInt(t, in.Params[0]))
+			n := int(vm.resolveInt(t, in.Params[1]))
+			vm.addDrop(t.owner, typ, n)
 		}
-	case opDropArea:
+	case opDropArea: // ff: (w, h), h read first
 		if t.owner != nil && len(in.Params) >= 2 {
 			a := vm.actorFor(t.owner)
-			a.dropArea.w = math.Abs(float64(vm.resolveFloat(t, in.Params[0])))
-			a.dropArea.h = math.Abs(float64(vm.resolveFloat(t, in.Params[1])))
+			h := vm.resolveFloat(t, in.Params[1])
+			w := vm.resolveFloat(t, in.Params[0])
+			a.dropArea.w, a.dropArea.h = math.Abs(float64(w)), math.Abs(float64(h))
 			t.owner.DropAreaW, t.owner.DropAreaH = a.dropArea.w, a.dropArea.h
 		}
 	case opDropMain:
@@ -310,16 +269,16 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		}
 	case opDropItems:
 		vm.spawnDrops(ctx, t.owner)
-	case opDelayedCall:
+	case opSetInterrupt: // 334 SSSm: (slot, hp, time, sub), FUN_00412720
 		if t.owner != nil && len(in.Params) >= 4 {
-			delay := int(vm.resolveInt(t, in.Params[1]))
-			if delay <= 0 {
-				delay = int(vm.resolveInt(t, in.Params[2]))
-			}
-			name := in.Params[3].Str
-			if name != "" {
-				if nt := vm.startTask(name, t.owner, nil, -1); nt != nil && delay > 0 {
-					nt.wait = delay
+			a := vm.actorFor(t.owner)
+			time := vm.resolveInt(t, in.Params[2])
+			hp := vm.resolveInt(t, in.Params[1])
+			if i := int(vm.resolveInt(t, in.Params[0])); i >= 0 && i < len(a.slots) {
+				s := &a.slots[i]
+				if s.hp = hp; s.hp >= 0 {
+					s.time = time
+					s.sub, s.timeoutSub = in.Params[3].Str, in.Params[3].Str
 				}
 			}
 		}
@@ -328,9 +287,10 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 			vm.playStageSound(ctx, int(vm.resolveInt(t, in.Params[0])))
 		}
 	case opScreenShake: // 337 SSS: (duration, magnitude, _) — screen shake
-		if len(in.Params) >= 2 {
-			dur := int(vm.resolveInt(t, in.Params[0]))
+		if len(in.Params) >= 3 {
+			vm.resolveInt(t, in.Params[2])
 			mag := float64(vm.resolveInt(t, in.Params[1]))
+			dur := int(vm.resolveInt(t, in.Params[0]))
 			if dur > 0 && mag > 0 {
 				vm.shakeFrames, vm.shakeTotal, vm.shakeMag = dur, dur, mag
 			}
@@ -344,53 +304,44 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		// A bare 339 (no preceding 338) is a spell-name/banner cue → not a dialog.
 		switch {
 		case vm.dialogFiring && vm.DialogActive != nil && vm.DialogActive():
-			t.wait = 1
-			t.pc-- // overlay still open: keep blocking
+			t.blocked = true // overlay still open: keep blocking
 		case vm.dialogFiring:
 			vm.dialogFiring = false // overlay closed: this event is done
 		case vm.dialogArmed && vm.DialogFunc != nil && vm.DialogFunc(vm.dialogID):
 			vm.dialogArmed = false
 			vm.dialogFiring = true
-			t.wait = 1
-			t.pc-- // opened this frame: block until it closes
+			t.blocked = true // opened this frame: block until it closes
 		default:
 			vm.dialogArmed = false // bare 339 or no bridge: nothing to do
 		}
-	case opDeathWait:
-		if vm.hasBlockingEnemies(ctx, t.owner) {
-			t.wait = 1
-			// re-run this instruction next time it wakes
-			t.pc--
+	case opBossWait: // 340: block while boss slot 0 is taken
+		if vm.boss0() != nil {
+			t.blocked = true
 		}
-	case opSetTimeout: // 341 Sm (case 0x155): register the timeout escape sub
-		if len(in.Params) >= 2 && in.Params[1].Str != "" {
-			vm.escapeSub = in.Params[1].Str
-			vm.escapeOwner = t.owner
+	case opSetTimeout: // 341 Sm (case 0x155): (slot, sub) run when the slot times out
+		if t.owner != nil && len(in.Params) >= 2 {
+			a := vm.actorFor(t.owner)
+			if i := int(vm.resolveInt(t, in.Params[0])); i >= 0 && i < len(a.slots) {
+				a.slots[i].timeoutSub = in.Params[1].Str
+			}
 		}
-	case opSpellEnd:
-		if ctx != nil && ctx.Bullets != nil {
-			ctx.Bullets.ClearAll()
-		}
+	case opSpellEnd: // case 0x157 leaves the bullets alone
 		vm.spell.active = false // 符卡结束：撤下 HUD
-		vm.escapeSub = ""       // 阶段被打掉：注册的超时逃跑不再触发
 	case opSpellBg, opSpell, opSpell3: // 342/357/359 SSSx: (idx, timeLimit, bonus, name)
 		vm.declareSpell(t, in)
 	case opLifeMarker:
 		vm.addLifeMarker(t, in)
 	case opRankPickI:
 		if len(in.Params) >= 5 {
-			vm.storeVar(t, in.Params[0], intVal(vm.rankPickInt(in.Params[1:])))
+			vm.storeVar(t, in.Params[0], intVal(vm.rankPickInt(t, in.Params[1:])))
 		}
 	case opRankPickF:
 		if len(in.Params) >= 5 {
 			vm.storeVar(t, in.Params[0], floatVal(vm.rankPickFloat(t, in.Params[1:])))
 		}
-	case opWaitRank: // 368 SSSS: difficulty-indexed wait (Easy,Normal,Hard,Lunatic)
+	case opWaitRank: // 368 SSSS: difficulty-indexed wait (Easy,Normal,Hard,Lunatic), as 83
 		if len(in.Params) > 0 {
-			n := int(vm.resolveInt(t, in.Params[vm.rankIndex(len(in.Params))]))
-			if n > 0 {
-				t.wait = n
-			}
+			t.clock -= float32(vm.resolveInt(t, in.Params[vm.rankIndex(len(in.Params))]))
 		}
 	case 364: // case 0x16c: set/clear enemy flag bit 0x80000
 		if t.owner != nil && len(in.Params) >= 1 {
@@ -400,22 +351,28 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 				t.owner.ECLFlags &^= 0x80000
 			}
 		}
-	case 367: // case 0x16f: set the global Timer time scale (DAT_00476f78)
+	case 367: // case 0x16f: the game speed (DAT_00476f78)
 		if len(in.Params) >= 1 {
-			if s := float64(vm.resolveFloat(t, in.Params[0])); s > 0 {
-				vm.timeScale = s
+			vm.gameSpeed = vm.resolveFloat(t, in.Params[0])
+			if ctx != nil && ctx.Anm != nil {
+				ctx.Anm.GameSpeed = vm.gameSpeed
 			}
+		}
+	case 346: // case 0x15a: 401 holds fire while the player is within r
+		if t.owner != nil && len(in.Params) >= 1 {
+			r := vm.resolveFloat(t, in.Params[0])
+			vm.actorFor(t.owner).fireR = float32(r * r)
 		}
 	default:
 		// Remaining no-ops with known-but-cosmetic binary effects: 272/273 spawn
 		// ANM effect objects at the enemy (case 0x110/0x111), 344/345 chapter
-		// bookkeeping, 346 (FUN_0040e6a0), 360 stars, 361 (FUN_00405410),
+		// bookkeeping (345 is FUN_0040e6a0), 360 stars, 361 (FUN_00405410),
 		// 362 HUD flag |8, 363 (FUN_0040cea0), 365 (FUN_0041c7d0), 366 dialog
 		// sprite-swap flags. UI/spell-frame ops likewise.
 	}
 }
 
-// layerOf returns 0 for the base opcode, 1 for its "+2" B-layer variant.
+// layerOf returns 0 (layer A) for the base opcode, 1 (B) for its variant.
 func layerOf(op, base uint16) int {
 	if op == base {
 		return 0
@@ -423,194 +380,258 @@ func layerOf(op, base uint16) int {
 	return 1
 }
 
-func (vm *VM) opSetPos(t *eclTask, in *Instr, layer int) {
+// opSetPos is 280/282: place the layer and recompute the final position at
+// once. Running tweens are left alone.
+func (vm *VM) opSetPos(t *eclTask, in *Instr, i int) {
 	if t.owner == nil || len(in.Params) < 2 {
 		return
 	}
-	l := &vm.actorFor(t.owner).layers[layer]
-	if x := vm.resolveFloat(t, in.Params[0]); !eclUnset(float64(x)) {
-		l.x = float64(x)
+	a := vm.actorFor(t.owner)
+	l := &a.mv.layer[i]
+	x := vm.resolveFloat(t, in.Params[0])
+	y := vm.resolveFloat(t, in.Params[1])
+	if set(x) {
+		l.pos[0] = x
 	}
-	if y := vm.resolveFloat(t, in.Params[1]); !eclUnset(float64(y)) {
-		l.y = float64(y)
+	if set(y) {
+		l.pos[1] = y
 	}
-	l.pos, l.vel = nil, nil
+	l.circle = false
+	a.mv.setFinal()
+	a.syncPos()
 }
 
-func (vm *VM) opMovePosTime(t *eclTask, in *Instr, layer int) {
+// opMovePos is 281/283: tween the layer to (x, y, 0) over time frames.
+func (vm *VM) opMovePos(t *eclTask, in *Instr, i int) {
 	if t.owner == nil || len(in.Params) < 4 {
 		return
 	}
-	l := &vm.actorFor(t.owner).layers[layer]
-	frames := int(vm.resolveInt(t, in.Params[0]))
-	mode := int(vm.resolveInt(t, in.Params[1]))
-	tx := float64(vm.resolveFloat(t, in.Params[2]))
-	ty := float64(vm.resolveFloat(t, in.Params[3]))
-	// Sentinel targets keep the current coordinate (FUN case 0x119).
-	if eclUnset(tx) {
-		tx = l.x
+	a := vm.actorFor(t.owner)
+	l := &a.mv.layer[i]
+	x := vm.resolveFloat(t, in.Params[2])
+	y := vm.resolveFloat(t, in.Params[3])
+	dur := vm.resolveInt(t, in.Params[0])
+	mode := vm.resolveInt(t, in.Params[1])
+	p := &a.mv.posI[i]
+	p.Start = l.pos
+	p.End = [3]float32{l.pos[0], l.pos[1], 0}
+	if set(x) {
+		p.End[0] = x
 	}
-	if eclUnset(ty) {
-		ty = l.y
+	if set(y) {
+		p.End[1] = y
 	}
-	if frames <= 0 {
-		l.x, l.y = tx, ty
-		l.pos = nil
-		return
-	}
-	if l.flip {
-		tx = 2*l.x - tx // mirror the X motion around the move's start
-	}
-	l.vel = nil
-	l.pos = &posTween{sx: l.x, sy: l.y, tx: tx, ty: ty, total: frames, mode: mode}
+	p.Begin(dur, mode)
+	l.circle = false
 }
 
-func (vm *VM) opSetVel(t *eclTask, in *Instr, layer int) {
+// opSetVel is 284/286: heading (mirrored under flag 0x800) and speed.
+func (vm *VM) opSetVel(t *eclTask, in *Instr, i int) {
 	if t.owner == nil || len(in.Params) < 2 {
 		return
 	}
-	l := &vm.actorFor(t.owner).layers[layer]
-	angle := float64(vm.resolveFloat(t, in.Params[0]))
-	speed := float64(vm.resolveFloat(t, in.Params[1]))
-	l.setVel(angle, speed)
+	l := &vm.actorFor(t.owner).mv.layer[i]
+	ang := vm.resolveFloat(t, in.Params[0])
+	speed := vm.resolveFloat(t, in.Params[1])
+	if set(ang) {
+		if t.owner.ECLFlags&0x800 != 0 {
+			ang = mirrorAngle(ang)
+		}
+		l.angle = normAngle(ang)
+	}
+	if set(speed) {
+		l.speed = speed
+	}
+	l.circle = false
 }
 
-// opMoveCircle handles 288/290 (moveCircle): the heading rotates by a fixed
-// step each frame, tracing a circular/spiral path at the given speed. thtk
-// signature ffff = (angle, angleStep, _, speed); sentinel args keep the
-// previous value (matching the 285/movePos "keep" convention).
-func (vm *VM) opMoveCircle(t *eclTask, in *Instr, layer int) {
+// opMoveVel is 285/287: tween heading and speed. In mode 7 the args are
+// per-frame increments (unset = 0, never mirrored). The heading takes the
+// short way round when the two are pi or more apart.
+func (vm *VM) opMoveVel(t *eclTask, in *Instr, i int) {
 	if t.owner == nil || len(in.Params) < 4 {
 		return
 	}
-	l := &vm.actorFor(t.owner).layers[layer]
-	if a := float64(vm.resolveFloat(t, in.Params[0])); !eclUnset(a) {
-		l.angle = a
-	}
-	if step := float64(vm.resolveFloat(t, in.Params[1])); !eclUnset(step) {
-		l.angleVel = step
-	}
-	if sp := float64(vm.resolveFloat(t, in.Params[3])); !eclUnset(sp) {
-		l.speed = sp
-	}
-	l.accel = 0
-	l.pos, l.vel = nil, nil
-}
-
-func (vm *VM) opMoveVelTime(t *eclTask, in *Instr, layer int) {
-	if t.owner == nil || len(in.Params) < 4 {
-		return
-	}
-	l := &vm.actorFor(t.owner).layers[layer]
-	frames := int(vm.resolveInt(t, in.Params[0]))
-	mode := int(vm.resolveInt(t, in.Params[1]))
-	angle := float64(vm.resolveFloat(t, in.Params[2]))
-	speed := float64(vm.resolveFloat(t, in.Params[3]))
-	if mode == 7 { // continuous acceleration: both args are per-frame deltas
-		if eclUnset(speed) { // sentinel -> 0 in mode 7 (FUN case 0x11d)
+	a := vm.actorFor(t.owner)
+	l := &a.mv.layer[i]
+	ang := vm.resolveFloat(t, in.Params[2])
+	speed := vm.resolveFloat(t, in.Params[3])
+	mode := vm.resolveInt(t, in.Params[1])
+	dur := vm.resolveInt(t, in.Params[0])
+	if mode == 7 {
+		if !set(ang) {
+			ang = 0
+		}
+		if !set(speed) {
 			speed = 0
 		}
-		if eclUnset(angle) {
-			angle = 0
+	} else {
+		if !set(ang) {
+			ang = l.angle
+		} else if t.owner.ECLFlags&0x800 != 0 {
+			ang = mirrorAngle(ang)
 		}
-		l.accel = speed
-		l.angleVel = angle
-		l.vel = nil
-		return
+		if !set(speed) {
+			speed = l.speed
+		}
 	}
-	if eclUnset(angle) {
-		angle = l.angle
+	start := l.angle
+	if d := start - ang; pi32 <= float32(math.Abs(float64(d))) {
+		if ang <= start {
+			ang += twoPi32
+		} else {
+			start += twoPi32
+		}
 	}
-	if eclUnset(speed) {
-		speed = l.speed
-	}
-	if frames <= 0 {
-		l.setVel(angle, speed)
-		return
-	}
-	l.pos = nil
-	l.vel = &velTween{sa: l.angle, ss: l.speed, ta: angle, ts: speed, total: frames, mode: mode}
+	p := &a.mv.velI[i]
+	p.Start = [3]float32{start, l.speed}
+	p.End = [3]float32{ang, speed}
+	p.Begin(dur, mode)
+	l.circle = false
 }
 
-// opMoveRand ports FUN_0040e770 case 0x124 exactly: the heading comes from one
-// ZUN-RNG draw r in [-1,1), shaped by where the enemy sits in the moveLimit
-// box and which side the player is on, then the speed tweens from the given
-// value down to 0 over `frames` (so the boss hops a bounded distance and
-// halts). X bands are ±w/4 around the box center: inside the band the fan is
-// a quarter circle opening toward the player's side; past the right margin it
-// opens left (r*pi/3 + pi); past the left margin it opens right (r*pi/3).
-// Outside the ±h/4 Y band the vertical sign is forced back toward the band.
-func (vm *VM) opMoveRand(t *eclTask, in *Instr, layer int) {
+// opSetCircle is 288/290: circle the current position (if not circling
+// already) with the given angle, angular speed, radius and radial speed.
+func (vm *VM) opSetCircle(t *eclTask, in *Instr, i int) {
+	if t.owner == nil || len(in.Params) < 4 {
+		return
+	}
+	l := &vm.actorFor(t.owner).mv.layer[i]
+	ang := vm.resolveFloat(t, in.Params[0])
+	speed := vm.resolveFloat(t, in.Params[1])
+	r := vm.resolveFloat(t, in.Params[2])
+	rv := vm.resolveFloat(t, in.Params[3])
+	if !l.circle {
+		l.delta = l.pos
+	}
+	if set(ang) {
+		l.angle = normAngle(ang)
+	}
+	if set(speed) {
+		l.speed = speed
+	}
+	if set(r) {
+		l.radius = r
+	}
+	if set(rv) {
+		l.radVel = rv
+	}
+	l.circle = true
+}
+
+// opMoveCircle is 289/291: tween the circle's angle/angular speed and
+// radius/radial speed, circling the current position.
+func (vm *VM) opMoveCircle(t *eclTask, in *Instr, i int) {
+	if t.owner == nil || len(in.Params) < 6 {
+		return
+	}
+	a := vm.actorFor(t.owner)
+	l := &a.mv.layer[i]
+	ang := vm.resolveFloat(t, in.Params[2])
+	speed := vm.resolveFloat(t, in.Params[3])
+	r := vm.resolveFloat(t, in.Params[4])
+	rv := vm.resolveFloat(t, in.Params[5])
+	if !set(speed) {
+		speed = l.speed
+	}
+	if !set(ang) {
+		ang = l.angle
+	}
+	if !set(rv) {
+		rv = l.radVel
+	}
+	if !set(r) {
+		r = l.radius
+	}
+	dur := vm.resolveInt(t, in.Params[0])
+	mode := vm.resolveInt(t, in.Params[1])
+	v := &a.mv.velI[i]
+	v.Start, v.End = [3]float32{l.angle, l.speed}, [3]float32{ang, speed}
+	v.Begin(dur, mode)
+	c := &a.mv.circI[i]
+	c.Start, c.End = [3]float32{l.radius, l.radVel}, [3]float32{r, rv}
+	c.Begin(dur, mode)
+	l.delta = l.pos
+	l.circle = true
+}
+
+// opMoveRand is 292/293 (case 0x124): a random heading from one RNG draw,
+// fanned by where the final position sits in the ins_324 box (x bands of
+// ±w/4) and which side the player is on, then pushed back toward the box's
+// ±h/4 y band; the speed tweens from the arg down to 0.
+func (vm *VM) opMoveRand(t *eclTask, in *Instr, i int) {
 	if t.owner == nil || len(in.Params) < 3 {
 		return
 	}
 	a := vm.actorFor(t.owner)
-	l := &a.layers[layer]
-	frames := int(vm.resolveInt(t, in.Params[0]))
-	mode := int(vm.resolveInt(t, in.Params[1]))
-	speed := float64(vm.resolveFloat(t, in.Params[2]))
-
-	fx := a.layers[0].x + a.layers[1].x
-	fy := a.layers[0].y + a.layers[1].y
-	r := vm.randSigned()
-	var angle float64
-	qw := math.Abs(a.moveLimit.w) * 0.25
+	m := &a.mv
+	fx, fy := m.final.pos[0], m.final.pos[1]
+	lx, ly := m.limit[0], m.limit[1]
+	var ang float32
+	q := float32(m.limit[2] * 0.25)
 	switch {
-	case fx < a.moveLimit.x-qw: // past the left margin: fan to the right
-		angle = r * (math.Pi / 3)
-	case fx > a.moveLimit.x+qw: // past the right margin: fan to the left
-		angle = float64(normAngle(float32(r*(math.Pi/3) + math.Pi)))
-	case fx < vm.playerX-eclCenterX(): // player to the right: quarter fan right
-		angle = r * (math.Pi / 2)
-	default: // player to the left: quarter fan left
-		angle = float64(normAngle(float32(r*(math.Pi/2) + math.Pi)))
+	case fx < lx-q: // past the left margin: fan to the right
+		ang = float32(vm.randSigned() * thirdPi32)
+	case q+lx < fx: // past the right margin: fan to the left
+		ang = normAngle(float32(float32(vm.randSigned()*pi32)*third32) + pi32)
+	case fx < vm.playerECL[0]: // player to the right
+		ang = float32(vm.randSigned() * halfPi32)
+	default:
+		ang = normAngle(float32(float32(vm.randSigned()*pi32)*0.5) + pi32)
 	}
-	qh := math.Abs(a.moveLimit.h) * 0.25
+	qh := float32(m.limit[3] * 0.25)
 	switch {
-	case fy < a.moveLimit.y-qh: // above the band: head down
-		angle = math.Abs(angle)
-	case fy > a.moveLimit.y+qh: // below the band: head up
-		angle = -math.Abs(angle)
+	case fy < ly-qh:
+		ang = float32(math.Abs(float64(ang)))
+	case qh+ly < fy:
+		ang = -float32(math.Abs(float64(ang)))
 	}
-
-	if frames <= 0 {
-		l.setVel(angle, 0)
-		return
-	}
-	l.pos = nil
-	l.vel = &velTween{sa: angle, ss: speed, ta: angle, ts: 0, total: frames, mode: mode}
+	mode := vm.resolveInt(t, in.Params[1])
+	speed := vm.resolveFloat(t, in.Params[2])
+	dur := vm.resolveInt(t, in.Params[0])
+	p := &m.velI[i]
+	p.Start = [3]float32{ang, speed}
+	p.End = [3]float32{ang, 0}
+	p.Begin(dur, mode)
+	m.layer[i].circle = false
 }
 
-func (vm *VM) spawn(ctx *stage.Context, t *eclTask, in *Instr) {
-	if ctx == nil || len(in.Params) < 6 {
+// createOp is 256-261/265-268/270/271 and FUN_0040cfb0. The 265-268/271
+// forms only create while boss slot 0 is empty. The new enemy is updated
+// once on the spot (movement, then its ECL), before it joins the list, so
+// what its sub does at time 0 is in place before the creator's next
+// instruction.
+func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
+	op := in.Opcode
+	switch op {
+	case 265, 266, 267, 268, 271:
+		if vm.boss0() != nil {
+			return
+		}
+		op = map[uint16]uint16{265: 256, 266: 257, 267: 260, 268: 261, 271: 270}[op]
+	}
+	n := 6
+	if op == opEnmCreate3D {
+		n = 7
+	}
+	if len(in.Params) < n {
 		return
 	}
+	parent := vm.actors[t.owner]
 	name := in.Params[0].Str
-	x := float64(vm.resolveFloat(t, in.Params[1]))
-	y := float64(vm.resolveFloat(t, in.Params[2]))
-
-	// 270/271 use the mffSSSS layout (an extra arg before hp): an initial
-	// heading/velocity at param[3] shifts hp→[4], score→[5], drop→[6].
-	hpIdx, dropIdx := 3, 5
-	extended := in.Opcode == 270 || in.Opcode == 271
-	if extended && len(in.Params) >= 7 {
-		hpIdx, dropIdx = 4, 6
+	var pos [3]float32
+	pos[0] = vm.resolveFloat(t, in.Params[1])
+	pos[1] = vm.resolveFloat(t, in.Params[2])
+	if op == opEnmCreate3D {
+		// The stage's 3D offset (DAT_00491d7c) is taken as 0.
+		pos[2] = vm.resolveFloat(t, in.Params[3])
+	} else if (op == opEnmCreate || op == opEnmCreateM) && parent != nil {
+		pos[0] += parent.mv.final.pos[0]
+		pos[1] += parent.mv.final.pos[1]
 	}
-	hp := int(vm.resolveInt(t, in.Params[hpIdx]))
-	drop := int(vm.resolveInt(t, in.Params[dropIdx]))
-
-	// Create-opcode semantics from FUN_0040e770 (cases 0x100/0x101/0x104/0x105
-	// and the conditional 0x109-0x10c that jump to the same labels):
-	//   flip (local_78=1): 260,261,267,268,271 -> enemy mirrors its X movement.
-	//   absolute position:  257,261,266,268 ; relative-to-parent: 256,260,265,267.
-	flip := in.Opcode == 260 || in.Opcode == 261 || in.Opcode == 267 || in.Opcode == 268 || in.Opcode == 271
-	absolute := in.Opcode == 257 || in.Opcode == 261 || in.Opcode == 266 || in.Opcode == 268
-	if !absolute && t.owner != nil {
-		if pa := vm.actors[t.owner]; pa != nil {
-			x += pa.layers[0].x + pa.layers[1].x
-			y += pa.layers[0].y + pa.layers[1].y
-		}
-	}
+	hp := vm.resolveInt(t, in.Params[n-3])
+	vm.resolveInt(t, in.Params[n-2]) // score (+0x23f8)
+	drop := vm.resolveInt(t, in.Params[n-1])
 
 	typ := enemy.TypeFairy
 	switch {
@@ -619,21 +640,115 @@ func (vm *VM) spawn(ctx *stage.Context, t *eclTask, in *Instr) {
 	case strings.Contains(name, "Boss"):
 		typ = enemy.TypeBoss
 	}
-	wx, wy := eclToWorld(x, y)
-	e := enemy.New(wx, wy, hp, typ)
-	e.DropPower = drop
+	wx, wy := eclToWorld(float64(pos[0]), float64(pos[1]))
+	e := enemy.New(wx, wy, int(hp), typ)
+	e.DropPower = int(drop)
 	e.DropPoint = 1
 	if typ != enemy.TypeFairy {
 		e.SpriteID = 1
-		e.HitWidth, e.HitHeight = 48, 48
-		e.BodyWidth, e.BodyHeight = 32, 32
 	}
+	e.Damaged = vm.damaged
+	e.Hidden = true // until an ANM op gives it a sprite
 	vm.applySpawnVisual(e, name)
-	ctx.AddEnemy(e)
-	a := vm.actorFor(e)
-	a.layers[0].x, a.layers[0].y = x, y
-	a.layers[0].flip, a.layers[1].flip = flip, flip
-	vm.startTask(name, e, nil, -1)
+	if op == opEnmCreateM || op == opEnmCreateAM {
+		e.ECLFlags |= 0x800
+	}
+	if op == opEnmCreate3D {
+		e.ECLFlags |= 0x40000
+	}
+
+	a := newActor(e)
+	a.mv.layer[0].pos = pos
+	if parent != nil {
+		a.vars = parent.vars
+	}
+	a.invuln.set(2)
+	a.main = &eclTask{sub: vm.prog.SubByName[name], owner: e, asyncID: -1}
+	if a.main.sub != nil {
+		a.main.frame = newFrame(a.main.sub, nil)
+	}
+	vm.actors[e] = a
+	vm.updateActor(a)
+	vm.order = append(vm.order, a)
+	if ctx != nil {
+		ctx.AddEnemy(e)
+	}
+}
+
+// anmSetSlot is 259/262 (cases 0x103/0x106): play script in an ANM slot of
+// the ins_258 file. Slot 0 is the body: its sprite sizes the offscreen test,
+// and 262 also makes the script the base 269 offsets.
+func (vm *VM) anmSetSlot(t *eclTask, in *Instr) {
+	if t.owner == nil || len(in.Params) < 2 {
+		return
+	}
+	a := vm.actorFor(t.owner)
+	slot := int(vm.resolveInt(t, in.Params[0]))
+	script := int(vm.resolveInt(t, in.Params[1]))
+	if in.Opcode == opAnmSetSlot && script < 0 {
+		return
+	}
+	if slot == 0 {
+		a.curScript = script
+		a.mv.size = vm.scriptSize(a.anmFile, script)
+		if in.Opcode == opAnmSetMain {
+			t.owner.ECLFlags |= 0x1000
+			a.dirScript = script
+			t.owner.MainScript = script
+		}
+	}
+	t.owner.Hidden = false
+	vm.applyEnemyVisual(t.owner, script)
+}
+
+// anmFiles caches parsed ANM files by name (nil: not embedded).
+var anmFiles sync.Map
+
+func loadANM(name string) *anm.File {
+	if v, ok := anmFiles.Load(name); ok {
+		return v.(*anm.File)
+	}
+	f, err := gamedata.ANM(name)
+	if err != nil {
+		f = nil
+	}
+	anmFiles.Store(name, f)
+	return f
+}
+
+// scriptSize is the slot-0 extent (+0x13a4/+0x13a8) for script in ANM file
+// index file (0 = bullet.anm, i = the ECL's i-th ANM): the sprite and scale
+// the script sets at time 0 (ANM ops 3 and 50), as (h*sy, w*sx). Zero if
+// the file is not embedded.
+func (vm *VM) scriptSize(file, script int) [2]float32 {
+	name := "bullet.anm"
+	if file > 0 {
+		if file > len(vm.prog.AnimNames) {
+			return [2]float32{}
+		}
+		name = vm.prog.AnimNames[file-1]
+	}
+	f := loadANM(name)
+	if f == nil || f.Scripts[script] == nil {
+		return [2]float32{}
+	}
+	var w, h float32
+	sx, sy := float32(1), float32(1)
+	for _, ins := range f.Scripts[script].Instrs {
+		if ins.Time > 0 {
+			break
+		}
+		switch ins.Op {
+		case 3:
+			if sp, ok := f.Sprites[int(ins.Arg(0))]; ok {
+				w, h = sp.W, sp.H
+			}
+		case 50:
+			sx = math.Float32frombits(uint32(ins.Arg(0)))
+			sy = math.Float32frombits(uint32(ins.Arg(1)))
+		}
+	}
+	return [2]float32{float32(h * sy), float32(w * sx)}
 }
 
 func (vm *VM) applyEnemyVisual(e *enemy.Enemy, id int) {
@@ -742,37 +857,15 @@ func (vm *VM) spawnDrops(ctx *stage.Context, e *enemy.Enemy) {
 	e.DropBigPower, e.DropBigPoint = 0, 0
 }
 
+// playStageSound plays entry id of the sound table (0x4749c8).
 func (vm *VM) playStageSound(ctx *stage.Context, id int) {
-	if ctx == nil || ctx.Audio == nil {
-		return
-	}
-	switch id {
-	case 7:
-		ctx.PlaySE(audio.SEEnemy)
-	case 15, 16:
-		ctx.PlaySE(audio.SEShoot)
-	case 18:
-		ctx.PlaySE(audio.SECancel)
+	if ctx != nil {
+		ctx.PlaySEID(id)
 	}
 }
 
-func (vm *VM) hasBlockingEnemies(ctx *stage.Context, owner *enemy.Enemy) bool {
-	if ctx == nil {
-		return false
-	}
-	for _, e := range ctx.Enemies {
-		if e == nil || !e.Active || e == owner {
-			continue
-		}
-		if e.Type == enemy.TypeFairy || e.Type == enemy.TypeMidBoss || e.Type == enemy.TypeBoss {
-			return true
-		}
-	}
-	return false
-}
-
-func (vm *VM) rankPickInt(args []Param) int32 {
-	return vm.resolveInt(nil, args[vm.rankIndex(len(args))])
+func (vm *VM) rankPickInt(t *eclTask, args []Param) int32 {
+	return vm.resolveInt(t, args[vm.rankIndex(len(args))])
 }
 
 func (vm *VM) rankPickFloat(t *eclTask, args []Param) float32 {
@@ -797,35 +890,34 @@ func (vm *VM) rankIndex(n int) int {
 var spellSJISDec = japanese.ShiftJIS.NewDecoder()
 
 // declareSpell handles 342/357/359: (idx, timeLimit, bonus, name). It records
-// the boss spell card for the HUD and resets the countdown timer.
+// the boss spell card for the HUD; the time limit is the interrupt slot's.
 func (vm *VM) declareSpell(t *eclTask, in *Instr) {
 	if len(in.Params) < 4 {
 		return
 	}
+	vm.resolveInt(t, in.Params[0])
+	bonus := vm.resolveInt(t, in.Params[2])
+	vm.resolveInt(t, in.Params[1])
 	name := in.Params[3].Str
 	if utf, err := spellSJISDec.String(name); err == nil && utf != "" {
 		name = utf
 	}
-	limit := int(vm.resolveInt(t, in.Params[1]))
 	vm.spell = spellState{
-		active:    true,
-		name:      name,
-		bonus:     int64(vm.resolveInt(t, in.Params[2])),
-		timeLimit: limit,
-		timeLeft:  limit,
-		owner:     t.owner,
+		active: true,
+		name:   name,
+		bonus:  int64(bonus),
+		owner:  t.owner,
 	}
 }
 
+// addLifeMarker is 347 SfS: (index, hp, colour), read last to first.
 func (vm *VM) addLifeMarker(t *eclTask, in *Instr) {
 	if t.owner == nil || len(in.Params) < 3 {
 		return
 	}
-	marker := lifeMarker{
-		index: int(vm.resolveInt(t, in.Params[0])),
-		hp:    float64(vm.resolveFloat(t, in.Params[1])),
-		raw:   vm.resolveInt(t, in.Params[2]),
-	}
+	raw := vm.resolveInt(t, in.Params[2])
+	hp := vm.resolveFloat(t, in.Params[1])
+	marker := lifeMarker{index: int(vm.resolveInt(t, in.Params[0])), hp: float64(hp), raw: raw}
 	a := vm.actorFor(t.owner)
 	for i := range a.markers {
 		if a.markers[i].index == marker.index {
@@ -836,60 +928,9 @@ func (vm *VM) addLifeMarker(t *eclTask, in *Instr) {
 	a.markers = append(a.markers, marker)
 }
 
-// --- small math helpers ---
-
-func easeFrac(t, total, mode int) float64 {
-	if total <= 0 {
-		return 1
-	}
-	f := float64(t) / float64(total)
-	if f < 0 {
-		f = 0
-	} else if f > 1 {
-		f = 1
-	}
-	switch mode {
-	case 1: // accelerate
-		return f * f
-	case 2, 4: // decelerate (common "glide to a stop")
-		return 1 - (1-f)*(1-f)
-	case 3: // smooth
-		return f * f * (3 - 2*f)
-	default: // linear
-		return f
-	}
-}
-
-func lerp(a, b, t float64) float64 { return a + (b-a)*t }
-
-func clampF(v, lo, hi float64) float64 {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-// angDelta returns the shortest signed angular distance from a to b (-pi..pi].
-func angDelta(a, b float64) float64 {
-	d := math.Mod(b-a, 2*math.Pi)
-	if d > math.Pi {
-		d -= 2 * math.Pi
-	} else if d <= -math.Pi {
-		d += 2 * math.Pi
-	}
-	return d
-}
-
 func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
 	return b
 }
-
-// eclUnset reports the "keep previous value" sentinel (large negative, e.g.
-// -999999 in stage01; _DAT_00470d58 in the binary).
-func eclUnset(v float64) bool { return v <= -900000 }

@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"th10/anm"
 	"th10/audio"
-	"th10/danmaku"
 	"th10/entity/bullet"
 	"th10/entity/effect"
 	"th10/entity/enemy"
 	"th10/entity/item"
+	"th10/entity/laser"
 	"th10/entity/player"
 	"th10/entity/playerbullet"
 	"th10/game"
@@ -18,6 +19,7 @@ import (
 	"th10/scene/dialog"
 	resultscene "th10/scene/result"
 	"th10/sprite"
+	"th10/zun"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -38,13 +40,24 @@ type Script interface {
 type Context struct {
 	State   *game.GameState
 	Player  *player.Player
-	Bullets *bullet.Pool // 敌弹池
+	Bullets *bullet.Pool // 敌弹管理器（DAT_004776f0）
+	Lasers  *laser.Pool  // 敌方激光（激光管理器尚未移植）
 	Items   *item.Pool
 	Effects *effect.Pool
 	Enemies []*enemy.Enemy // 活跃敌人列表
-	Emitter *danmaku.Emitter
-	Audio   Sound // 音频管理器；无头模拟（sim 包）保持 nil
-	stage   *Stage // 反向引用（用于触发对话等）
+	Audio   Sound          // 音频管理器；无头模拟（sim 包）保持 nil
+	// World 是 ANM 特效对象（消弹、擦弹火花等），Anm 是它们与子弹脚本共用的
+	// 运行环境，BulletEnv 是子弹管理器对外的接口。见 bullets.go。
+	World     *anm.World
+	Anm       *anm.Env
+	BulletEnv *bullet.Env
+	// RNG 是原作的游戏随机数（DAT_004918b0），ECL 与子弹自身的 ANM 脚本共用。
+	RNG   *zun.RNG
+	stage *Stage // 反向引用（用于触发对话等）
+
+	// ManagerOrder 由 ECL VM 设置：按原作敌人管理器链表顺序列出存活敌人，
+	// 包括隐藏的 main 敌人（trace 采样用，与 th10probe 对齐）。
+	ManagerOrder func() []*enemy.Enemy
 }
 
 // AddEnemy 脚本用：添加敌人
@@ -146,21 +159,13 @@ func NewHeadless(state *game.GameState, script Script) *Stage {
 }
 
 func newStage(state *game.GameState, script Script) *Stage {
-	bulletPool := bullet.NewPool(2048)
 	s := &Stage{
 		script:     script,
 		field:      ebiten.NewImage(fieldW, fieldH),
 		frontFrame: loadFrontFrame(),
 	}
-	s.ctx = &Context{
-		State:   state,
-		Player:  player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
-		Bullets: bulletPool,
-		Items:   item.NewPool(256),
-		Effects: effect.NewPool(512),
-		Emitter: danmaku.NewEmitter(bulletPool),
-		stage:   s,
-	}
+	s.ctx = NewContext(state)
+	s.ctx.stage = s
 	s.hud = newHud(state)
 	return s
 }
@@ -240,6 +245,7 @@ func (s *Stage) update(in *input.State) error {
 
 	// 1. 玩家
 	s.updatePlayer(in)
+	ctx.SyncPlayer() // the script aims at this frame's position
 
 	// 1b. Bomb 起爆沿：进入 Bomb 态的第一帧播放符卡音效、信仰惩罚、屏幕全屏闪光
 	bombing := ctx.Player.State == player.StateBomb
@@ -258,8 +264,8 @@ func (s *Stage) update(in *input.State) error {
 		e.Update()
 	}
 
-	// 4. 敌弹
-	ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+	// 4. 敌弹与激光（子弹自身的命中、擦弹判定在这里完成）
+	ctx.UpdateBullets()
 
 	// 5. 道具
 	focused := in.IsPressed(input.KeyFocus)
@@ -267,9 +273,15 @@ func (s *Stage) update(in *input.State) error {
 
 	// 6. 特效
 	ctx.Effects.Update()
+	ctx.UpdateWorld()
 
 	// 7. 碰撞
 	s.checkCollisions()
+
+	// 7b. 脚本的伤害后处理：ECL 的阶段中断（超时）与计时器，见 FUN_0040dc80
+	if lu, ok := s.script.(interface{ LateUpdate(*Context) }); ok {
+		lu.LateUpdate(ctx)
+	}
 
 	// 8. 清理
 	s.cleanEnemies()
@@ -306,7 +318,7 @@ func (s *Stage) checkCollisions() {
 
 	// 自机子弹 vs 敌人
 	for _, e := range ctx.Enemies {
-		if !e.Active {
+		if !e.Shootable() {
 			continue
 		}
 		ex, ey, ew, eh := e.HitRect()
@@ -324,24 +336,18 @@ func (s *Stage) checkCollisions() {
 		}
 	}
 
-	// 敌弹 vs 自机
+	// 激光 vs 自机（敌弹的命中与擦弹由子弹管理器自己判定，见 bullets.go）
 	if !p.IsInvincible() {
-		ctx.Bullets.Each(func(b *bullet.Bullet) {
-			if b.HitPlayer(px, py, pr) {
-				p.Hit()
-				b.Active = false
-				st.AddFaith(-8000)
-				ctx.Effects.Spawn(px, py, effect.TypePlayerDead, 30)
-				ctx.PlaySE(audio.SEDead)
+		ctx.Lasers.Each(func(l *laser.Laser) {
+			if l.HitPlayer(px, py, pr) {
+				ctx.bulletHit()
 			}
 		})
 	}
-
-	// 擦弹（GrazePlayer 内部保证每颗子弹只计一次）
 	if p.State == player.StateNormal || p.State == player.StateRespawn {
 		grazed := false
-		ctx.Bullets.Each(func(b *bullet.Bullet) {
-			if b.Age > 4 && b.GrazePlayer(px, py, p.GrazeRadius) {
+		ctx.Lasers.Each(func(l *laser.Laser) {
+			if l.Age > 4 && l.GrazePlayer(px, py, p.GrazeRadius) {
 				st.Graze++
 				st.AddFaith(3)
 				st.AddScore(100)
@@ -379,13 +385,9 @@ func (s *Stage) checkCollisions() {
 		}
 	})
 
-	// Bomb 清屏
+	// Bomb 清屏（灵击移植前的占位，M7）
 	if p.State == player.StateBomb {
-		ctx.Bullets.Each(func(b *bullet.Bullet) {
-			ctx.Effects.Spawn(b.X, b.Y, effect.TypeBulletCancel, 12)
-			b.Active = false
-			ctx.Items.Spawn(b.X, b.Y, item.PointItem)
-		})
+		ctx.ClearBullets()
 		s.applyBombDamage()
 	}
 }
@@ -452,7 +454,7 @@ func (s *Stage) applyBombDamage() {
 	}
 	damage := 40 + st.Power/20
 	for _, e := range ctx.Enemies {
-		if !e.Active {
+		if !e.Shootable() {
 			continue
 		}
 		prevHP := e.HP
@@ -467,14 +469,14 @@ func (s *Stage) applyBombDamage() {
 	}
 }
 
+// cleanEnemies drops deleted enemies. Leaving the field is the ECL's call
+// (the per-enemy offscreen test in FUN_0040dc80, scene/stage/ecl/motion.go).
 func (s *Stage) cleanEnemies() {
 	n := 0
 	for _, e := range s.ctx.Enemies {
-		if e.Active && e.InBounds(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom) {
+		if e.Active {
 			s.ctx.Enemies[n] = e
 			n++
-		} else {
-			e.Active = false // release sticky homing targets when an enemy leaves the stage
 		}
 	}
 	for i := n; i < len(s.ctx.Enemies); i++ {
@@ -501,6 +503,7 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 	s.drawPlayerOptions(s.field)
 	s.drawPlayer(s.field)
 	s.drawEffects(s.field)
+	s.drawWorld(s.field)
 
 	// Bomb 全屏闪光：起爆后渐弱的白色叠层（叠在 field 上，跟随震动）
 	s.drawBombFlash(s.field)
@@ -598,7 +601,7 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
 	res := sprite.Global
 	for _, e := range s.ctx.Enemies {
-		if !e.Active {
+		if !e.Active || e.Hidden {
 			continue
 		}
 		x := e.X - fl
@@ -658,56 +661,35 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 	}
 }
 
+// drawBullets draws the bullets layer by layer as the manager sorted them,
+// then the lasers.
 func (s *Stage) drawBullets(field *ebiten.Image) {
 	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
-	res := sprite.Global
-	s.ctx.Bullets.Each(func(b *bullet.Bullet) {
-		x := b.X - fl
-		y := b.Y - ft
-		if b.Type == bullet.TypeLaser {
-			drawLaserBullet(field, b, x, y)
-			return
-		}
-
-		// sprite 绘制
-		if res != nil {
-			frame := res.Bullets.Frame(int(b.Type), b.Color)
-			if frame != nil {
-				fw := float64(frame.Bounds().Dx())
-				fh := float64(frame.Bounds().Dy())
-				op := &ebiten.DrawImageOptions{}
-				op.GeoM.Translate(-fw/2, -fh/2)
-				op.GeoM.Rotate(b.Angle + 1.5707963) // 弹头朝运动方向（+π/2 修正）
-				op.GeoM.Translate(x, y)
-				if b.Additive {
-					op.Blend = ebiten.BlendLighter
-				}
-				field.DrawImage(frame, op)
-				return
-			}
-		}
-
-		// fallback
-		r := float32(b.Radius)
-		if r < 2 {
-			r = 2
-		}
-		vector.FillCircle(field, float32(x), float32(y), r*2, color.RGBA{255, 255, 0, 220}, false)
+	for l := range bullet.Layers {
+		s.ctx.Bullets.EachLayer(l, func(b *bullet.Bullet) {
+			sprite.DrawVM(field, &b.VM, -fl, -ft)
+		})
+	}
+	s.ctx.Lasers.Each(func(l *laser.Laser) {
+		drawLaser(field, l, l.X-fl, l.Y-ft)
 	})
 }
 
-func drawLaserBullet(field *ebiten.Image, b *bullet.Bullet, x, y float64) {
-	length := b.Length
-	if length <= 0 {
-		length = 256
+// drawWorld draws the ANM effect objects by layer.
+func (s *Stage) drawWorld(field *ebiten.Image) {
+	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
+	for l := range anm.Layers {
+		s.ctx.World.Each(l, func(vm *anm.VM) {
+			sprite.DrawVM(field, vm, -fl, -ft)
+		})
 	}
-	width := b.Width
-	if width <= 0 {
-		width = 12
-	}
-	x2 := x + math.Cos(b.Angle)*length
-	y2 := y + math.Sin(b.Angle)*length
-	c := laserColor(b.Color, 120)
+}
+
+func drawLaser(field *ebiten.Image, l *laser.Laser, x, y float64) {
+	x2 := x + math.Cos(l.Angle)*l.Length
+	y2 := y + math.Sin(l.Angle)*l.Length
+	c := laserColor(l.Color, 120)
+	width := l.Width
 	vector.StrokeLine(field, float32(x), float32(y), float32(x2), float32(y2), float32(width+6), color.RGBA{255, 255, 255, 48}, false)
 	vector.StrokeLine(field, float32(x), float32(y), float32(x2), float32(y2), float32(width), c, false)
 	vector.StrokeLine(field, float32(x), float32(y), float32(x2), float32(y2), float32(math.Max(2, width*0.28)), color.RGBA{255, 255, 255, 190}, false)
@@ -811,24 +793,23 @@ func (s *Stage) drawBossHUD(field *ebiten.Image) {
 		vector.FillRect(field, x-1, barY-2, 2, barH+4, color.RGBA{255, 255, 255, 210}, false)
 	}
 
-	if !info.Spell {
-		return
-	}
-	if s.bossNameFace == nil {
-		s.bossNameFace = render.LoadSystemFace(15)
-	}
-	if s.bossNumFace == nil {
-		s.bossNumFace = render.LoadHUDFace(18)
-	}
-	// 符卡名（右对齐于条下方），描边提升可读性。
 	nameY := int(barY) + barH + 4
-	nameW, _ := render.MeasureText(s.bossNameFace, info.Name)
-	render.DrawTextShadow(field, info.Name, s.bossNameFace,
-		int(w)-int(barPad)-nameW, nameY,
-		color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 200}, 1, 1)
+	if info.Spell {
+		if s.bossNameFace == nil {
+			s.bossNameFace = render.LoadSystemFace(15)
+		}
+		// 符卡名（右对齐于条下方），描边提升可读性。
+		nameW, _ := render.MeasureText(s.bossNameFace, info.Name)
+		render.DrawTextShadow(field, info.Name, s.bossNameFace,
+			int(w)-int(barPad)-nameW, nameY,
+			color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 200}, 1, 1)
+	}
 
-	// 时限倒数（左上角大号数字）。
+	// 时限倒数（左上角大号数字）：非符阶段同样有时限（ECL 334 的时间槽）。
 	if info.TimeLeft > 0 {
+		if s.bossNumFace == nil {
+			s.bossNumFace = render.LoadHUDFace(18)
+		}
 		render.DrawTextShadow(field, fmt.Sprintf("%d", info.TimeLeft), s.bossNumFace,
 			int(barPad), nameY-2,
 			color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 200}, 1, 1)

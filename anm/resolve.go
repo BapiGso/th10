@@ -4,7 +4,6 @@ package anm
 // set (~75 ops: color/scale/rotation/blend/interpolation) is handled by the
 // animation VM in track B2; here we only need the sprite-timeline subset.
 const (
-	opEnd       = 0 // ins_0: end of script
 	opStop      = 1 // ins_1: stop/return (terminal, like end for our purposes)
 	opSetSprite = 3 // ins_3(spriteID): show this sprite
 	opGoto      = 4 // ins_4(byteOffset, time): jump within the script, set clock=time
@@ -41,7 +40,7 @@ func (s *Script) SpriteAt(age int) int {
 			continue
 		}
 		switch in.Op {
-		case opEnd, opStop:
+		case opStop:
 			return sprite
 		case opSetSprite:
 			sprite = int(in.Arg(0))
@@ -79,6 +78,9 @@ func (s *Script) SpriteAt(age int) int {
 }
 
 func (s *Script) offsetIndex() map[int]int {
+	if s.byOffset != nil {
+		return s.byOffset
+	}
 	m := make(map[int]int, len(s.Instrs))
 	for i, in := range s.Instrs {
 		m[in.Offset] = i

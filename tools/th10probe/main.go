@@ -42,15 +42,16 @@ const ExpectedHash = "2f14760b6fbbf57549541583283badb9a19a4222b90f0a146d5aa17f01
 // Global addresses (absolute, image-base relative offsets from Ghidra).
 const (
 	addrPlayerPtr   = 0x00477834 // *Player
-	addrEnemyMgr    = 0x004776f0 // enemy manager
+	addrBulletMgr   = 0x004776f0 // *bullet manager (FUN_004065c0, FUN_004067d0)
+	addrEnemyMgr    = 0x00477704 // *enemy manager (FUN_0040d750)
 	addrScore       = 0x00474c40 // score
 	addrLife        = 0x00474c70 // lives
 	addrPower       = 0x00474c48 // power (raw, 0..100)
 	addrFaith       = 0x00474c90 // faith
 	addrGraze       = 0x00474c84 // graze counter (candidate)
-	addrPlayerX     = 0x3c0      // offset from player base
+	addrPlayerX     = 0x3c0      // offset from player base (game space, FUN_004073e0)
 	addrPlayerY     = 0x3c4
-	addrPlayerState = 0x478 // player state index
+	addrPlayerState = 0x478 // player state index (candidate)
 )
 
 // Frame-counter candidates. FUN_00418190 increments DAT_00474c88 and
@@ -70,16 +71,31 @@ var frameCounterCandidates = []struct {
 // addrFrameCounter is the stage frame clock, confirmed by probeFrameCounters.
 const addrFrameCounter = 0x00474c88
 
-// Enemy manager layout (FUN_00406060): array at +0x18, stride 0x7f0, 2001 slots.
+// Enemy manager (FUN_0040d750): +0x58 points at the first list node, a node
+// is {enemy*, next*}. Enemy fields (docs/research/m2_motion.md section 5):
+// EnemyData sits at enemy+0x103c.
 const (
-	enemyArrayOff = 0x18
-	enemyStride   = 0x7f0
-	enemySlots    = 2001
-	// Enemy field offsets (from ECL VM notes / FUN_0040dc80).
-	enemyPosX   = 0x2c
-	enemyPosY   = 0x34
-	enemyHP     = 0x446 // candidate short
-	enemyActive = 0x446 // active flag lives in the same word family
+	enemyListHead = 0x58
+	enemyMaxNodes = 4096   // guards against a torn list read
+	enemyPosX     = 0x1068 // final position (A+B), EnemyData+0x2c
+	enemyPosY     = 0x106c
+	enemyHP       = 0x23fc
+	enemyFlags    = 0x2480
+)
+
+// Bullet manager (FUN_004065c0/FUN_004067d0): 2000 bullets inline from +0x60,
+// stride 0x7f0, then a sentinel slot with state 5.
+const (
+	bulletArrayOff = 0x60
+	bulletStride   = 0x7f0
+	bulletSlots    = 2000
+	bulletPosX     = 0x3b4
+	bulletPosY     = 0x3b8
+	bulletSpeed    = 0x3d8
+	bulletAngle    = 0x3e4
+	bulletType     = 0x7ea // short (candidate)
+	bulletSprite   = 0x7ec // short (candidate)
+	bulletState    = 0x446 // short: 0 free, 1 normal, 2 spawning, ...
 )
 
 func main() {
@@ -90,9 +106,11 @@ func run() int {
 	var (
 		pid      = flag.Uint("pid", 0, "target process id")
 		exePath  = flag.String("exe", "", "path to th10.exe (to locate the pid and verify the hash)")
-		frames   = flag.Int("frames", 3600, "number of frames to sample")
+		frames   = flag.Int("frames", 3600, "sample up to this stage frame")
 		outPath  = flag.String("out", "-", "output trace path (- = stdout)")
 		pollUS   = flag.Int("poll-us", 500, "frame-poll interval in microseconds")
+		settleUS = flag.Int("settle-us", 3000, "wait after a frame tick before sampling, so the frame's update has finished")
+		noWait   = flag.Bool("no-wait-start", false, "sample from the current frame instead of waiting for a stage start")
 		skipHash = flag.Bool("skip-hash", false, "skip the exe SHA-256 check")
 		counters = flag.Bool("probe-counters", false, "print which frame-counter candidate ticks, then exit")
 	)
@@ -147,12 +165,33 @@ func run() int {
 	tw := trace.NewWriter(out)
 	poll := time.Duration(*pollUS) * time.Microsecond
 
-	fmt.Fprintf(os.Stderr, "th10probe: attached to pid %d, sampling %d frames\n", target.pid, *frames)
+	fmt.Fprintf(os.Stderr, "th10probe: attached to pid %d, sampling up to frame %d\n", target.pid, *frames)
 
+	// Frames are indexed by the stage frame clock, so dropped samples leave
+	// gaps that th10diff skips instead of shifting every later frame. Unless
+	// told otherwise, wait for the clock to restart (a new stage) so the
+	// trace begins at the stage's first frame.
 	lastFrame := int32(-1)
-	sampled := 0
-	deadline := time.Now().Add(10 * time.Minute)
-	for sampled < *frames {
+	if !*noWait {
+		fmt.Fprintln(os.Stderr, "th10probe: waiting for a stage start (start the replay now)")
+		prev, _ := rd.i32(addrFrameCounter)
+		for {
+			fc, err := rd.i32(addrFrameCounter)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "th10probe: read frame counter:", err)
+				return 2
+			}
+			if fc >= 0 && fc <= 2 && fc != prev { // zeroed or first tick
+				break
+			}
+			prev = fc
+			time.Sleep(poll)
+		}
+	}
+	sampled, torn := 0, 0
+	settle := time.Duration(*settleUS) * time.Microsecond
+	deadline := time.Now().Add(30 * time.Minute)
+	for lastFrame < int32(*frames) {
 		if time.Now().After(deadline) {
 			fmt.Fprintln(os.Stderr, "th10probe: timeout waiting for frames")
 			break
@@ -166,18 +205,35 @@ func run() int {
 			time.Sleep(poll)
 			continue
 		}
+		if lastFrame >= 0 && fc < lastFrame {
+			fmt.Fprintf(os.Stderr, "th10probe: frame clock restarted (%d -> %d); stopping\n", lastFrame, fc)
+			break
+		}
 		if lastFrame >= 0 && fc != lastFrame+1 {
 			fmt.Fprintf(os.Stderr, "th10probe: frame jump %d -> %d (dropped %d)\n",
 				lastFrame, fc, fc-lastFrame-1)
 		}
 		lastFrame = fc
-		sampled++
-		f, err := rd.sampleFrame(sampled)
+		if fc > int32(*frames) {
+			break
+		}
+		time.Sleep(settle)
+		f, err := rd.sampleFrame(int(fc))
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "th10probe: sample:", err)
 			return 2
 		}
+		// A sample that straddles the next frame's update mixes two frames;
+		// drop it rather than report a false divergence.
+		if after, err := rd.i32(addrFrameCounter); err == nil && after != fc {
+			torn++
+			continue
+		}
+		sampled++
 		tw.WriteFrame(f)
+	}
+	if torn > 0 {
+		fmt.Fprintf(os.Stderr, "th10probe: dropped %d torn samples (lower -settle-us?)\n", torn)
 	}
 	if err := tw.Flush(); err != nil {
 		fmt.Fprintln(os.Stderr, "th10probe:", err)
@@ -351,7 +407,7 @@ func (r *reader) u32(addr uint32) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24, nil
+	return le32(b), nil
 }
 
 func (r *reader) i32(addr uint32) (int32, error) {
@@ -367,13 +423,11 @@ func (r *reader) f32(addr uint32) (float32, error) {
 	return math.Float32frombits(v), nil
 }
 
-func (r *reader) i16(addr uint32) (int16, error) {
-	b, err := r.bytes(addr, 2)
-	if err != nil {
-		return 0, err
-	}
-	return int16(uint16(b[0]) | uint16(b[1])<<8), nil
+func le32(b []byte) uint32 {
+	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
 }
+
+func le16(b []byte) uint16 { return uint16(b[0]) | uint16(b[1])<<8 }
 
 func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
 	f := &trace.Frame{Index: index}
@@ -402,25 +456,54 @@ func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
 		}
 	}
 
-	// Enemies: walk the manager's array.
-	em, err := r.u32(addrEnemyMgr)
-	if err == nil && em != 0 {
-		arr, errArr := r.u32(em + enemyArrayOff)
-		if errArr == nil && arr != 0 {
-			for i := 0; i < enemySlots && len(f.E) < trace.MaxEnemyRows; i++ {
-				base := arr + uint32(i*enemyStride)
-				act, errAct := r.i16(base + enemyActive)
-				if errAct != nil {
-					break
-				}
-				if act == 0 {
+	// Enemies: walk the manager's list, main first.
+	if em, err := r.u32(addrEnemyMgr); err == nil && em != 0 {
+		node, _ := r.u32(em + enemyListHead)
+		for n := 0; node != 0 && n < enemyMaxNodes; n++ {
+			pair, err := r.bytes(node, 8)
+			if err != nil {
+				break
+			}
+			e, next := le32(pair[0:]), le32(pair[4:])
+			node = next
+			if e == 0 {
+				continue
+			}
+			f.Enemies++
+			if len(f.E) >= trace.MaxEnemyRows {
+				continue
+			}
+			x, _ := r.f32(e + enemyPosX)
+			y, _ := r.f32(e + enemyPosY)
+			hp, _ := r.i32(e + enemyHP)
+			flags, _ := r.u32(e + enemyFlags)
+			f.E = append(f.E, trace.EnemyRow{
+				X: float64(x), Y: float64(y), HP: int(hp), Active: flags&0x20000 == 0,
+			})
+		}
+	}
+
+	// Bullets: one read of the whole pool, then slot order.
+	if bm, err := r.u32(addrBulletMgr); err == nil && bm != 0 {
+		pool, err := r.bytes(bm+bulletArrayOff, bulletSlots*bulletStride)
+		if err == nil {
+			for i := 0; i < bulletSlots; i++ {
+				b := pool[i*bulletStride:]
+				if le16(b[bulletState:]) == 0 {
 					continue
 				}
-				x, _ := r.f32(base + enemyPosX)
-				y, _ := r.f32(base + enemyPosY)
-				hp, _ := r.i32(base + enemyHP)
-				f.E = append(f.E, trace.EnemyRow{X: float64(x), Y: float64(y), HP: int(hp), Active: true})
-				f.Enemies++
+				f.Bullets++
+				if len(f.B) >= trace.MaxBulletRows {
+					continue
+				}
+				f.B = append(f.B, trace.BulletRow{
+					X:     float64(math.Float32frombits(le32(b[bulletPosX:]))),
+					Y:     float64(math.Float32frombits(le32(b[bulletPosY:]))),
+					Angle: float64(math.Float32frombits(le32(b[bulletAngle:]))),
+					Speed: float64(math.Float32frombits(le32(b[bulletSpeed:]))),
+					Type:  int(int16(le16(b[bulletType:]))),
+					Color: int(int16(le16(b[bulletSprite:]))),
+				})
 			}
 		}
 	}

@@ -1,3 +1,7 @@
+//go:build ignore
+
+// Excluded from the build: hand-written stage 1, kept for reference; stage 1 runs stage01.ecl.
+
 package deprecatedstage1
 
 import (

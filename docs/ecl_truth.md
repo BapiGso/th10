@@ -116,8 +116,8 @@ Each opcode has an A form and a "+2" B form. Most enemies use only layer A.
 
 ### Enemy state / drops / flow
 320 setHurtbox, 321 setHitbox, 322/323 flagSet/Clear, 326 dropClear, 327 dropExtra,
-329 dropItems, 330 dropMain, 331 setHP, 332 setBoss, 333 timerReset, 334 delayedCall,
-335 setInvuln, 336 playSound, 338/339 dialog, 340 deathWait, 343 spellEnd,
+329 dropItems, 330 dropMain, 331 setHP, 332 setBoss, 333 timerReset, 334 setInterrupt,
+335 setInvuln, 336 playSound, 338/339 dialog, 340 bossWait, 343 spellEnd,
 355/356 rankPick (5-way by difficulty). 337/341/342/344/347/357-360 are HUD/bookkeeping
 (approximated/no-op).
 
@@ -136,13 +136,15 @@ Each opcode has an A form and a "+2" B form. Most enemies use only layer A.
 - 420 etCancel / 421 etClear (clear active bullets); 425-427 rank-interpolated count.
 
 ## 6. Deliberate approximations (Pareto, per project decision)
-- **RNG**: a deterministic xorshift, not ZUN's 16-bit `FUN_0044bb90` — behavior-faithful,
-  not frame-perfect.
+- **RNG**: the VM implements ZUN's `FUN_0044bb90` generator bit-exactly (`rngRaw` in vm.go), but the seed is hard-coded to 0x1234 rather than taken from the replay chapter header, and ANM-side random draws that share the same state are not modelled.
 - **Movement easing modes**: a small curve set (linear / accel / decel / smooth); exact ZUN
   easing function pointers (`&DAT_00476f78…`) not ported.
 - **Random ET modes (6-8)** and **lasers (412/413)** and **`etEx` (409) timing** are still
   approximate; the deterministic per-bullet emission (modes 0-5) is ported from `FUN_004067d0`.
 - **UI/HUD opcodes** (spell cards, chapters, stars, screen shake) are no-ops.
+- **Op 334** (fixed in M1, 2026-10-27) registers one of 8 boss interrupt slots (HP threshold, time, sub) checked every frame by `FUN_004127a0`, which replaces the main routine; see `scene/stage/ecl/interrupt.go` and `docs/research/m1_interrupts.md`.
 
 These are the points to tighten with the differential harness (dump live th10.exe per-frame
 enemy/bullet traces for Stage 1 and diff against the VM).
+
+Full gap audit: `docs/research/ecl_gaps.md`.

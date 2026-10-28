@@ -72,7 +72,7 @@ func TestLoaderDecodesBossMovePosTime(t *testing.T) {
 	// Boss contains ins_281(60, 4, 0.0f, 112.0f) — movePosTime.
 	var found *Instr
 	for i := range sub.Instrs {
-		if sub.Instrs[i].Opcode == opMovePosTime {
+		if sub.Instrs[i].Opcode == opMovePos {
 			found = &sub.Instrs[i]
 			break
 		}
@@ -118,6 +118,47 @@ func TestLoaderParsesAllStages(t *testing.T) {
 		}
 		if prog.SubByName["main"] == nil {
 			t.Fatalf("%s: missing main sub (have %d subs)", name, len(prog.Subs))
+		}
+	}
+}
+
+// TestStageVMIncludesDefaultECL: every stage lists default.ecl in its ECLI
+// block and calls its subs (Ecl_EtBreak) by name, so the VM must merge it.
+// No stage redefines a default.ecl sub, so Include's keep-the-stage's-copy
+// rule never has to pick between two definitions.
+func TestStageVMIncludesDefaultECL(t *testing.T) {
+	data, err := assets.Assets.ReadFile("ecl/default.ecl")
+	if err != nil {
+		t.Fatalf("read default.ecl: %v", err)
+	}
+	def, err := LoadProgram(data)
+	if err != nil {
+		t.Fatalf("LoadProgram(default.ecl): %v", err)
+	}
+	for _, name := range []string{
+		"ecl/stage01.ecl", "ecl/stage02.ecl", "ecl/stage03.ecl",
+		"ecl/stage04.ecl", "ecl/stage05.ecl", "ecl/stage06.ecl",
+		"ecl/stage07.ecl",
+	} {
+		data, err := assets.Assets.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		own, err := LoadProgram(data)
+		if err != nil {
+			t.Fatalf("LoadProgram(%s): %v", name, err)
+		}
+		for _, sub := range def.Subs {
+			if own.SubByName[sub.Name] != nil {
+				t.Errorf("%s redefines default.ecl's %s", name, sub.Name)
+			}
+		}
+		vm := NewStageVM(name)
+		if vm.prog.SubByName["Ecl_EtBreak"] == nil {
+			t.Errorf("%s: Ecl_EtBreak not reachable (ECLI %v)", name, own.EcliNames)
+		}
+		if got, want := len(vm.prog.Subs), len(own.Subs)+len(def.Subs); got != want {
+			t.Errorf("%s: %d subs after include, want %d", name, got, want)
 		}
 	}
 }

@@ -31,7 +31,7 @@ import (
 	"fmt"
 	"sync"
 
-	"th10/assets"
+	"th10/gamedata"
 
 	"golang.org/x/text/encoding/japanese"
 )
@@ -203,7 +203,7 @@ func loadStageDialog(stage string, character int) *stageDialog {
 	}
 
 	path := fmt.Sprintf("msg/st%02d_%02d.msg", stageNum, character&1)
-	data, err := assets.Assets.ReadFile(path)
+	data, err := gamedata.ReadFile(path)
 	if err != nil {
 		msgCache[key] = nil
 		return nil

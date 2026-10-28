@@ -71,11 +71,51 @@ func TestDiffEpsilonBudget(t *testing.T) {
 	}
 }
 
+func TestDiffSkipsSamplerGaps(t *testing.T) {
+	dir := t.TempDir()
+	frame3 := strings.ReplaceAll(strings.SplitAfter(baseFrame, "\n")[1], "F 2 ", "F 3 ")
+	a := writeTrace(t, dir, "a.txt", strings.SplitAfter(baseFrame, "\n")[0]+frame3)
+	b := writeTrace(t, dir, "b.txt", baseFrame+frame3)
+	if code := runDiff(t, a, b); code != 0 {
+		t.Fatalf("dropped reference frame returned %d, want 0", code)
+	}
+}
+
+func TestDiffReferenceEndsFirst(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTrace(t, dir, "a.txt", strings.SplitAfter(baseFrame, "\n")[0])
+	b := writeTrace(t, dir, "b.txt", baseFrame)
+	if code := runDiff(t, a, b); code != 0 {
+		t.Fatalf("shorter reference returned %d, want 0", code)
+	}
+}
+
+func TestDiffShift(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTrace(t, dir, "a.txt", strings.NewReplacer("F 1 ", "F 0 ", "F 2 ", "F 1 ").Replace(baseFrame))
+	b := writeTrace(t, dir, "b.txt", baseFrame)
+	if code := runDiff(t, a, b, "-shift", "1"); code != 0 {
+		t.Fatalf("shifted reference returned %d, want 0", code)
+	}
+}
+
+func TestDiffMotionScope(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTrace(t, dir, "a.txt", baseFrame)
+	b := writeTrace(t, dir, "b.txt", strings.Replace(baseFrame, "faith 49998", "faith 50000", 1))
+	if code := runDiff(t, a, b); code != 1 {
+		t.Fatalf("faith divergence returned %d, want 1", code)
+	}
+	if code := runDiff(t, a, b, "-scope", "motion"); code != 0 {
+		t.Fatalf("faith divergence under -scope motion returned %d, want 0", code)
+	}
+}
+
 // runDiff invokes the command's run() with flags parsed from args.
-func runDiff(t *testing.T, a, b string) int {
+func runDiff(t *testing.T, a, b string, extra ...string) int {
 	t.Helper()
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
-	os.Args = []string{"th10diff", "-a", a, "-b", b, "-context", "1"}
+	os.Args = append([]string{"th10diff", "-a", a, "-b", b, "-context", "1"}, extra...)
 	return run()
 }

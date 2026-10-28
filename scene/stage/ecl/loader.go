@@ -170,6 +170,19 @@ func LoadProgram(data []byte) (*Program, error) {
 	return prog, nil
 }
 
+// Include adds the subs of an ECLI-listed file (e.g. "default.ecl") that p
+// does not define itself. th10.exe merges every loaded file's subs into one
+// sorted name table and binary-searches it (FUN_00450470).
+func (p *Program) Include(inc *Program) {
+	for _, sub := range inc.Subs {
+		if _, ok := p.SubByName[sub.Name]; ok {
+			continue
+		}
+		p.Subs = append(p.Subs, sub)
+		p.SubByName[sub.Name] = sub
+	}
+}
+
 func readList(data []byte, off int, magic string) (names []string, next int, err error) {
 	if off+8 > len(data) {
 		return nil, off, errTooShort

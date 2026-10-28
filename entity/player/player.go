@@ -3,9 +3,9 @@ package player
 import (
 	"fmt"
 	"math"
-	"th10/assets"
 	"th10/entity/playerbullet"
 	"th10/game"
+	"th10/gamedata"
 	"th10/input"
 	"th10/sht"
 )
@@ -74,7 +74,7 @@ const (
 func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 	centerX := (fieldL + fieldR) / 2
 	path := fmt.Sprintf("sht/pl%02d%c.sht", gs.Character, 'a'+gs.ShotType)
-	data, err := assets.Assets.ReadFile(path)
+	data, err := gamedata.ReadFile(path)
 	if err != nil {
 		panic(fmt.Sprintf("load player movement %s: %v", path, err))
 	}

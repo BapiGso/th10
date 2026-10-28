@@ -3,59 +3,80 @@ package ecl
 // TH10 ECL virtual machine — runtime over the binary IR (see loader.go).
 //
 // Faithful to the binary's model rather than thtk's decompiled text:
-//   - Each task has a virtual clock. An instruction runs once clock>=Time;
-//     the clock advances 1 per frame while waiting. goto/if/unless carry a
-//     time arg that sets the clock; wait(83) freezes the clock for N frames.
-//     (Confirmed against Boss1/Boss1At1 instruction Time fields.)
+//   - Every enemy, the stage's "main" included, owns a primary context and
+//     a list of async ones. The manager (FUN_0040d750) walks the enemy list
+//     in creation order and updates each enemy in full (FUN_0040dc80):
+//     movement (motion.go), then its contexts (FUN_0044fd10), the primary
+//     first. An enemy created by an ECL op is updated once on the spot.
+//   - Each context has a float clock (FUN_0044e1a0). Every instruction with
+//     Time <= clock runs, then the clock advances by the game speed.
+//     goto/if/unless carry a time arg that sets the clock; wait(83)
+//     subtracts N from it, so what follows runs N frames later. A game op
+//     that returns -1 (the 339/340 waits) ends the frame without advancing
+//     the clock and runs again next frame.
+//   - op 1, and op 10 with nothing to return to, end the context: an async
+//     one is freed, the end of the primary one deletes the enemy.
 //   - System opcodes (<256) are a typed stack machine (expr.c / FUN_0043ee30):
 //     LOADI/F push, ASSIGNI/F pop->var, 50-84 arithmetic/compare/logic.
 //   - Variables: param_mask bit => the 4-byte value is a var ref; id>=0 is a
 //     local-frame byte offset, id==-1 pops the data stack, id<-1 is a special
 //     var (FUN_0044fdb0). Float vars encode the id as a float bit pattern.
 //
-// Movement (282-299) and danmaku (400-436) handlers live in game_ops.go /
-// bullet_ops.go; this file owns the core loop, control flow, and resolution.
+// Game ops (256-368) and danmaku (400-436) live in game_ops.go /
+// bullet_ops.go, special variables in special.go; this file owns the core
+// loop, control flow, and resolution.
 
 import (
 	"math"
+	"path"
 	"sort"
 
-	"th10/assets"
 	"th10/entity/enemy"
 	"th10/game"
+	"th10/gamedata"
 	"th10/scene/stage"
+	"th10/zun"
 )
 
 // VM runs an ECL program for one stage.
 type VM struct {
-	prog     *Program
-	tasks    []*eclTask
-	actors   map[*enemy.Enemy]*eclActor
-	frame    int
-	rngState uint16 // ZUN RNG state (FUN_0044bb90); seed DAT_004918b0
-	mainTask *eclTask // the "main" stage task; stage ends when it finishes
+	prog   *Program
+	actors map[*enemy.Enemy]*eclActor
+	// order is the enemy list (DAT_00477704+0x58) in creation order.
+	order []*eclActor
+	// main is the hidden enemy that runs the "main" sub; the stage ends with
+	// it. It starts on the first Update.
+	main    *eclActor
+	started bool
+	frame   int
+	// rng is the game RNG (DAT_004918b0), shared with the bullet ANM VMs
+	// through stage.Context.RNG.
+	rng *zun.RNG
 
 	// Dynamic rank (DAT_00474c98, -1024..1024): +1 every 60 frames while
 	// enemies are on screen and no dialog is open (player update FUN_00425730).
 	// Consumed by the rank-tier ET opcodes 422-427.
 	rank int
 
-	// Global time scale (DAT_00476f78, set by ins_367). Every script Timer and
-	// tween advances by this much per frame; 1.0 = normal speed.
-	timeScale float64
-	tickAcc   float64 // fractional script-tick accumulator
+	// The game speed (DAT_00476f78, set by ins_367): every context clock,
+	// timer and tween advances by this much per frame.
+	gameSpeed float32
 
 	// snapshot of stage state for special-var resolution (set each frame)
 	difficulty int
 	playerX    float64
 	playerY    float64
 	hasPlayer  bool
+	playerECL  [2]float32 // the player in ECL coordinates (float32)
 
-	// escape/timeout handler registered by ins_341 (slot, subName): when the
-	// current attack times out, the sub runs on the registering enemy
-	// (e.g. "MBossEscape" makes the midboss fly away).
-	escapeSub   string
-	escapeOwner *enemy.Enemy
+	ctx *stage.Context // this frame's context, for the damage callback
+
+	// Boss slots (DAT_00477704+0x10): ins_332 puts an enemy in one, ins_340
+	// waits for slot 0 to empty, and the boss HUD follows slot 0.
+	bossSlots [8]*enemy.Enemy
+	// hudTimer is the boss timer readout (DAT_0047770c+0x9ec0), rewritten by
+	// FUN_004127a0 whenever it checks an armed slot with a time limit.
+	hudTimer int
 
 	// dialog bridge: ins_338 records the requested id; the next ins_339 fires
 	// DialogFunc(id). If DialogFunc returns true (dialog shown), the task blocks
@@ -71,19 +92,17 @@ type VM struct {
 	shakeTotal  int
 	shakeMag    float64
 
-	// boss spell-card HUD state, driven by 357/359 (declare), 341/368 (timer),
-	// and the boss enemy's HP. Decoded from the ECL itself.
+	// boss spell-card HUD state, driven by 357/359 (declare) and 343 (end).
+	// The timer is hudTimer. Decoded from the ECL itself.
 	spell spellState
 }
 
 // spellState tracks the currently-declared boss spell card for the HUD.
 type spellState struct {
-	active    bool
-	name      string // UTF-8 (decoded from the ECL's Shift-JIS 357/359 arg)
-	bonus     int64  // base bonus score
-	timeLimit int    // total frames (from 357/359 arg or a setTimeout)
-	timeLeft  int    // remaining frames, counted down each VM frame
-	owner     *enemy.Enemy
+	active bool
+	name   string // UTF-8 (decoded from the ECL's Shift-JIS 357/359 arg)
+	bonus  int64  // base bonus score
+	owner  *enemy.Enemy
 }
 
 // eVal is a typed value on the data stack / in a variable (raw 32-bit bits).
@@ -111,16 +130,17 @@ func (v eVal) asFloat() float32 {
 // eclTask is one running coroutine. Async calls spawn sibling tasks sharing the
 // owner enemy; sync calls push onto the call stack.
 type eclTask struct {
-	sub   *Sub
-	pc    int
-	clock int32
-	wait  int // explicit ins_83 frames remaining (clock frozen)
+	sub     *Sub // nil: the sub was not found; the task ends on its next run
+	pc      int
+	clock   float32
+	blocked bool // the last game op returned -1: rerun it next frame
 
 	frame []uint32 // local variable slots, indexed by byte offset / 4
 	stack []eVal
 	calls []callFrame
 
 	owner   *enemy.Enemy
+	async   bool  // an async context; otherwise the owner's primary one
 	asyncID int32 // callAsyncID slot, for targeted kill; -1 otherwise
 	done    bool
 }
@@ -128,7 +148,7 @@ type eclTask struct {
 type callFrame struct {
 	sub   *Sub
 	pc    int
-	clock int32
+	clock float32
 	frame []uint32
 }
 
@@ -143,15 +163,31 @@ func NewStageVM(eclPath string) *VM {
 	vm := &VM{
 		prog:      &Program{SubByName: map[string]*Sub{}},
 		actors:    map[*enemy.Enemy]*eclActor{},
-		rngState:  0x1234,
-		timeScale: 1,
+		rng:       &zun.RNG{State: 0x1234},
+		gameSpeed: 1,
 	}
-	if data, err := assets.Assets.ReadFile(eclPath); err == nil {
+	if data, err := gamedata.ReadFile(eclPath); err == nil {
 		if prog, perr := LoadProgram(data); perr == nil {
 			vm.prog = prog
+			// The ECLI list ("default.ecl": the Ecl_EtBreak bullet-clearing
+			// enemies, et_ofs_r) shares the stage's sub namespace; th10.exe
+			// looks every name up in one table (FUN_00450470).
+			for _, name := range prog.EcliNames {
+				if inc, err := gamedata.ReadFile(path.Join(path.Dir(eclPath), name)); err == nil {
+					if incProg, err := LoadProgram(inc); err == nil {
+						prog.Include(incProg)
+					}
+				}
+			}
 		}
 	}
-	vm.mainTask = vm.startTask("main", nil, nil, -1)
+	if sub := vm.prog.SubByName["main"]; sub != nil {
+		e := enemy.New(0, 0, 0, enemy.TypeFairy)
+		e.Hidden = true
+		e.ECLFlags = 0x10
+		vm.main = newActor(e)
+		vm.main.main = &eclTask{sub: sub, owner: e, asyncID: -1, frame: newFrame(sub, nil)}
+	}
 	return vm
 }
 
@@ -160,7 +196,7 @@ func NewStageVM(eclPath string) *VM {
 // is defeated and ends with delete() — so this is the faithful stage-clear
 // signal (replacing the old fixed-frame cutoff).
 func (vm *VM) MainDone() bool {
-	return vm.mainTask == nil || vm.mainTask.done
+	return vm.main == nil || !vm.main.e.Active
 }
 
 // BossActive reports whether a boss-type enemy spawned by the VM is currently
@@ -175,21 +211,11 @@ func (vm *VM) BossActive() bool {
 	return false
 }
 
-// BossHUD returns the current boss/spell HUD snapshot. The boss is the live
-// TypeBoss enemy with the most HP (mid-boss + boss never co-exist in TH10).
+// BossHUD returns the current boss/spell HUD snapshot for the enemy in boss
+// slot 0 (ins_332(0); mid-bosses use it too).
 func (vm *VM) BossHUD() stage.BossHUDInfo {
-	var boss *enemy.Enemy
-	for e := range vm.actors {
-		if e == nil || !e.Active {
-			continue
-		}
-		if e.Type == enemy.TypeBoss || e.Type == enemy.TypeMidBoss {
-			if boss == nil || e.MaxHP > boss.MaxHP {
-				boss = e
-			}
-		}
-	}
-	if boss == nil {
+	boss := vm.bossSlots[0]
+	if boss == nil || !boss.Active {
 		return stage.BossHUDInfo{}
 	}
 	frac := 0.0
@@ -202,20 +228,24 @@ func (vm *VM) BossHUD() stage.BossHUDInfo {
 		}
 	}
 	info := stage.BossHUDInfo{Active: true, HPFrac: frac}
-	if a := vm.actors[boss]; a != nil && boss.MaxHP > 0 {
-		for _, m := range a.markers {
-			mf := m.hp / float64(boss.MaxHP)
-			if mf > 0 && mf < 1 {
-				info.HPMarkers = append(info.HPMarkers, mf)
+	if a := vm.actors[boss]; a != nil {
+		if boss.MaxHP > 0 {
+			for _, m := range a.markers {
+				mf := m.hp / float64(boss.MaxHP)
+				if mf > 0 && mf < 1 {
+					info.HPMarkers = append(info.HPMarkers, mf)
+				}
 			}
+			sort.Float64s(info.HPMarkers)
 		}
-		sort.Float64s(info.HPMarkers)
+		if a.timed() {
+			info.TimeLeft = vm.hudTimer
+		}
 	}
 	if vm.spell.active && vm.spell.owner == boss {
 		info.Spell = true
 		info.Name = vm.spell.name
 		info.Bonus = vm.spell.bonus
-		info.TimeLeft = (vm.spell.timeLeft + 59) / 60 // frames → ceil seconds
 	}
 	return info
 }
@@ -244,40 +274,36 @@ func (vm *VM) ShakeOffset() (float64, float64) {
 	return dx, dy
 }
 
-// Update advances movement and runs every live task one frame.
+// Update runs the enemy manager (FUN_0040d750) for one frame.
 func (vm *VM) Update(ctx *stage.Context) {
 	vm.frame++
 	if vm.shakeFrames > 0 {
 		vm.shakeFrames--
 	}
-	// ins_367 time scale: script Timers advance by timeScale per real frame
-	// (velocity integration is not Timer-driven and keeps full speed). The
-	// accumulator turns fractional scales into 0/1 whole script ticks.
-	vm.tickAcc += vm.timeScale
-	ticks := int(vm.tickAcc)
-	vm.tickAcc -= float64(ticks)
+	vm.ctx = ctx
+	vm.prune()
+	if ctx != nil {
+		ctx.ManagerOrder = vm.ManagerOrder
+	}
 
 	// Dynamic rank (FUN_00425730): +1 every 60 frames while enemies are on
-	// screen and no dialog is open, clamped to [-1024, 1024].
+	// screen and no dialog is open, clamped to [-1024, 1024]. It lives in the
+	// game state so it carries over between stages.
+	if !vm.started && ctx != nil && ctx.State != nil {
+		vm.rank = ctx.State.Rank
+	}
 	if len(vm.actors) > 0 && (vm.DialogActive == nil || !vm.DialogActive()) && vm.frame%60 == 0 {
 		if vm.rank++; vm.rank > 1024 {
 			vm.rank = 1024
 		}
 	}
+	if ctx != nil && ctx.State != nil {
+		ctx.State.Rank = vm.rank
+	}
 
-	// Tick the spell-card countdown; drop the HUD when the card's owner dies.
-	// On timeout, fire the ins_341 escape handler (e.g. "MBossEscape").
-	if vm.spell.active {
-		switch {
-		case vm.spell.owner != nil && !vm.spell.owner.Active:
-			vm.spell.active = false
-		case vm.spell.timeLeft > 0:
-			if vm.spell.timeLeft -= ticks; vm.spell.timeLeft <= 0 {
-				vm.spell.timeLeft = 0
-				vm.spell.active = false
-				vm.fireEscape()
-			}
-		}
+	// Drop the spell HUD when the card's owner dies.
+	if vm.spell.active && vm.spell.owner != nil && !vm.spell.owner.Active {
+		vm.spell.active = false
 	}
 	if ctx != nil {
 		if ctx.State != nil {
@@ -285,59 +311,116 @@ func (vm *VM) Update(ctx *stage.Context) {
 		}
 		if ctx.Player != nil {
 			vm.playerX, vm.playerY, vm.hasPlayer = ctx.Player.X, ctx.Player.Y, true
-		}
-	}
-	// Integrate enemy movement first (positions used by this frame's logic).
-	for e, a := range vm.actors {
-		if !e.Active {
-			delete(vm.actors, e)
-			continue
-		}
-		a.integrate(e, ticks)
-	}
-
-	// Step every task that exists at the start of each tick. Tasks spawned
-	// during stepping (startTask appends to vm.tasks, possibly reallocating)
-	// run starting next tick, so the loop bound is fixed per round. We index
-	// rather than range, and never reslice vm.tasks here, so an append can't
-	// clobber a not-yet-visited entry (the old [:0] alias did exactly that
-	// and silently dropped the spawner task).
-	for tick := 0; tick < ticks; tick++ {
-		n := len(vm.tasks)
-		for i := 0; i < n; i++ {
-			t := vm.tasks[i]
-			if t.done || (t.owner != nil && !t.owner.Active) {
-				continue
+			vm.playerECL = [2]float32{
+				float32(ctx.Player.X - eclCenterX()),
+				float32(ctx.Player.Y - float64(game.FieldTop)),
 			}
-			vm.stepTask(ctx, t)
 		}
 	}
 
-	// Compact in place: drop finished tasks and tasks whose owner died.
-	live := vm.tasks[:0]
-	for _, t := range vm.tasks {
-		if t.done || (t.owner != nil && !t.owner.Active) {
-			continue
+	// The stage's main enemy is created (and so first updated) before the
+	// list runs.
+	if !vm.started {
+		vm.started = true
+		if ctx != nil && ctx.RNG != nil {
+			vm.rng = ctx.RNG
+		} else if ctx != nil && ctx.State != nil && ctx.State.HasSeed {
+			vm.rng.State = ctx.State.RNGSeed
 		}
-		live = append(live, t)
+		if a := vm.main; a != nil {
+			vm.actors[a.e] = a
+			vm.updateActor(a)
+			vm.order = append(vm.order, a)
+		}
 	}
-	vm.tasks = live
+
+	// The list walk takes each enemy's successor before updating it, so an
+	// enemy created by the last one waits for the next frame, its 0x400
+	// still set from its first update.
+	for i := 0; i < len(vm.order); i++ {
+		a := vm.order[i]
+		last := i == len(vm.order)-1
+		if a.e.Active {
+			if a.e.ECLFlags&0x20000 == 0 && vm.updateActor(a) {
+				a.e.ECLFlags &^= 0x400
+			} else {
+				a.e.Active = false
+			}
+		}
+		if last {
+			break
+		}
+	}
 }
 
-// fireEscape runs the ins_341-registered timeout sub on its enemy (once).
-func (vm *VM) fireEscape() {
-	if vm.escapeSub == "" || vm.escapeOwner == nil || !vm.escapeOwner.Active {
-		return
+// ManagerOrder lists the live enemies in the enemy manager's list order
+// (DAT_00477704+0x58), the hidden main first.
+func (vm *VM) ManagerOrder() []*enemy.Enemy {
+	out := make([]*enemy.Enemy, 0, len(vm.order))
+	for _, a := range vm.order {
+		if a.e.Active {
+			out = append(out, a.e)
+		}
 	}
-	vm.startTask(vm.escapeSub, vm.escapeOwner, nil, -1)
-	vm.escapeSub = ""
+	return out
 }
 
-// stepTask runs one frame of a task using the clock model described above.
-func (vm *VM) stepTask(ctx *stage.Context, t *eclTask) {
-	if t.wait > 0 {
-		t.wait--
-		return
+// updateActor is FUN_0040dc80 up to the damage step (the rest runs in
+// LateUpdate, after the stage's collisions): once per frame (flag 0x400),
+// movement, then the ECL. It reports false when the enemy is to be deleted.
+func (vm *VM) updateActor(a *eclActor) bool {
+	e := a.e
+	if e.ECLFlags&0x400 != 0 {
+		return true
+	}
+	e.ECLFlags |= 0x400
+	a.ran = true
+	if !a.mv.step(&e.ECLFlags, vm.gameSpeed) {
+		return false
+	}
+	a.syncPos()
+	if !vm.runActor(a) {
+		return false
+	}
+	e.ECLFlags &^= 0x2000
+	return true
+}
+
+// runActor is FUN_0044fd10: the primary context, then the async contexts
+// that existed before it ran, newest first. The end of the primary context
+// ends the enemy; an async one that ends is freed.
+func (vm *VM) runActor(a *eclActor) bool {
+	var buf [8]*eclTask
+	snap := append(buf[:0], a.asyncs...)
+	if a.main != nil && !vm.stepTask(vm.ctx, a.main) {
+		return false
+	}
+	for _, t := range snap {
+		if !t.done && !vm.stepTask(vm.ctx, t) {
+			t.done = true
+		}
+	}
+	n := 0
+	for _, t := range a.asyncs {
+		if !t.done {
+			a.asyncs[n] = t
+			n++
+		}
+	}
+	clear(a.asyncs[n:])
+	a.asyncs = a.asyncs[:n]
+	return true
+}
+
+// stepTask runs one frame of a context using the clock model described
+// above (FUN_0044e1a0). It reports false when the context has ended.
+func (vm *VM) stepTask(ctx *stage.Context, t *eclTask) bool {
+	if t.done {
+		return false
+	}
+	if t.sub == nil {
+		t.done = true // no instruction pointer: returns -1
+		return false
 	}
 	diff := 1
 	if ctx != nil && ctx.State != nil {
@@ -346,13 +429,13 @@ func (vm *VM) stepTask(ctx *stage.Context, t *eclTask) {
 	for budget := 0; budget < 100000; budget++ {
 		if t.pc >= len(t.sub.Instrs) {
 			if !vm.returnFromCall(t) {
-				t.done = true
-				return
+				vm.end(t) // fell off the outermost sub: as op 10
+				return false
 			}
 			continue
 		}
 		in := &t.sub.Instrs[t.pc]
-		if in.Time > t.clock {
+		if float32(in.Time) > t.clock {
 			break // not yet time; yield and let the clock catch up
 		}
 		if !in.rankAllows(diff) {
@@ -361,13 +444,21 @@ func (vm *VM) stepTask(ctx *stage.Context, t *eclTask) {
 		}
 		vm.execInstr(ctx, t, in)
 		if t.done {
-			return
+			return false
 		}
-		if t.wait > 0 {
-			return // explicit wait: do not advance the clock this frame
+		if t.blocked {
+			t.blocked = false
+			return true // retry this op next frame; the clock stands still
 		}
 	}
-	t.clock++ // one frame elapsed
+	t.clock += vm.gameSpeed
+	return true
+}
+
+// end finishes t as op 1 does. Its caller frees an async context, or
+// deletes the enemy for the primary one.
+func (vm *VM) end(t *eclTask) {
+	t.done = true
 }
 
 func (vm *VM) returnFromCall(t *eclTask) bool {
@@ -388,7 +479,9 @@ func (vm *VM) returnFromCall(t *eclTask) bool {
 func (vm *VM) execInstr(ctx *stage.Context, t *eclTask, in *Instr) {
 	if in.Opcode >= 256 {
 		vm.execGameOp(ctx, t, in)
-		t.pc++
+		if !t.blocked {
+			t.pc++
+		}
 		return
 	}
 	vm.execSystemOp(ctx, t, in)
@@ -398,14 +491,11 @@ func (vm *VM) execInstr(ctx *stage.Context, t *eclTask, in *Instr) {
 // Most ops advance pc by 1; jumps/return set pc explicitly.
 func (vm *VM) execSystemOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	switch in.Opcode {
-	case opRetBig: // 1: delete owner + end this task tree
-		if t.owner != nil && len(t.calls) == 0 {
-			t.owner.Active = false
-		}
-		t.done = true
-	case opRetNormal: // 10
+	case opRetBig: // 1
+		vm.end(t)
+	case opRetNormal: // 10: with nothing to return to, as op 1
 		if !vm.returnFromCall(t) {
-			t.done = true
+			vm.end(t)
 		}
 	case opCall: // 11 m*D
 		vm.doCall(ctx, t, in, false, -1)
@@ -437,11 +527,8 @@ func (vm *VM) execSystemOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		} else {
 			t.pc++
 		}
-	case opWait: // 83 S
-		n := int(vm.resolveInt(t, in.Params[0]))
-		if n > 0 {
-			t.wait = n
-		}
+	case opWait: // 83 S: the clock steps back n frames
+		t.clock -= float32(vm.resolveInt(t, in.Params[0]))
 		t.pc++
 	case opLoadI: // 42 S
 		t.push(intVal(vm.resolveInt(t, in.Params[0])))
@@ -461,10 +548,11 @@ func (vm *VM) execSystemOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		vm.storeVar(t, in.Params[0], intVal(v-1))
 		t.pc++
 	case opPolar: // 81 ffff: out_x, out_y = cos/sin(angle)*radius
-		angle := float64(vm.resolveFloat(t, in.Params[2]))
-		radius := float64(vm.resolveFloat(t, in.Params[3]))
-		vm.storeVar(t, in.Params[0], floatVal(float32(math.Cos(angle)*radius)))
-		vm.storeVar(t, in.Params[1], floatVal(float32(math.Sin(angle)*radius)))
+		angle := vm.resolveFloat(t, in.Params[2])
+		radius := vm.resolveFloat(t, in.Params[3])
+		x, y := polar(angle, radius)
+		vm.storeVar(t, in.Params[0], floatVal(x))
+		vm.storeVar(t, in.Params[1], floatVal(y))
 		t.pc++
 	case opValidRad: // 82 f: normalize angle var into (-pi, pi]
 		v := vm.loadVarFloat(t, in.Params[0])
@@ -606,7 +694,7 @@ func (vm *VM) jump(t *eclTask, in *Instr, offsetParam, timeParam Param) {
 		return
 	}
 	t.pc = target
-	t.clock = timeParam.Int()
+	t.clock = float32(timeParam.Int())
 }
 
 func (vm *VM) doCall(ctx *stage.Context, t *eclTask, in *Instr, async bool, asyncID int32) {
@@ -621,7 +709,14 @@ func (vm *VM) doCall(ctx *stage.Context, t *eclTask, in *Instr, async bool, asyn
 		args = append(args, vm.resolveCallArg(t, p))
 	}
 	if async {
-		vm.startTask(name, t.owner, args, asyncID)
+		// A new async context goes to the head of the owner's list.
+		if a := vm.actors[t.owner]; a != nil {
+			nt := &eclTask{sub: vm.prog.SubByName[name], owner: t.owner, async: true, asyncID: asyncID}
+			if nt.sub != nil {
+				nt.frame = newFrame(nt.sub, args)
+			}
+			a.asyncs = append([]*eclTask{nt}, a.asyncs...)
+		}
 		t.pc++
 		return
 	}
@@ -637,23 +732,23 @@ func (vm *VM) doCall(ctx *stage.Context, t *eclTask, in *Instr, async bool, asyn
 	t.frame = newFrame(callee, args)
 }
 
-func (vm *VM) startTask(name string, owner *enemy.Enemy, args []eVal, asyncID int32) *eclTask {
-	sub := vm.prog.SubByName[name]
-	if sub == nil {
-		return nil
-	}
-	t := &eclTask{sub: sub, owner: owner, asyncID: asyncID, frame: newFrame(sub, args)}
-	vm.tasks = append(vm.tasks, t)
-	return t
-}
-
+// killAsync frees the owner's async contexts other than current: the first
+// with the given id (op 17), or all of them for id < 0 (op 21). The primary
+// context is never one of them.
 func (vm *VM) killAsync(current *eclTask, id int32) {
-	for _, task := range vm.tasks {
-		if task == current || task.owner != current.owner || task.owner == nil {
+	a := vm.actors[current.owner]
+	if a == nil {
+		return
+	}
+	for _, task := range a.asyncs {
+		if task == current || task.done {
 			continue
 		}
-		if id < 0 || task.asyncID == id {
+		if id < 0 {
 			task.done = true
+		} else if task.asyncID == id {
+			task.done = true
+			return
 		}
 	}
 }
@@ -712,7 +807,7 @@ func (vm *VM) resolveInt(t *eclTask, p Param) int32 {
 	case id == -1:
 		return vm.popInt(t)
 	default:
-		return int32(vm.specialFloat(t, id))
+		return vm.specialInt(t, id)
 	}
 }
 
@@ -756,7 +851,8 @@ func (vm *VM) frameWord(t *eclTask, id int32) uint32 {
 func (vm *VM) storeVar(t *eclTask, p Param, v eVal) {
 	id := p.VarID()
 	if id < 0 {
-		return // can't assign to a special var
+		vm.storeSpecial(t, id, v)
+		return
 	}
 	vm.ensureFrame(t, int(id)+4)
 	t.frame[id/4] = v.bits
@@ -766,6 +862,9 @@ func (vm *VM) loadVarInt(t *eclTask, p Param) int32 {
 	if !p.IsVar {
 		return p.Int()
 	}
+	if id := p.VarID(); id < -1 {
+		return vm.specialInt(t, id)
+	}
 	return int32(vm.frameWord(t, p.VarID()))
 }
 
@@ -773,35 +872,10 @@ func (vm *VM) loadVarFloat(t *eclTask, p Param) float32 {
 	if !p.IsVar {
 		return p.Float()
 	}
+	if id := p.VarID(); id < -1 {
+		return vm.specialFloat(t, id)
+	}
 	return math.Float32frombits(vm.frameWord(t, p.VarID()))
-}
-
-// specialFloat returns the value of a special/global variable (id < -1).
-// Behavioral (Pareto) approximations; refine via the differential harness.
-func (vm *VM) specialFloat(t *eclTask, id int32) float32 {
-	switch id {
-	case -9959: // difficulty / rank
-		return float32(vm.difficulty)
-	case -9986: // spell-practice/replay flag (0 in normal play)
-		return 0
-	case -9989: // angle from enemy to player
-		return float32(vm.aimAngle(t))
-	case -9987, -9999: // random float [0,1)
-		return vm.randFloat()
-	case -9998: // random angle [-pi, pi): FUN_0044bb90 draw scaled by pi
-		return float32(vm.randSigned() * math.Pi)
-	case -10000: // global frame counter
-		return float32(vm.frame)
-	default:
-		return 0
-	}
-}
-
-func (vm *VM) aimAngle(t *eclTask) float64 {
-	if t.owner == nil || !vm.hasPlayer {
-		return math.Pi / 2 // downward
-	}
-	return math.Atan2(vm.playerY-t.owner.Y, vm.playerX-t.owner.X)
 }
 
 // aimAngleAt returns atan2(player - (x,y)) like FUN_004073e0: exactly pi/2
@@ -813,42 +887,10 @@ func (vm *VM) aimAngleAt(x, y float64) float64 {
 	return math.Atan2(vm.playerY-y, vm.playerX-x)
 }
 
-// rngRaw advances the ZUN RNG (FUN_0044bb90) and returns the combined 32-bit
-// draw: two 16-bit steps of w = rotl16((w ^ 0x9630) - 0x6553, 2) followed by
-// w = rotl16((w ^ 0x9630) + 0x9aad, 2), giving hi<<16|lo. Bit-exact.
-func (vm *VM) rngRaw() uint32 {
-	w := (vm.rngState ^ 0x9630) - 0x6553
-	w = w<<2 | w>>14
-	u := (w ^ 0x9630) + 0x9aad
-	u = u<<2 | u>>14
-	vm.rngState = u
-	return uint32(w)<<16 | uint32(u)
-}
-
-// randSigned returns the FUN_0044bb90 float draw. The binary computes
-// raw * DAT_00470bec - DAT_00470afc; with afc = 1.0 (shared with the Timer
-// tick) and bec = 2^-31 this is [-1, 1). Scale constants pending the round-2
-// const dump; the integer sequence above is exact regardless.
-func (vm *VM) randSigned() float64 {
-	return float64(vm.rngRaw())*(1.0/2147483648.0) - 1.0
-}
-
-// randFloat returns a [0,1) draw for call sites whose original getter
-// (FUN_0044bb20 family) is not yet dumped; derived from the same sequence.
-func (vm *VM) randFloat() float32 {
-	return float32(vm.rngRaw()) * (1.0 / 4294967296.0)
-}
-
-func normAngle(a float32) float32 {
-	x := float64(a)
-	for x > math.Pi {
-		x -= 2 * math.Pi
-	}
-	for x <= -math.Pi {
-		x += 2 * math.Pi
-	}
-	return float32(x)
-}
+// rngRaw, randSigned and randFloat draw from the game RNG (zun.RNG).
+func (vm *VM) rngRaw() uint32      { return vm.rng.Raw() }
+func (vm *VM) randSigned() float32 { return vm.rng.Signed() }
+func (vm *VM) randFloat() float32  { return vm.rng.Float() }
 
 func eclCenterX() float64 { return float64(game.FieldLeft+game.FieldRight) / 2 }
 

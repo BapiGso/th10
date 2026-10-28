@@ -12,6 +12,7 @@ import (
 	"io"
 
 	"th10/entity/bullet"
+	"th10/entity/enemy"
 	"th10/game"
 	"th10/input"
 	"th10/replay"
@@ -27,6 +28,7 @@ type Config struct {
 	Difficulty int // game.DiffEasy..DiffExtra
 	Power      int // starting power in hundredths
 	Seed       uint16
+	Rank       int // dynamic rank at the chapter's start
 }
 
 // ScriptFactory builds the stage script for a stage number. Wired by the
@@ -72,11 +74,11 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 
 // headless owns the simulated world.
 type headless struct {
-	st      *stage.Stage
-	ctx     *stage.Context
-	state   *game.GameState
-	in      input.State
-	gameRef *game.Game
+	st       *stage.Stage
+	ctx      *stage.Context
+	state    *game.GameState
+	in       input.State
+	gameRef  *game.Game
 	finished bool
 }
 
@@ -89,6 +91,8 @@ func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
 	state.SingleStage = true
 	state.DebugMode = true
 	state.Power = cfg.Power
+	state.RNGSeed, state.HasSeed = cfg.Seed, true
+	state.Rank = cfg.Rank
 	if cfg.Difficulty == game.DiffExtra {
 		state.Difficulty = game.DiffExtra
 	}
@@ -108,31 +112,39 @@ func (h *headless) step(rec replay.Record) {
 	h.finished = h.st.FinishedHeadless()
 }
 
+// Trace positions are in the original's game space (package trace): the
+// playfield's top-centre is the origin.
+const (
+	gameOriginX = float64(game.FieldLeft+game.FieldRight) / 2
+	gameOriginY = float64(game.FieldTop)
+)
+
 // sample snapshots the current world into a trace frame.
 func (h *headless) sample(index int) *trace.Frame {
+	enemies := liveEnemies(h.ctx)
 	f := &trace.Frame{
-		Index:    index,
-		PX:       h.ctx.Player.X,
-		PY:       h.ctx.Player.Y,
-		PLife:    h.state.Life,
-		PPower:   h.state.Power,
-		PFaith:   h.state.Faith,
-		PScore:   h.state.Score,
-		PGraze:   h.state.Graze,
-		PState:   int(h.ctx.Player.State),
-		PInvinc:  h.ctx.Player.InvincTimer,
+		Index:      index,
+		PX:         h.ctx.Player.X - gameOriginX,
+		PY:         h.ctx.Player.Y - gameOriginY,
+		PLife:      h.state.Life,
+		PPower:     h.state.Power,
+		PFaith:     h.state.Faith,
+		PScore:     h.state.Score,
+		PGraze:     h.state.Graze,
+		PState:     int(h.ctx.Player.State),
+		PInvinc:    h.ctx.Player.InvincTimer,
 		PBombTimer: h.ctx.Player.BombTimer,
-		Enemies:  activeEnemies(h.ctx),
-		Bullets:  h.ctx.Bullets.ActiveCount(),
-		Items:    h.ctx.Items.ActiveCount(),
-		PBullets: h.ctx.Player.Bullets.ActiveCount(),
+		Enemies:    len(enemies),
+		Bullets:    h.ctx.Bullets.Live(),
+		Items:      h.ctx.Items.ActiveCount(),
+		PBullets:   h.ctx.Player.Bullets.ActiveCount(),
 	}
-	for _, e := range h.ctx.Enemies {
+	for _, e := range enemies {
 		if len(f.E) >= trace.MaxEnemyRows {
 			break
 		}
 		f.E = append(f.E, trace.EnemyRow{
-			X: e.X, Y: e.Y, HP: e.HP, Active: e.Active, Type: int(e.Type),
+			X: e.X - gameOriginX, Y: e.Y - gameOriginY, HP: e.HP, Active: e.Active, Type: int(e.Type),
 		})
 	}
 	h.ctx.Bullets.Each(func(b *bullet.Bullet) {
@@ -140,21 +152,26 @@ func (h *headless) sample(index int) *trace.Frame {
 			return
 		}
 		f.B = append(f.B, trace.BulletRow{
-			X: b.X, Y: b.Y, Angle: b.Angle, Speed: b.Speed,
-			Type: int(b.Type), Color: b.Color,
+			X: float64(b.Pos[0]), Y: float64(b.Pos[1]), Angle: float64(b.Angle), Speed: float64(b.Speed),
+			Type: int(b.Type), Color: int(b.Colour),
 		})
 	})
 	return f
 }
 
-func activeEnemies(ctx *stage.Context) int {
-	n := 0
+// liveEnemies is the enemy list in the original manager's order (hidden main
+// first) when the stage runs an ECL VM, else the stage's own list.
+func liveEnemies(ctx *stage.Context) []*enemy.Enemy {
+	if ctx.ManagerOrder != nil {
+		return ctx.ManagerOrder()
+	}
+	out := make([]*enemy.Enemy, 0, len(ctx.Enemies))
 	for _, e := range ctx.Enemies {
 		if e != nil && e.Active {
-			n++
+			out = append(out, e)
 		}
 	}
-	return n
+	return out
 }
 
 // restoreBits maps a replay record onto the input.State bit layout.

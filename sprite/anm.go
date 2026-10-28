@@ -1,31 +1,30 @@
 package sprite
 
 import (
-	"bytes"
 	"image"
-	_ "image/png"
 
 	"th10/anm"
-	"th10/assets"
+	"th10/gamedata"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // AnmSheet is a loaded .anm file plus its textures, resolving ANM scripts and
 // sprite ids to drawable sub-images. It is the runtime side of the binary anm
-// loader: the parser yields UV rects + script timelines, and this builds the
-// ebiten sub-images from the already-extracted PNG textures.
+// loader: the parser yields UV rects, script timelines and THTX pixels, and
+// this builds the ebiten sub-images from them.
 type AnmSheet struct {
 	file     *anm.File
 	textures []*ebiten.Image       // per entry (texture)
 	subCache map[int]*ebiten.Image // sprite id -> sub-image
 }
 
-// LoadAnmSheet parses an embedded .anm (e.g. "anm/enemy.anm") and loads each
-// entry's texture from the matching extracted PNG ("anm/<entry name>").
+// LoadAnmSheet parses an archived .anm (e.g. "anm/enemy.anm") and builds each
+// entry's texture from its THTX pixels. Entries sharing a texture name are
+// tiles of one picture and share one assembled image.
 func LoadAnmSheet(anmPath string) *AnmSheet {
 	sh := &AnmSheet{subCache: map[int]*ebiten.Image{}}
-	data, err := assets.Assets.ReadFile(anmPath)
+	data, err := gamedata.ReadFile(anmPath)
 	if err != nil {
 		return sh
 	}
@@ -33,24 +32,25 @@ func LoadAnmSheet(anmPath string) *AnmSheet {
 	if err != nil {
 		return sh
 	}
-	sh.file = file
-	sh.textures = make([]*ebiten.Image, len(file.Entries))
-	for i, e := range file.Entries {
-		sh.textures[i] = loadTexturePNG("anm/" + e.Name)
-	}
-	return sh
+	return NewAnmSheet(file)
 }
 
-func loadTexturePNG(path string) *ebiten.Image {
-	data, err := assets.Assets.ReadFile(path)
-	if err != nil {
-		return nil
+// NewAnmSheet builds the textures of a parsed .anm.
+func NewAnmSheet(file *anm.File) *AnmSheet {
+	sh := &AnmSheet{subCache: map[int]*ebiten.Image{}, file: file}
+	sh.textures = make([]*ebiten.Image, len(file.Entries))
+	byName := map[string]*ebiten.Image{}
+	for i, e := range file.Entries {
+		img, ok := byName[e.Name]
+		if !ok {
+			if pix := file.NamedImage(e.Name); pix != nil {
+				img = ebiten.NewImageFromImage(pix)
+			}
+			byName[e.Name] = img
+		}
+		sh.textures[i] = img
 	}
-	img, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil
-	}
-	return ebiten.NewImageFromImage(img)
+	return sh
 }
 
 // Sprite returns the sub-image for a sprite id (cached), or nil.

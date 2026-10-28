@@ -5,6 +5,7 @@ import (
 	"math"
 	"th10/audio"
 	"th10/render"
+	"th10/scene/dialog"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
 
@@ -26,11 +27,13 @@ type eclScript struct {
 	frame    int
 	finished bool
 	bgX, bgY float64
+	bossBGM  bool
 
 	bg1, bg2 *ebiten.Image
 	bg3, bg4 *ebiten.Image
 
-	vm *stageecl.VM
+	vm  *stageecl.VM
+	dlg *stage.DialogQueue
 }
 
 func NewScript() stage.Script {
@@ -52,6 +55,13 @@ func (s *eclScript) loadBg() {
 
 func (s *eclScript) Init(ctx *stage.Context) {
 	ctx.PlayBGM(audio.BGMStage1)
+	// Stage 1 has a mid-boss and a boss, but no post-boss dialog.
+	ch := ctx.State.Character
+	s.dlg = stage.NewDialogQueue(ctx,
+		dialog.MidPreC("stage1", ch), dialog.BossPreC("stage1", ch))
+	if s.vm != nil {
+		s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
+	}
 }
 
 func (s *eclScript) Update(ctx *stage.Context) {
@@ -61,6 +71,10 @@ func (s *eclScript) Update(ctx *stage.Context) {
 	s.bgY = cam.y
 	if s.vm != nil {
 		s.vm.Update(ctx)
+		if !s.bossBGM && s.vm.BossActive() {
+			s.bossBGM = true
+			ctx.PlayBGM(audio.BGMStage1Boss)
+		}
 	}
 	// Stage clears when the ECL main task finishes (after the boss is defeated:
 	// main blocks on deathWait then delete()). The frame cap is only a safety
@@ -105,6 +119,29 @@ func (s *eclScript) BgDraw(field *ebiten.Image) {
 }
 
 func (s *eclScript) Finished() bool { return s.finished }
+
+// ShakeOffset 暴露 ECL ins_337 屏幕震动给 Stage.Draw（可选接口）。
+func (s *eclScript) ShakeOffset() (float64, float64) {
+	if s.vm == nil {
+		return 0, 0
+	}
+	return s.vm.ShakeOffset()
+}
+
+// BossHUD 暴露 ECL 解析的 Boss 血条/符卡数据给 Stage.Draw（可选接口）。
+func (s *eclScript) BossHUD() stage.BossHUDInfo {
+	if s.vm == nil {
+		return stage.BossHUDInfo{}
+	}
+	return s.vm.BossHUD()
+}
+
+// LateUpdate 在碰撞结算后运行 ECL 中断槽检查与阶段计时（可选接口，FUN_0040dc80 后半段）。
+func (s *eclScript) LateUpdate(ctx *stage.Context) {
+	if s.vm != nil {
+		s.vm.LateUpdate(ctx)
+	}
+}
 
 var _ stage.Script = (*eclScript)(nil)
 

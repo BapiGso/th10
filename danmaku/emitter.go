@@ -1,3 +1,7 @@
+//go:build ignore
+
+// Excluded from the build: the float64 emitter of the old bullet pool; ECL op 401 drives entity/bullet now.
+
 package danmaku
 
 import (

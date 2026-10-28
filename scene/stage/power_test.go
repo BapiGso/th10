@@ -3,22 +3,16 @@ package stage
 import (
 	"testing"
 	"th10/audio"
-	"th10/entity/bullet"
-	"th10/entity/effect"
 	"th10/entity/item"
-	"th10/entity/player"
 	"th10/game"
 	"th10/input"
 )
 
 func powerTestStage() *Stage {
 	state := game.NewState(game.CharReimu, game.ShotA, game.DiffNormal)
-	return &Stage{ctx: &Context{
-		State:  state,
-		Player: player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
-		Items:  item.NewPool(32), Bullets: bullet.NewPool(32), Effects: effect.NewPool(32),
-		Audio: &audio.Manager{}, // zero-volume manager, no device required
-	}}
+	ctx := NewContext(state)
+	ctx.Audio = &audio.Manager{} // zero-volume manager, no device required
+	return &Stage{ctx: ctx}
 }
 
 func TestCollectedPowerValues(t *testing.T) {

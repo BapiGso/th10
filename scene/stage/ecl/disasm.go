@@ -137,7 +137,7 @@ var opNames = map[uint16]string{
 	opStackAlloc: "var", opLoadI: "pushI", opAssignI: "setI", opLoadF: "pushF", opAssignF: "setF",
 	opWait: "wait", opPolar: "polar", opValidRad: "validRad", opDec: "dec",
 	opEnmCreate: "enmCreate", opAnmSelect: "anmSelect", opAnmSetMain: "anmSetMain",
-	opMovePosTime: "movePosTime", opSetVel: "setVel", opMoveVelTime: "moveVelTime",
+	opMovePos: "movePos", opSetVel: "setVel", opMoveVel: "moveVel",
 	opMoveRand: "moveRand", opMoveLimit: "moveLimit", opSetHP: "setHP", opSetBoss: "setBoss",
 	opETNew: "etNew", opETFire: "etFire", opETSprite: "etSprite", opETAngle: "etAngle",
 	opETSpeed: "etSpeed", opETCount: "etCount", opETAim: "etAim", opETEx: "etEx",

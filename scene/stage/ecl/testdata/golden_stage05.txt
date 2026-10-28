@@ -1,6 +1,6 @@
-frame 0600 hash 46d47ee80e19139e enemies 15 bullets 133
-frame 1200 hash 64737cf10b1c8512 enemies 12 bullets 145
-frame 1800 hash fe07d6a53940cf55 enemies 5 bullets 715
-frame 2400 hash 04440301a9dc7396 enemies 10 bullets 571
-frame 3000 hash 934408c2de66481c enemies 2 bullets 114
-frame 3600 hash 1ab8ae78548abe06 enemies 22 bullets 832
+frame 0600 hash 1db41892013c469d enemies 15 bullets 236
+frame 1200 hash 67a355709110a992 enemies 12 bullets 116
+frame 1800 hash 0eb5a9da7743753f enemies 5 bullets 583
+frame 2400 hash e144188e425a9052 enemies 9 bullets 439
+frame 3000 hash 19174f362763302e enemies 2 bullets 34
+frame 3600 hash 6b11520d206a5ae8 enemies 22 bullets 617

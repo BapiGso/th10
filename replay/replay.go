@@ -13,10 +13,10 @@
 //	  +0x24 ...      compressed payload (2x XOR transform + ZUN LZSS)
 //	  tail 200 B     plaintext metadata (player name, version, date, chara, rank, score)
 //
-// The decompressed payload starts with a 100-byte global header, then up to six
-// chapter blocks, each 0x1c4-byte header + N 6-byte input records. A record is
-// {u16 keys, u16 x, u16 y} where x/y carry stage-relative player position for
-// the chapter's deterministic playback.
+// The decompressed payload starts with a 100-byte global header, then the
+// chapter blocks: a 0x1c4-byte header, N 6-byte input records and ceil(N/30)
+// slow-rate bytes. A record is {u16 keys, u16 aux1, u16 aux2}, the values of
+// DAT_00474e5c/62/64 for that frame.
 package replay
 
 import (
@@ -46,49 +46,66 @@ const chapterHeaderSize = 0x1c4
 // recordSize is the per-frame input record length.
 const recordSize = 6
 
-// MaxChapters is the number of chapters (stage runs) a replay may contain.
-const MaxChapters = 6
-
 // Key bits in a record's key word. The replay key word is masked with 0x01f7
-// by FUN_004297d0, so only these bits are ever recorded. Directions use a
-// two-of-four encoding: 0x10/0x20 mark the horizontal/vertical axis as active,
-// and 0x80/0x40 carry the up-or-left / down-or-right sign.
+// by FUN_004297d0, so only these bits are ever recorded. Directions are one bit
+// each, the same layout the menus (FUN_004236f0) and the player (FUN_004250b0)
+// read.
 const (
 	KeyShot  uint16 = 0x001 // Z: fire (also advances dialog)
 	KeyBomb  uint16 = 0x002 // X: spirit attack / deathbomb (FUN_00425730)
 	KeyFocus uint16 = 0x004 // Shift: focused movement
+	KeyUp    uint16 = 0x010
+	KeyDown  uint16 = 0x020
+	KeyLeft  uint16 = 0x040
+	KeyRight uint16 = 0x080
 	KeySkip  uint16 = 0x100 // Ctrl: skip dialog / fast-forward
-
-	axisHorizontal uint16 = 0x010 // left or right held
-	axisVertical   uint16 = 0x020 // up or down held
-	signDownRight  uint16 = 0x040 // down (with vertical) or right (with horizontal)
-	signUpLeft     uint16 = 0x080 // up (with vertical) or left (with horizontal)
 )
-
-// Direction bit combinations for synthetic input streams and tests.
-func KeyUpBit() uint16    { return axisVertical | signUpLeft }
-func KeyDownBit() uint16  { return axisVertical | signDownRight }
-func KeyLeftBit() uint16  { return axisHorizontal | signUpLeft }
-func KeyRightBit() uint16 { return axisHorizontal | signDownRight }
 
 // Record is one frame of recorded input.
 type Record struct {
-	Keys uint16 // key bitmask (KeyShot, KeyFocus, ...); use the direction helpers
+	Keys uint16 // key bitmask (KeyShot, KeyUp, ...); use the direction helpers
 	Aux1 uint16 // DAT_00474e62 (raw menu keycodes; semantics not fully decoded)
 	Aux2 uint16 // DAT_00474e64
 }
 
-// Up reports whether the up direction was held this frame.
-func (r Record) Up() bool { return r.Keys&axisVertical != 0 && r.Keys&signUpLeft != 0 }
+// Direction is the player's 8-way direction index as FUN_004250b0 stores it
+// (player +0x454): 0 none, 1 up, 2 down, 3 left, 4 right, 5 up-left,
+// 6 up-right, 7 down-left, 8 down-right. Contradictory keys resolve in the
+// original's test order, e.g. up+down is down and left+right is left.
+func (r Record) Direction() int {
+	k := r.Keys
+	switch {
+	case k&(KeyUp|KeyLeft) == KeyUp|KeyLeft:
+		return 5
+	case k&(KeyDown|KeyLeft) == KeyDown|KeyLeft:
+		return 7
+	case k&(KeyUp|KeyRight) == KeyUp|KeyRight:
+		return 6
+	case k&(KeyDown|KeyRight) == KeyDown|KeyRight:
+		return 8
+	case k&KeyDown != 0:
+		return 2
+	case k&KeyUp != 0:
+		return 1
+	case k&KeyLeft != 0:
+		return 3
+	case k&KeyRight != 0:
+		return 4
+	}
+	return 0
+}
 
-// Down reports whether the down direction was held this frame.
-func (r Record) Down() bool { return r.Keys&axisVertical != 0 && r.Keys&signDownRight != 0 }
+// Up reports whether the resolved direction points up.
+func (r Record) Up() bool { d := r.Direction(); return d == 1 || d == 5 || d == 6 }
 
-// Left reports whether the left direction was held this frame.
-func (r Record) Left() bool { return r.Keys&axisHorizontal != 0 && r.Keys&signUpLeft != 0 }
+// Down reports whether the resolved direction points down.
+func (r Record) Down() bool { d := r.Direction(); return d == 2 || d == 7 || d == 8 }
 
-// Right reports whether the right direction was held this frame.
-func (r Record) Right() bool { return r.Keys&axisHorizontal != 0 && r.Keys&signDownRight != 0 }
+// Left reports whether the resolved direction points left.
+func (r Record) Left() bool { d := r.Direction(); return d == 3 || d == 5 || d == 7 }
+
+// Right reports whether the resolved direction points right.
+func (r Record) Right() bool { d := r.Direction(); return d == 4 || d == 6 || d == 8 }
 
 // Chapter is one stage run inside a replay.
 //
@@ -144,6 +161,7 @@ type Header struct {
 // correlating all four official demos against their trailer text
 // (Chara/Rank/Stage/Score); see replay_test.go.
 type GlobalHeader struct {
+	Chapters   uint32 // +0x4c: number of chapter blocks (FUN_0042a200)
 	Character  uint32 // +0x50: 0=Reimu 1=Marisa
 	ShotType   uint32 // +0x54: 0=A 1=B 2=C
 	Difficulty uint32 // +0x58: 0=E 1=N 2=H 3=L 4=X
@@ -184,13 +202,14 @@ func Parse(data []byte) (*Replay, error) {
 
 	r := &Replay{Header: h}
 	r.Global = parseGlobalHeader(raw[:globalHeaderSize])
-	r.Chapters = parseChapters(raw[globalHeaderSize:])
+	r.Chapters = parseChapters(raw[globalHeaderSize:], int(r.Global.Chapters))
 	r.Trailer = parseTrailer(data[len(data)-trailerSize:])
 	return r, nil
 }
 
 func parseGlobalHeader(b []byte) GlobalHeader {
 	g := GlobalHeader{Raw: append([]byte(nil), b...)}
+	g.Chapters = binary.LittleEndian.Uint32(b[0x4c:])
 	g.Character = binary.LittleEndian.Uint32(b[0x50:])
 	g.ShotType = binary.LittleEndian.Uint32(b[0x54:])
 	g.Difficulty = binary.LittleEndian.Uint32(b[0x58:])
@@ -198,22 +217,35 @@ func parseGlobalHeader(b []byte) GlobalHeader {
 	return g
 }
 
-func parseChapters(b []byte) []Chapter {
+// parseChapters walks the chapter blocks the way FUN_0042a200 does: n blocks
+// (values above 7 read as 6), each followed by its records at +0x1c4 and the
+// next block +8 bytes after that. The +4 frame count can exceed the records
+// actually stored (Royalflare th10_ud0043 stores twice the real count; the
+// original never notices because the stage ends first), so it is capped by
+// the +8 length.
+func parseChapters(b []byte, n int) []Chapter {
+	if n > 7 {
+		n = 6
+	}
 	var out []Chapter
 	pos := 0
-	for i := 0; i < MaxChapters; i++ {
+	for i := 0; i < n; i++ {
 		if pos+chapterHeaderSize > len(b) {
 			break
 		}
 		idx := binary.LittleEndian.Uint16(b[pos:])
 		seed := binary.LittleEndian.Uint16(b[pos+2:])
 		count := int(binary.LittleEndian.Uint32(b[pos+4:]))
+		size := int(binary.LittleEndian.Uint32(b[pos+8:]))
 		if idx == 0 || count == 0 {
 			break
 		}
 		recStart := pos + chapterHeaderSize
-		if count > (len(b)-recStart)/recordSize {
-			count = (len(b) - recStart) / recordSize
+		if size > len(b)-recStart {
+			size = len(b) - recStart
+		}
+		if stored := storedRecords(size); count > stored {
+			count = stored
 		}
 		ch := Chapter{
 			Index:   idx,
@@ -232,10 +264,19 @@ func parseChapters(b []byte) []Chapter {
 			}
 		}
 		out = append(out, ch)
-		// Each chapter is followed by its slow-rate samples (one per 30 frames).
-		pos = recStart + count*recordSize + slowRateSamples(count)
+		pos = recStart + size
 	}
 	return out
+}
+
+// storedRecords returns how many records fit in a chapter body of size bytes,
+// which holds the records followed by their slow-rate samples.
+func storedRecords(size int) int {
+	n := size / recordSize
+	for n > 0 && n*recordSize+slowRateSamples(n) > size {
+		n--
+	}
+	return n
 }
 
 func parseTrailer(b []byte) Trailer {

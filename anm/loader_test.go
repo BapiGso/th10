@@ -1,19 +1,17 @@
-package anm
+package anm_test
 
 import (
-	"os"
 	"testing"
+
+	"th10/anm"
+	"th10/gamedata"
 )
 
-func loadEnemyAnm(t *testing.T) *File {
+func loadEnemyAnm(t *testing.T) *anm.File {
 	t.Helper()
-	data, err := os.ReadFile("../assets/anm/enemy.anm")
+	f, err := gamedata.ANM("enemy.anm")
 	if err != nil {
-		t.Fatalf("read enemy.anm: %v", err)
-	}
-	f, err := Load(data)
-	if err != nil {
-		t.Fatalf("parse enemy.anm: %v", err)
+		t.Fatalf("load enemy.anm: %v", err)
 	}
 	return f
 }
@@ -56,5 +54,27 @@ func TestSpriteResolverScript0(t *testing.T) {
 		if got := sc.SpriteAt(c.age); got != c.want {
 			t.Errorf("SpriteAt(%d)=%d want %d", c.age, got, c.want)
 		}
+	}
+}
+
+// TestEnemyTexture checks the THTX block decodes to the entry's picture.
+func TestEnemyTexture(t *testing.T) {
+	f := loadEnemyAnm(t)
+	tex := f.Entries[0].Texture
+	if tex == nil {
+		t.Fatal("enemy.png carries no THTX pixels")
+	}
+	img := f.NamedImage("enemy/enemy.png")
+	if img == nil || img.Bounds().Dx() != tex.W || img.Bounds().Dy() != tex.H {
+		t.Fatalf("NamedImage bounds %v, THTX %dx%d", img.Bounds(), tex.W, tex.H)
+	}
+	opaque := 0
+	for i := 3; i < len(img.Pix); i += 4 {
+		if img.Pix[i] != 0 {
+			opaque++
+		}
+	}
+	if opaque == 0 {
+		t.Fatal("texture is fully transparent")
 	}
 }

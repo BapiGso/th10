@@ -138,3 +138,60 @@ func TestDemo0GoldenHash(t *testing.T) {
 		t.Fatal("empty decode")
 	}
 }
+
+// chapterBlock builds a chapter block whose +4 frame count is count but whose
+// body stores only stored records, as Royalflare th10_ud0043 does.
+func chapterBlock(idx uint16, count, stored int) []byte {
+	size := stored*recordSize + slowRateSamples(stored)
+	b := make([]byte, chapterHeaderSize+size)
+	binary.LittleEndian.PutUint16(b[0:], idx)
+	binary.LittleEndian.PutUint32(b[4:], uint32(count))
+	binary.LittleEndian.PutUint32(b[8:], uint32(size))
+	for i := 0; i < stored; i++ {
+		binary.LittleEndian.PutUint16(b[chapterHeaderSize+i*recordSize:], idx)
+	}
+	return b
+}
+
+func TestParseChaptersUsesBodySize(t *testing.T) {
+	b := append(chapterBlock(1, 200, 100), chapterBlock(2, 75, 75)...)
+	chs := parseChapters(b, 2)
+	if len(chs) != 2 {
+		t.Fatalf("got %d chapters, want 2", len(chs))
+	}
+	if chs[0].Index != 1 || len(chs[0].Records) != 100 {
+		t.Errorf("chapter 1: index %d, %d records; want 1, 100", chs[0].Index, len(chs[0].Records))
+	}
+	if chs[1].Index != 2 || len(chs[1].Records) != 75 || chs[1].Records[74].Keys != 2 {
+		t.Errorf("chapter 2: index %d, %d records; want 2, 75 starting after chapter 1's body",
+			chs[1].Index, len(chs[1].Records))
+	}
+	if got := parseChapters(b, 1); len(got) != 1 {
+		t.Errorf("global count 1: got %d chapters", len(got))
+	}
+}
+
+func TestDirectionMatchesPlayer(t *testing.T) {
+	// FUN_004250b0's test order, including contradictory combinations.
+	cases := []struct {
+		keys uint16
+		dir  int
+	}{
+		{0, 0},
+		{KeyUp, 1}, {KeyDown, 2}, {KeyLeft, 3}, {KeyRight, 4},
+		{KeyUp | KeyLeft, 5}, {KeyUp | KeyRight, 6}, {KeyDown | KeyLeft, 7}, {KeyDown | KeyRight, 8},
+		{KeyUp | KeyDown, 2}, {KeyLeft | KeyRight, 3},
+		{KeyUp | KeyDown | KeyLeft, 5}, {KeyDown | KeyLeft | KeyRight, 7},
+		{KeyShot | KeyFocus | KeyRight, 4},
+	}
+	for _, c := range cases {
+		r := Record{Keys: c.keys}
+		if got := r.Direction(); got != c.dir {
+			t.Errorf("keys %#03x: direction %d, want %d", c.keys, got, c.dir)
+		}
+	}
+	r := Record{Keys: KeyLeft | KeyRight}
+	if !r.Left() || r.Right() || r.Up() || r.Down() {
+		t.Errorf("left+right should resolve to left only")
+	}
+}

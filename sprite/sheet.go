@@ -1,10 +1,8 @@
 package sprite
 
 import (
-	"bytes"
 	"image"
-	_ "image/png"
-	"th10/assets"
+	"th10/gamedata"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -15,13 +13,9 @@ type Sheet struct {
 	frames map[string]*ebiten.Image // 命名帧缓存
 }
 
-// LoadSheet 从 embed FS 加载 spritesheet
+// LoadSheet 按资源路径加载 spritesheet（路径规则见 gamedata.Image）
 func LoadSheet(path string) *Sheet {
-	data, err := assets.Assets.ReadFile(path)
-	if err != nil {
-		return &Sheet{img: ebiten.NewImage(1, 1), frames: make(map[string]*ebiten.Image)}
-	}
-	img, _, err := image.Decode(bytes.NewReader(data))
+	img, err := gamedata.Image(path)
 	if err != nil {
 		return &Sheet{img: ebiten.NewImage(1, 1), frames: make(map[string]*ebiten.Image)}
 	}

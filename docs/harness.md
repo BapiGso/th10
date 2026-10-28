@@ -38,8 +38,8 @@ M0 建立的"一比一还原"验证脊柱。它把还原从**手工取证**升�
 ## 用法
 
 ```bash
-# 复刻侧（无需原作）
-go run ./tools/th10sim -replay .thtk/th10_dat/demo0.rpy -frames 3600 -out .tmp/trace/sim.txt
+# 复刻侧（无需原作）；验收回放见 docs/research/replays.md
+go run ./tools/th10sim -replay ".tmp/[th10]/replay/th10_05.rpy" -frames 3600 -out .tmp/trace/sim.txt
 
 # 原作侧（先启动原作并进入回放播放）
 go run ./tools/th10probe -exe ".tmp/[th10]/th10.exe" -frames 3600 -out .tmp/trace/orig.txt
@@ -48,6 +48,19 @@ go run ./tools/th10probe -exe ".tmp/[th10]/th10.exe" -frames 3600 -out .tmp/trac
 go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
 # exit 0 = 全程在 epsilon 内；exit 1 = 有分歧（打印首个分歧帧）
 ```
+
+### 原作配置 th10.cfg
+
+`th10.cfg` 共 52 字节，由 `FUN_00438ad0` 读入 `DAT_00491d48` 并在退出时写回。与采集相关的字段：
+
+| 偏移 | 含义 | 依据 |
+|---|---|---|
+| +0x1a | 色深：0 = 32 位（X8R8G8B8），1 = 16 位（R5G6B5），0xff = 自动 | `FUN_00439890` |
+| +0x1d | 1 = 窗口模式（带边框 640×480），0 = 全屏 | `FUN_00439730`、`FUN_00439890` |
+| +0x20 / +0x21 | BGM / SE 音量 | — |
+| +0x30 位 0x100 | 启动时弹窗询问；答"是"（IDYES）为全屏，否则窗口模式，结果覆盖 +0x1d | `FUN_00438ad0` |
+
+截图对比（L3）需要窗口模式。
 
 ## 精度标准（L1/L2/L3）
 
@@ -81,15 +94,20 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
 
 解压后负载:
   100 B 全局头（+0x50 角色 / +0x54 装备 / +0x58 难度 / +0x5c 关卡）
-  最多 6 个章节块: 0x1c4 B 头 + N×6 B 输入记录
-    章节头 +0x00 章节索引 / +0x02 RNG 种子 / +0x04 记录数 / +0x18 起始帧 / +0x20 动态 rank
+  章节块个数 = 全局头 +0x4c（大于 7 时按 6），FUN_0042a200 按此遍历:
+    0x1c4 B 头 + N×6 B 输入记录 + ceil(N/30) 字节 slow-rate 采样
+    章节头 +0x00 章节索引 / +0x02 RNG 种子 / +0x04 帧数（回放读取上限）
+           +0x08 本块正文字节数（下一块 = 记录起点 + 该值）/ +0x18 起始帧 / +0x20 动态 rank
     记录 = {u16 keys, u16 aux1, u16 aux2}
-  每章节后跟 ceil(N/30) 字节的 slow-rate 采样
+  +0x04 可能大于实际存储的记录数（Royalflare ud0043 每章都是 2 倍），
+  所以下一块的位置必须用 +0x08，记录数取两者较小值
 
 输入位（keys，消费端用 0x01f7 掩码）:
   0x001 射击(Z)   0x002 灵击(X)   0x004 低速(Shift)   0x100 跳过(Ctrl)
-  方向用 2-of-4 编码:
-    0x010/0x020 = 水平/垂直轴激活；0x080/0x040 = 上或左 / 下或右
+  0x010 上   0x020 下   0x040 左   0x080 右（每个方向一位，与菜单 FUN_004236f0 相同）
+  自机方向由 FUN_004250b0 按以下顺序判定，冲突组合取先命中者:
+    上左 5 → 下左 7 → 上右 6 → 下右 8 → 下 2 → 上 1 → 左 3 → 右 4
+  （2026-10-27 更正：此前写的"2-of-4 编码"是猜测，回放中大量单独的 0x40/0x80 与之矛盾）
 ```
 
 4 个官方 demo 的 trailer 与全局头**交叉验证一致**（角色/装备/难度/关卡四项），见

@@ -4,6 +4,15 @@
 // Usage:
 //
 //	th10diff -a original.trace -b replica.trace [-eps 0.001] [-context 3]
+//	         [-shift 0] [-scope all|motion]
+//
+// Frames are matched by index (A's index plus -shift), so frames the sampler
+// dropped are skipped instead of misaligning the rest. Comparison ends when
+// the reference runs out; the replica ending first is a divergence.
+//
+// -scope motion compares only the player, enemy and bullet positions, enemy
+// HP, angles, speeds and counts: what the ECL and the RNG decide on their own
+// in a replay that never shoots.
 //
 // Exit code is 0 when the traces match within the epsilon budget, 1 when they
 // diverge, and 2 on usage/IO errors.
@@ -30,6 +39,8 @@ type diffFlags struct {
 	angEps  float64
 	context int
 	maxRows int
+	shift   int
+	scope   string
 }
 
 func parseFlags() (diffFlags, bool) {
@@ -41,10 +52,12 @@ func parseFlags() (diffFlags, bool) {
 	fs.Float64Var(&f.angEps, "ang-eps", 1e-4, "angle epsilon in radians")
 	fs.IntVar(&f.context, "context", 3, "frames of context to print around the divergence")
 	fs.IntVar(&f.maxRows, "max-rows", 8, "max entity rows to show per side")
+	fs.IntVar(&f.shift, "shift", 0, "added to A's frame indices before matching")
+	fs.StringVar(&f.scope, "scope", "all", "fields to compare: all or motion")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		return f, false
 	}
-	return f, f.pathA != "" && f.pathB != ""
+	return f, f.pathA != "" && f.pathB != "" && (f.scope == "all" || f.scope == "motion")
 }
 
 func run() int {
@@ -67,11 +80,18 @@ func run() int {
 	defer fb.Close()
 
 	ra, rb := trace.NewReader(fa), trace.NewReader(fb)
-	diff := &differ{eps: opts.eps, angEps: opts.angEps, maxRows: opts.maxRows, context: opts.context}
+	diff := &differ{eps: opts.eps, angEps: opts.angEps, maxRows: opts.maxRows, context: opts.context,
+		shift: opts.shift, motion: opts.scope == "motion"}
 	code := diff.compare(ra, rb)
 	if code == 0 {
 		fmt.Printf("MATCH: %d frames compared, all within eps (pos %.4g px, ang %.4g rad)\n",
 			diff.frames, opts.eps, opts.angEps)
+		if diff.gaps > 0 {
+			fmt.Printf("  %d replica frames had no reference sample\n", diff.gaps)
+		}
+		if diff.tail > 0 {
+			fmt.Printf("  reference ended; %d further replica frames not compared\n", diff.tail)
+		}
 	}
 	return code
 }
@@ -81,34 +101,55 @@ type differ struct {
 	angEps  float64
 	maxRows int
 	context int
+	shift   int
+	motion  bool // -scope motion
 	frames  int
+	gaps    int            // B frames with no A frame at that index
+	tail    int            // B frames after A ended
 	history []*trace.Frame // ring of recent A frames for context printing
 }
 
 func (d *differ) compare(ra, rb *trace.Reader) int {
+	a, err := ra.Next()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
+		return 2
+	}
+	b, err := rb.Next()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
+		return 2
+	}
 	for {
-		a, err := ra.Next()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
-			return 2
-		}
-		b, err := rb.Next()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
-			return 2
-		}
-		if a == nil && b == nil {
+		if a == nil {
+			for b != nil {
+				d.tail++
+				if b, err = rb.Next(); err != nil {
+					fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
+					return 2
+				}
+			}
 			return 0
 		}
-		if a == nil {
-			fmt.Printf("DIVERGE: trace A ended at frame %d; B continues\n", d.frames+1)
-			d.printFrame("B", b)
-			return 1
-		}
 		if b == nil {
-			fmt.Printf("DIVERGE: trace B ended at frame %d; A continues\n", d.frames+1)
+			fmt.Printf("DIVERGE: trace B ended before frame %d; A continues\n", a.Index+d.shift)
 			d.printFrame("A", a)
 			return 1
+		}
+		switch ai := a.Index + d.shift; {
+		case ai < b.Index: // before the replica's first frame
+			if a, err = ra.Next(); err != nil {
+				fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
+				return 2
+			}
+			continue
+		case ai > b.Index: // the sampler dropped this frame
+			d.gaps++
+			if b, err = rb.Next(); err != nil {
+				fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
+				return 2
+			}
+			continue
 		}
 		d.frames++
 		if why := d.diffFrame(a, b); why != "" {
@@ -119,14 +160,49 @@ func (d *differ) compare(ra, rb *trace.Reader) int {
 		if len(d.history) > d.context {
 			d.history = d.history[1:]
 		}
+		if a, err = ra.Next(); err != nil {
+			fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
+			return 2
+		}
+		if b, err = rb.Next(); err != nil {
+			fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
+			return 2
+		}
 	}
 }
 
 // diffFrame returns a non-empty description when the frames disagree.
 func (d *differ) diffFrame(a, b *trace.Frame) string {
-	if a.Index != b.Index {
-		return fmt.Sprintf("frame index %d != %d", a.Index, b.Index)
+	if !d.motion {
+		if why := d.diffStats(a, b); why != "" {
+			return why
+		}
 	}
+	if math.Abs(a.PX-b.PX) > d.eps || math.Abs(a.PY-b.PY) > d.eps {
+		return fmt.Sprintf("player pos (%.3f,%.3f) != (%.3f,%.3f)", a.PX, a.PY, b.PX, b.PY)
+	}
+	if a.Enemies != b.Enemies {
+		return fmt.Sprintf("enemy count %d != %d", a.Enemies, b.Enemies)
+	}
+	if a.Bullets != b.Bullets {
+		return fmt.Sprintf("bullet count %d != %d", a.Bullets, b.Bullets)
+	}
+	if !d.motion {
+		if a.Items != b.Items {
+			return fmt.Sprintf("item count %d != %d", a.Items, b.Items)
+		}
+		if a.PBullets != b.PBullets {
+			return fmt.Sprintf("player bullet count %d != %d", a.PBullets, b.PBullets)
+		}
+	}
+	if why := d.diffEnemies(a.E, b.E); why != "" {
+		return why
+	}
+	return d.diffBullets(a.B, b.B)
+}
+
+// diffStats compares the player's counters (out of -scope motion).
+func (d *differ) diffStats(a, b *trace.Frame) string {
 	if a.PLife != b.PLife {
 		return fmt.Sprintf("life %d != %d", a.PLife, b.PLife)
 	}
@@ -144,27 +220,6 @@ func (d *differ) diffFrame(a, b *trace.Frame) string {
 	}
 	if a.PState != b.PState {
 		return fmt.Sprintf("player state %d != %d", a.PState, b.PState)
-	}
-	if math.Abs(a.PX-b.PX) > d.eps || math.Abs(a.PY-b.PY) > d.eps {
-		return fmt.Sprintf("player pos (%.3f,%.3f) != (%.3f,%.3f)", a.PX, a.PY, b.PX, b.PY)
-	}
-	if a.Enemies != b.Enemies {
-		return fmt.Sprintf("enemy count %d != %d", a.Enemies, b.Enemies)
-	}
-	if a.Bullets != b.Bullets {
-		return fmt.Sprintf("bullet count %d != %d", a.Bullets, b.Bullets)
-	}
-	if a.Items != b.Items {
-		return fmt.Sprintf("item count %d != %d", a.Items, b.Items)
-	}
-	if a.PBullets != b.PBullets {
-		return fmt.Sprintf("player bullet count %d != %d", a.PBullets, b.PBullets)
-	}
-	if why := d.diffEnemies(a.E, b.E); why != "" {
-		return why
-	}
-	if why := d.diffBullets(a.B, b.B); why != "" {
-		return why
 	}
 	return ""
 }
@@ -193,7 +248,7 @@ func (d *differ) diffBullets(ba, bb []trace.BulletRow) string {
 	n := min(len(ba), len(bb))
 	for i := 0; i < n; i++ {
 		a, b := &ba[i], &bb[i]
-		if a.Type != b.Type || a.Color != b.Color {
+		if !d.motion && (a.Type != b.Type || a.Color != b.Color) {
 			return fmt.Sprintf("bullet[%d] type/color (%d,%d) != (%d,%d)", i, a.Type, a.Color, b.Type, b.Color)
 		}
 		if math.Abs(a.X-b.X) > d.eps || math.Abs(a.Y-b.Y) > d.eps {

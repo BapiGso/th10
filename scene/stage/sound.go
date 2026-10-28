@@ -4,6 +4,7 @@ package stage
 // 模拟器（sim 包）把 Context.Audio 留为 nil，逐帧模拟不依赖音频设备。
 type Sound interface {
 	PlaySE(name string)
+	PlaySEID(id int)
 	PlayBGM(idx int)
 	StopBGM()
 }
@@ -12,6 +13,13 @@ type Sound interface {
 func (c *Context) PlaySE(name string) {
 	if c.Audio != nil {
 		c.Audio.PlaySE(name)
+	}
+}
+
+// PlaySEID 按原作音效表（0x4749c8）的编号播放音效；Audio 为 nil 时静默。
+func (c *Context) PlaySEID(id int) {
+	if c.Audio != nil {
+		c.Audio.PlaySEID(id)
 	}
 }
 

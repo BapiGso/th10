@@ -58,6 +58,13 @@ type GameState struct {
 	ExtraUnlocked bool
 	SingleStage   bool
 	DebugMode     bool
+	// RNGSeed seeds the shared RNG (DAT_004918b0) when HasSeed is set; a
+	// replay chapter restores it from its header (+0x02).
+	RNGSeed uint16
+	HasSeed bool
+	// Rank is the dynamic rank (DAT_00474c98, -1024..1024). It carries over
+	// between stages; a replay chapter restores it from its header (+0x20).
+	Rank int
 }
 
 func NewState(character, shotType, difficulty int) *GameState {

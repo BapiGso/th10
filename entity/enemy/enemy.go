@@ -32,12 +32,17 @@ type Enemy struct {
 	DropBigPoint int // 大得点
 	DropAreaW    float64
 	DropAreaH    float64
-	SpriteID     int // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）
-	FairyKind    int // 杂兵 sprite 种类（enemy.anm 行索引，回退用）
-	MainScript   int // ECL anmSetMain layer-0 的 enemy.anm 脚本 id（-1=未设置）
-	AnmSlot      int // ECL anmSelect 选择的 ANM 文件槽位
-	ECLFlags     int // 原作 ECL flagSet/flagClear 的保守记录
-	InvulnFrames int // ECL setInvuln 设置的无敌帧
+	SpriteID     int  // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）
+	FairyKind    int  // 杂兵 sprite 种类（enemy.anm 行索引，回退用）
+	MainScript   int  // ECL anmSetMain layer-0 的 enemy.anm 脚本 id（-1=未设置）
+	AnmSlot      int  // ECL anmSelect 选择的 ANM 文件槽位
+	ECLFlags     int  // 原作 ECL flagSet/flagClear 的保守记录
+	InvulnFrames int  // 旧 Boss 脚本的无敌帧（ECL 敌机的无敌计时在 ECL VM 内）
+	Hidden       bool // ECL 敌机尚未设定任何 ANM：原作什么也不画（如 Ecl_EtBreak 消弹敌机）
+
+	// Damaged 不为 nil 时接管 TakeDamage：ECL VM 借此按原作（FUN_0040dc80）
+	// 扣血、检查阶段中断槽并决定是否击破。返回值同 TakeDamage。
+	Damaged func(e *Enemy, dmg int) bool
 
 	// Boss 专用（杂兵不使用）
 	Boss *BossData
@@ -170,10 +175,19 @@ func (e *Enemy) updateBoss() {
 	}
 }
 
+// Shootable 报告自机子弹/灵击能否命中：ECL 标志 0x1/0x10 使原作整个跳过
+// 伤害查询（FUN_0040dc80），子弹直接穿过。
+func (e *Enemy) Shootable() bool {
+	return e.Active && e.ECLFlags&0x11 == 0
+}
+
 // TakeDamage 受到伤害，返回是否击破
 func (e *Enemy) TakeDamage(dmg int) bool {
 	if !e.Active {
 		return false
+	}
+	if e.Damaged != nil {
+		return e.Damaged(e, dmg)
 	}
 	if e.InvulnFrames > 0 || (e.Boss != nil && e.Boss.Invincible) {
 		return false

@@ -4,25 +4,38 @@ import (
 	"math"
 	"testing"
 
-	"th10/danmaku"
-	"th10/entity/bullet"
 	"th10/entity/enemy"
 	"th10/entity/item"
-	"th10/entity/player"
 	"th10/game"
 	"th10/scene/stage"
+	"th10/zun"
 )
 
-func newTestContext() *stage.Context {
-	state := game.NewState(game.CharReimu, game.ShotA, game.DiffNormal)
-	pool := bullet.NewPool(2048)
-	return &stage.Context{
-		State:   state,
-		Player:  player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
-		Bullets: pool,
-		Items:   item.NewPool(256),
-		Emitter: danmaku.NewEmitter(pool),
+// newTestVM is a VM with no program, for driving ops and contexts directly.
+func newTestVM() *VM {
+	return &VM{
+		prog:      &Program{SubByName: map[string]*Sub{}},
+		actors:    map[*enemy.Enemy]*eclActor{},
+		rng:       &zun.RNG{State: 1},
+		gameSpeed: 1,
 	}
+}
+
+func newTestContext() *stage.Context {
+	return stage.NewContext(game.NewState(game.CharReimu, game.ShotA, game.DiffNormal))
+}
+
+// updateBullets is the stage's bullet step: the manager, then the sparks.
+func updateBullets(ctx *stage.Context) {
+	ctx.UpdateBullets()
+	ctx.UpdateWorld()
+}
+
+// stepFrame runs one stage frame of the VM: the scripts, then (after the
+// stage's collision pass) the interrupt check and timers.
+func stepFrame(vm *VM, ctx *stage.Context) {
+	vm.Update(ctx)
+	vm.LateUpdate(ctx)
 }
 
 func activeEnemies(ctx *stage.Context) int {
@@ -42,13 +55,13 @@ func TestVMClockTimingFirstWave(t *testing.T) {
 	vm := NewStage01VM()
 
 	for i := 0; i < 150; i++ {
-		vm.Update(ctx)
+		stepFrame(vm, ctx)
 	}
 	if got := activeEnemies(ctx); got != 0 {
 		t.Fatalf("frame 150: %d enemies, want 0 (still in intro wait)", got)
 	}
 	for i := 150; i < 280; i++ {
-		vm.Update(ctx)
+		stepFrame(vm, ctx)
 	}
 	if got := activeEnemies(ctx); got < 3 {
 		t.Fatalf("frame 280: %d enemies, want >=3 spawned", got)
@@ -61,7 +74,7 @@ func TestVMSpawnWaveSpreadsAcross(t *testing.T) {
 	ctx := newTestContext()
 	vm := NewStage01VM()
 	for i := 0; i < 360; i++ {
-		vm.Update(ctx)
+		stepFrame(vm, ctx)
 	}
 	xs := map[int]bool{}
 	moved := false
@@ -88,11 +101,11 @@ func TestVMFiresDanmaku(t *testing.T) {
 	vm := NewStage01VM()
 	maxBullets := 0
 	for i := 0; i < 4000; i++ {
-		vm.Update(ctx)
-		if n := ctx.Bullets.ActiveCount(); n > maxBullets {
+		stepFrame(vm, ctx)
+		if n := ctx.Bullets.Live(); n > maxBullets {
 			maxBullets = n
 		}
-		ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+		updateBullets(ctx)
 	}
 	if maxBullets == 0 {
 		t.Fatal("no bullets fired across 4000 frames")
@@ -107,8 +120,8 @@ func TestVMBossSpellHUD(t *testing.T) {
 	vm := NewStageVM("ecl/stage02.ecl")
 	var sawSpell BossHUDInfoSnapshot
 	for i := 0; i < 12000; i++ {
-		vm.Update(ctx)
-		ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+		stepFrame(vm, ctx)
+		updateBullets(ctx)
 		h := vm.BossHUD()
 		if h.Active && h.HPFrac < 0 || h.HPFrac > 1 {
 			t.Fatalf("frame %d: HPFrac out of range: %v", i, h.HPFrac)
@@ -146,17 +159,22 @@ func containsRune(s string, r rune) bool {
 
 func TestVMSpellBgDeclaresHUD(t *testing.T) {
 	ctx := newTestContext()
-	vm := &VM{actors: map[*enemy.Enemy]*eclActor{}}
+	vm := newTestVM()
 	owner := enemy.New(100, 100, 1000, enemy.TypeBoss)
-	vm.actorFor(owner)
+	vm.actorFor(owner).ran = true // as if updated this frame
 	task := &eclTask{owner: owner}
 
+	vm.execGameOp(ctx, task, &Instr{Opcode: opSetBoss, Params: []Param{intParam(0)}})
+	vm.execGameOp(ctx, task, &Instr{Opcode: opSetInterrupt, Params: []Param{
+		intParam(0), intParam(0), intParam(4200), stringParam("Next"),
+	}})
 	vm.execGameOp(ctx, task, &Instr{Opcode: opSpellBg, Params: []Param{
 		intParam(80),
 		intParam(4200),
 		intParam(1000000),
 		stringParam("Test Spell"),
 	}})
+	vm.LateUpdate(ctx) // the slot check writes the timer: ceil(4200/60) = 70
 
 	h := vm.BossHUD()
 	if !h.Active || !h.Spell {
@@ -169,11 +187,12 @@ func TestVMSpellBgDeclaresHUD(t *testing.T) {
 
 func TestVMLifeMarkersExposeBossHUDFractions(t *testing.T) {
 	ctx := newTestContext()
-	vm := &VM{actors: map[*enemy.Enemy]*eclActor{}}
+	vm := newTestVM()
 	owner := enemy.New(100, 100, 10000, enemy.TypeBoss)
 	vm.actorFor(owner)
 	task := &eclTask{owner: owner}
 
+	vm.execGameOp(ctx, task, &Instr{Opcode: opSetBoss, Params: []Param{intParam(0)}})
 	vm.execGameOp(ctx, task, &Instr{Opcode: opLifeMarker, Params: []Param{
 		intParam(0),
 		floatParam(2500),
@@ -191,7 +210,7 @@ func TestVMLifeMarkersExposeBossHUDFractions(t *testing.T) {
 
 func TestVMDropAreaSpreadsOpcodeDrops(t *testing.T) {
 	ctx := newTestContext()
-	vm := &VM{actors: map[*enemy.Enemy]*eclActor{}, rngState: 1}
+	vm := newTestVM()
 	owner := enemy.New(100, 100, 100, enemy.TypeFairy)
 	vm.actorFor(owner)
 	task := &eclTask{owner: owner}
@@ -238,8 +257,8 @@ func TestVMStableFullStage(t *testing.T) {
 	ctx := newTestContext()
 	vm := NewStage01VM()
 	for i := 0; i < 8000; i++ {
-		vm.Update(ctx)
-		ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+		stepFrame(vm, ctx)
+		updateBullets(ctx)
 	}
 }
 
@@ -259,8 +278,8 @@ func TestVMDialogBridgeBlocks(t *testing.T) {
 
 	dismissCountdown := -1
 	for i := 0; i < 20000; i++ {
-		vm.Update(ctx)
-		ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+		stepFrame(vm, ctx)
+		updateBullets(ctx)
 		// Clear enemies so the boss's deathWait (340) between the two dialogs
 		// passes and the timeline reaches the post dialog.
 		for _, e := range ctx.Enemies {
@@ -308,14 +327,14 @@ func TestVMAllStagesStableAndFire(t *testing.T) {
 			maxBullets := 0
 			maxEnemies := 0
 			for i := 0; i < 8000; i++ {
-				vm.Update(ctx)
-				if n := ctx.Bullets.ActiveCount(); n > maxBullets {
+				stepFrame(vm, ctx)
+				if n := ctx.Bullets.Live(); n > maxBullets {
 					maxBullets = n
 				}
 				if n := activeEnemies(ctx); n > maxEnemies {
 					maxEnemies = n
 				}
-				ctx.Bullets.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+				updateBullets(ctx)
 			}
 			if maxEnemies == 0 {
 				t.Fatalf("%s: no enemies ever spawned", name)

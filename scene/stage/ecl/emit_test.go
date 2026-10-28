@@ -1,56 +1,91 @@
 package ecl
 
 import (
-	"math"
 	"testing"
+
+	"th10/entity/enemy"
+	"th10/game"
+	"th10/scene/stage"
 )
 
-// Even ring (mode 3): N ways evenly spaced 2pi/N, speed constant when 1 stack.
-func TestPerBulletEvenRing(t *testing.T) {
-	vm := &VM{rngState: 1}
-	const n = 8
-	tp := &eclTemplate{aim: 3, ways: n, stacks: 1, speed: 3, angleInc: 0}
-	var prev float64
-	for w := 0; w < n; w++ {
-		a, sp := vm.perBullet(tp, w, 0, n, 1, 0)
-		if sp != 3 {
-			t.Fatalf("w=%d speed=%v want 3", w, sp)
-		}
-		if w > 0 {
-			d := math.Mod(a-prev+2*math.Pi, 2*math.Pi)
-			if math.Abs(d-2*math.Pi/n) > 1e-6 {
-				t.Fatalf("w=%d spacing=%v want %v", w, d, 2*math.Pi/n)
-			}
-		}
-		prev = a
+func bulletOp(vm *VM, ctx *stage.Context, e *enemy.Enemy, op uint16, params ...Param) {
+	vm.execBulletOp(ctx, &eclTask{owner: e}, &Instr{Opcode: op, Params: params})
+}
+
+// 400 resets a template to the binary's defaults and zeroes the offset's x
+// and y, keeping z.
+func TestETNewDefaults(t *testing.T) {
+	vm := newTestVM()
+	e := &enemy.Enemy{Active: true}
+	a := vm.actorFor(e)
+	a.tpl[3].Angle1, a.tpl[3].Ex[2].C = 1, 5
+	a.tplOff[3] = [3]float32{4, 5, 6}
+	bulletOp(vm, nil, e, opETNew, intParam(3))
+	if a.tpl[3] != newTemplate() {
+		t.Fatalf("template = %+v, want the defaults", a.tpl[3])
+	}
+	if a.tplOff[3] != [3]float32{0, 0, 6} {
+		t.Fatalf("offset = %v, want [0 0 6]", a.tplOff[3])
+	}
+	bulletOp(vm, nil, e, opETNew, intParam(16)) // past the slots: ignored
+}
+
+// 401 fires from the enemy plus the slot's offset, unless the player is
+// inside the radius 346 set.
+func TestETFireRadius(t *testing.T) {
+	ctx := stage.NewContext(game.NewState(game.CharReimu, game.ShotA, game.DiffNormal))
+	vm := newTestVM()
+	e := &enemy.Enemy{Active: true}
+	a := vm.actorFor(e)
+	a.mv.final.pos = [3]float32{0, 100, 0}
+	bulletOp(vm, ctx, e, opETNew, intParam(0))
+	bulletOp(vm, ctx, e, opETOffset, intParam(0), floatParam(8), floatParam(0))
+	vm.execGameOp(ctx, &eclTask{owner: e}, &Instr{Opcode: 346, Params: []Param{floatParam(20)}})
+	if a.fireR != 400 {
+		t.Fatalf("fire radius² = %v, want 400", a.fireR)
+	}
+
+	vm.playerECL = [2]float32{8, 110}
+	bulletOp(vm, ctx, e, opETFire, intParam(0))
+	if n := ctx.Bullets.Live(); n != 0 {
+		t.Fatalf("fired %d bullets with the player inside the radius", n)
+	}
+	if a.tpl[0].Pos != [3]float32{8, 100, 0} {
+		t.Fatalf("template pos = %v, want [8 100 0]", a.tpl[0].Pos)
+	}
+	vm.playerECL = [2]float32{8, 300}
+	bulletOp(vm, ctx, e, opETFire, intParam(0))
+	if n := ctx.Bullets.Live(); n != 1 {
+		t.Fatalf("fired %d bullets, want 1", n)
 	}
 }
 
-// Centered fan (mode 1, no aim): symmetric about the base angle, so angles sum to ways*base.
-func TestPerBulletFanSymmetric(t *testing.T) {
-	vm := &VM{rngState: 1}
-	const n = 5
-	base, inc := 1.0, 0.2
-	tp := &eclTemplate{aim: 1, ways: n, stacks: 1, speed: 2, angle: base, angleInc: inc}
-	sum := 0.0
-	for w := 0; w < n; w++ {
-		a, _ := vm.perBullet(tp, w, 0, n, 1, 0)
-		sum += a
-	}
-	if math.Abs(sum-float64(n)*base) > 1e-6 {
-		t.Fatalf("fan not symmetric: sum=%v want %v", sum, float64(n)*base)
-	}
-}
-
-// Speed interpolates speed -> speed2 (tp.speedInc) across stacks.
-func TestPerBulletSpeedInterp(t *testing.T) {
-	vm := &VM{rngState: 1}
-	tp := &eclTemplate{aim: 3, ways: 1, stacks: 4, speed: 4, speedInc: 0}
-	want := []float64{4, 3, 2, 1}
-	for s := 0; s < 4; s++ {
-		_, sp := vm.perBullet(tp, 0, s, 1, 4, 0)
-		if math.Abs(sp-want[s]) > 1e-6 {
-			t.Fatalf("stack %d speed=%v want %v", s, sp, want[s])
+// 422 picks a speed pair by rank tier; 424 and 427 blend by rank.
+func TestETRankOps(t *testing.T) {
+	vm := newTestVM()
+	e := &enemy.Enemy{Active: true}
+	a := vm.actorFor(e)
+	tier := []Param{intParam(0),
+		floatParam(1), floatParam(2), floatParam(3), floatParam(4), floatParam(5), floatParam(6)}
+	for _, tc := range []struct {
+		rank   int
+		s1, s2 float32
+	}{{-513, 1, 2}, {-512, 3, 4}, {511, 3, 4}, {512, 5, 6}} {
+		vm.rank = tc.rank
+		bulletOp(vm, nil, e, opETSpeedR3, tier...)
+		if a.tpl[0].Speed1 != tc.s1 || a.tpl[0].Speed2 != tc.s2 {
+			t.Errorf("rank %d: speeds %v, %v, want %v, %v", tc.rank, a.tpl[0].Speed1, a.tpl[0].Speed2, tc.s1, tc.s2)
 		}
+	}
+
+	vm.rank = 0
+	bulletOp(vm, nil, e, opETSpeedR2, intParam(0), floatParam(1), floatParam(4), floatParam(3), floatParam(0))
+	if a.tpl[0].Speed1 != 2 || a.tpl[0].Speed2 != 2 {
+		t.Errorf("424 at rank 0: speeds %v, %v, want 2, 2", a.tpl[0].Speed1, a.tpl[0].Speed2)
+	}
+	// (hi - lo) * 1024 >> 11 rounds toward zero: 3/2 -> 1, -3/2 -> -1.
+	bulletOp(vm, nil, e, opETCountR2, intParam(0), intParam(2), intParam(5), intParam(5), intParam(2))
+	if a.tpl[0].Count1 != 3 || a.tpl[0].Count2 != 4 {
+		t.Errorf("427 at rank 0: counts %d, %d, want 3, 4", a.tpl[0].Count1, a.tpl[0].Count2)
 	}
 }

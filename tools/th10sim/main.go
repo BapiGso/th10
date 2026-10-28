@@ -62,7 +62,12 @@ func run() int {
 	}
 	ch := rp.Chapters[*chapterIdx]
 
-	stage := int(rp.Global.Stage)
+	// The global header's stage is where the run ended (8 = all clear); each
+	// chapter records its own stage.
+	stage := int(ch.Index)
+	if stage < 1 || stage > 7 {
+		stage = int(rp.Global.Stage)
+	}
 	if *stageNum > 0 {
 		stage = *stageNum
 	}
@@ -77,6 +82,7 @@ func run() int {
 		Difficulty: int(rp.Global.Difficulty),
 		Power:      startingPower(rp),
 		Seed:       ch.Seed,
+		Rank:       int(ch.Rank),
 	}
 	if cfg.Difficulty > game.DiffLuna {
 		cfg.Difficulty = game.DiffNormal

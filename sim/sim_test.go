@@ -116,11 +116,11 @@ func TestHeadlessDeterministic(t *testing.T) {
 // the player: a synthetic chapter holding "right" must move the player right.
 func TestHeadlessInputMovesPlayer(t *testing.T) {
 	ch := replay.Chapter{
-		Index: 1,
+		Index:   1,
 		Records: make([]replay.Record, 120),
 	}
 	for i := range ch.Records {
-		ch.Records[i] = replay.Record{Keys: replay.KeyRightBit()}
+		ch.Records[i] = replay.Record{Keys: replay.KeyRight}
 	}
 	cfg := Config{Stage: 1, Character: game.CharReimu, ShotType: game.ShotA, Difficulty: game.DiffNormal}
 	r := New(cfg, testFactory)

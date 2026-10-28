@@ -101,4 +101,11 @@ func (s *Script5) BossHUD() stage.BossHUDInfo {
 	return s.vm.BossHUD()
 }
 
+// LateUpdate 在碰撞结算后运行 ECL 中断槽检查与阶段计时（可选接口，FUN_0040dc80 后半段）。
+func (s *Script5) LateUpdate(ctx *stage.Context) {
+	if s.vm != nil {
+		s.vm.LateUpdate(ctx)
+	}
+}
+
 var _ stage.Script = (*Script5)(nil)

@@ -5,6 +5,10 @@
 // The format is line-oriented text, one frame per block, so diffs are readable
 // without tooling. Values are printed with fixed precision; the diff tool
 // applies per-field epsilon budgets instead of comparing text.
+//
+// Positions are in the original's game space: origin at the playfield's
+// top-centre, x right, y down, in pixels (ECL coordinates). The replica's
+// screen space is that plus (game.FieldLeft+192, game.FieldTop).
 package trace
 
 import (
@@ -17,7 +21,7 @@ import (
 
 // FormatVersion is bumped when the schema changes; the diff tool refuses to
 // compare traces of different versions.
-const FormatVersion = 1
+const FormatVersion = 2 // 2: game-space positions, manager-order enemies
 
 // Frame is one sampled frame of game state.
 type Frame struct {
@@ -40,9 +44,10 @@ type Frame struct {
 	Items    int
 	PBullets int
 
-	// Enemies (bounded sample, in pool order)
+	// Enemies (bounded sample) in the enemy manager's list order, which
+	// includes the stage's hidden "main" enemy at the head
 	E []EnemyRow
-	// Enemy bullets (bounded sample, in pool order)
+	// Enemy bullets (bounded sample, in pool slot order)
 	B []BulletRow
 }
 

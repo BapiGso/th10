@@ -7,8 +7,7 @@
 // "show sprite" / ins_4 "loop" timeline drives an animation. ECL opcodes
 // anmSetMain/anmSelect/anmPlay reference these scripts by id.
 //
-// We only need the sprite table + scripts here: the texture pixels already live
-// as extracted PNGs under assets/anm/<name>, so the THTX blob is skipped.
+// Texture pixels come from each entry's THTX block (see texture.go).
 //
 // On-disk layout (little-endian), per entry, base = entry offset:
 //
@@ -22,6 +21,8 @@
 //	@0x40                 u32 spriteOffsets[numSprites]   (entry-relative)
 //	@0x40+numSprites*4    {u32 id; u32 offset}[numScripts] (offset entry-relative)
 //	@nameOffset           NUL texture name
+//	@thtxOffset           THTX block: "THTX", u16 zero, u16 format, u16 w, u16 h,
+//	                      u32 size, pixels[size]
 //	sprite struct (20B):  u32 id; f32 x; f32 y; f32 w; f32 h
 //	script bytecode:      instr* until next script / name / THTX
 //	instr (8B header):    u16 opcode; u16 size; u16 time; u16 paramMask ; params[size-8]
@@ -64,13 +65,30 @@ func (in Instr) Arg(i int) int32 {
 type Script struct {
 	ID     int
 	Instrs []Instr
+	// byOffset maps an instruction's byte offset to its index (jump targets).
+	byOffset map[int]int
 }
+
+func newScript(id int, instrs []Instr) *Script {
+	s := &Script{ID: id, Instrs: instrs, byOffset: make(map[int]int, len(instrs))}
+	for i, in := range instrs {
+		s.byOffset[in.Offset] = i
+	}
+	return s
+}
+
+// ArgF returns parameter word i as float32, or 0.
+func (in Instr) ArgF(i int) float32 { return math.Float32frombits(uint32(in.Arg(i))) }
 
 // Entry is one texture + its metadata.
 type Entry struct {
 	Name          string // texture path, e.g. "enemy/enemy.png"
 	Width, Height int
 	Format        int
+	// X, Y place this entry's pixels inside the named image when several
+	// entries share one name (they are tiles of one larger picture).
+	X, Y    int
+	Texture *Texture // nil when the entry has no pixel data (e.g. "@" render targets)
 }
 
 // File is a parsed .anm: every entry's texture, plus the global sprite and
@@ -117,14 +135,25 @@ func (f *File) parseEntry(data []byte, base int) (next int, err error) {
 	height := int(u32(0x10))
 	format := int(u32(0x14))
 	nameOff := int(u32(0x1c))
+	thtxOff := int(u32(0x30))
+	hasData := binary.LittleEndian.Uint16(data[base+0x34:]) != 0
 	nextOff := int(u32(0x38))
 
+	var tex *Texture
+	if hasData && thtxOff != 0 {
+		if tex, err = parseTHTX(data, base+thtxOff); err != nil {
+			return 0, err
+		}
+	}
 	entryIdx := len(f.Entries)
 	f.Entries = append(f.Entries, Entry{
-		Name:   readCString(data, base+nameOff),
-		Width:  width,
-		Height: height,
-		Format: format,
+		Name:    readCString(data, base+nameOff),
+		Width:   width,
+		Height:  height,
+		Format:  format,
+		X:       int(u32(0x20)),
+		Y:       int(u32(0x24)),
+		Texture: tex,
 	})
 
 	// Sprite offset table, then sprite structs.
@@ -161,13 +190,14 @@ func (f *File) parseEntry(data []byte, base int) (next int, err error) {
 		if perr != nil {
 			return 0, fmt.Errorf("anm script %d: %w", id, perr)
 		}
-		f.Scripts[id] = &Script{ID: id, Instrs: instrs}
+		f.Scripts[id] = newScript(id, instrs)
 	}
 	return nextOff, nil
 }
 
-// parseScript reads instructions until an end marker (ins_0) or a malformed
-// header (which signals we've run into the next section).
+// parseScript reads instructions up to the 0xffff terminator, whose size field
+// is 0, or a malformed header. ins_0 is a nop, not an end: scripts 370/371 of
+// bullet.anm continue past one.
 func parseScript(data []byte, pos int) ([]Instr, error) {
 	var out []Instr
 	start := pos
@@ -182,9 +212,6 @@ func parseScript(data []byte, pos int) ([]Instr, error) {
 		args := append([]byte(nil), data[pos+8:pos+size]...)
 		out = append(out, Instr{Time: time, Op: op, Mask: mask, Offset: pos - start, Args: args})
 		pos += size
-		if op == opEnd { // ins_0: end of script
-			break
-		}
 	}
 	return out, nil
 }

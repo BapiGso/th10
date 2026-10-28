@@ -1,51 +1,28 @@
+// Package audio plays the original sound, all embedded (see package
+// gamedata): SE are th10.dat's WAV files as is, BGM is thbgm.dat's PCM
+// encoded to Ogg Vorbis sample for sample and looped at thbgm.fmt's points.
 package audio
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"th10/assets"
+	"sync"
+
+	"th10/datfs"
+	"th10/gamedata"
 
 	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
+	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 )
 
 const (
-	bgmLoopPointSampleRate   = 44100
-	bgmPlaybackSampleRate    = 48000
-	bgmChannels              = 2
-	pcmBytesPerSample        = 2
-	pcmBytesPerFrame         = bgmChannels * pcmBytesPerSample
-	maxOpusSamplesPerChannel = 5760
-	maxActiveSEPlayers       = 64
+	pcmBytesPerFrame   = 4 // ebiten streams are 16-bit stereo
+	maxActiveSEPlayers = 64
 )
 
-// BGMTrack BGM 循环点（基于原始 44.1kHz PCM 字节偏移）。
-type BGMTrack struct {
-	IntroBytes44100   int64 // loop 前奏结束位置（PCM 字节）
-	LoopEndBytes44100 int64 // loop 终点位置（PCM 字节）
-}
-
-// TH10BGM 东方风神录全 18 首 BGM 循环点。
-var TH10BGM = [18]BGMTrack{
-	{IntroBytes44100: 0x003C3000, LoopEndBytes44100: 0x00E2FA00}, // 01 封印されし神々
-	{IntroBytes44100: 0x00297C00, LoopEndBytes44100: 0x016E4800}, // 02 人恋し神様
-	{IntroBytes44100: 0x0003B600, LoopEndBytes44100: 0x00781000}, // 03 稲田姫様に叱られるから
-	{IntroBytes44100: 0x0009F200, LoopEndBytes44100: 0x0146BC00}, // 04 厄神様の通り道
-	{IntroBytes44100: 0x0007CA00, LoopEndBytes44100: 0x011CA600}, // 05 運命のダークサイド
-	{IntroBytes44100: 0x00300000, LoopEndBytes44100: 0x01EAB600}, // 06 神々が恋した幻想郷
-	{IntroBytes44100: 0x001AA800, LoopEndBytes44100: 0x01898500}, // 07 芥川龍之介の河童
-	{IntroBytes44100: 0x001A1000, LoopEndBytes44100: 0x02252800}, // 08 フォールオブフォール
-	{IntroBytes44100: 0x00193800, LoopEndBytes44100: 0x00E12E00}, // 09 妖怪の山
-	{IntroBytes44100: 0x00082000, LoopEndBytes44100: 0x01EC9A00}, // 10 少女が見た日本の原風景
-	{IntroBytes44100: 0x0026A6E8, LoopEndBytes44100: 0x01DF1948}, // 11 信仰は儚き人間の為に
-	{IntroBytes44100: 0x00218800, LoopEndBytes44100: 0x00B61100}, // 12 御柱の墓場
-	{IntroBytes44100: 0x004D9B00, LoopEndBytes44100: 0x01B65000}, // 13 神さびた古戦場
-	{IntroBytes44100: 0x00065100, LoopEndBytes44100: 0x021BCB80}, // 14 明日ハレの日、ケの昨日
-	{IntroBytes44100: 0x000D7220, LoopEndBytes44100: 0x01D07640}, // 15 ネイティブフェイス
-	{IntroBytes44100: 0x007A2C00, LoopEndBytes44100: 0x00EB5200}, // 16 麓の神社
-	{IntroBytes44100: 0x00A70194, LoopEndBytes44100: 0x00F04FF4}, // 17 神は恵みの雨を降らす
-	{IntroBytes44100: 0x001CACC8, LoopEndBytes44100: 0x0066DCC0}, // 18 プレイヤーズスコア
-}
-
+// BGMNames 是音乐室顺序（即 thbgm.fmt 记录顺序）的曲名。
 var BGMNames = [18]string{
 	"封印されし神々",
 	"人恋し神様 〜 Romantic Fall",
@@ -67,28 +44,7 @@ var BGMNames = [18]string{
 	"プレイヤーズスコア",
 }
 
-var bgmOpusFiles = [18]string{
-	"01. 封印されし神々.opus",
-	"02. 人恋し神様Romantic Fall.opus",
-	"03. 稲田姫様に叱られるから.opus",
-	"04. 厄神様の通り道 - Dark Road.opus",
-	"05. 運命のダークサイド.opus",
-	"06. 神々が恋した幻想郷.opus",
-	"07. 芥川龍之介の河童 - Candid Friend.opus",
-	"08. フォールオブフォール - 秋めく滝.opus",
-	"09. 妖怪の山 - Mysterious Mountain.opus",
-	"10. 少女が見た日本の原風景.opus",
-	"11. 信仰は儚き人間の為に.opus",
-	"12. 御柱の墓場 - Grave of Being.opus",
-	"13. 神さびた古戦場 - Suwa Foughten Field.opus",
-	"14. 明日ハレの日,ケの昨日.opus",
-	"15. ネイティブフェイス.opus",
-	"16. 麓の神社.opus",
-	"17. 神は恵みの雨を降らす - Sylphid Dream.opus",
-	"18. プレイヤーズスコア.opus",
-}
-
-// BGM 编号常量（0-based 索引）
+// BGM 编号常量（0-based，thbgm.fmt 记录下标）
 // 风神录 BGM 顺序: 标题→1面道中→1面Boss→2面道中→2面Boss→...→Extra道中→Extra Boss→ED→Staff→Result
 const (
 	BGMTitle      = 0  // 01 封印されし神々（标题画面）
@@ -111,21 +67,21 @@ const (
 	BGMResult     = 17 // 18 プレイヤーズスコア（Result）
 )
 
-// SE 音效名称常量
+// SE 音效名称常量（th10.dat 内的文件名）
 const (
-	SEShoot   = "wav/se/se_gun00.opus"
-	SEEnemy   = "wav/se/se_enep00.opus"
-	SEDamage  = "wav/se/se_damage00.opus"
-	SEGraze   = "wav/se/se_graze.opus"
-	SEItem    = "wav/se/se_item00.opus"
-	SEExtend  = "wav/se/se_extend.opus"
-	SEBomb    = "wav/se/se_ch00.opus"
-	SEOk      = "wav/se/se_ok00.opus"
-	SECancel  = "wav/se/se_cancel00.opus"
-	SESelect  = "wav/se/se_select00.opus"
-	SEPause   = "wav/se/se_pause.opus"
-	SEPowerUp = "wav/se/se_powerup.opus"
-	SEDead    = "wav/se/se_pldead00.opus"
+	SEShoot   = "se_gun00.wav"
+	SEEnemy   = "se_enep00.wav"
+	SEDamage  = "se_damage00.wav"
+	SEGraze   = "se_graze.wav"
+	SEItem    = "se_item00.wav"
+	SEExtend  = "se_extend.wav"
+	SEBomb    = "se_ch00.wav"
+	SEOk      = "se_ok00.wav"
+	SECancel  = "se_cancel00.wav"
+	SESelect  = "se_select00.wav"
+	SEPause   = "se_pause.wav"
+	SEPowerUp = "se_powerup.wav"
+	SEDead    = "se_pldead00.wav"
 )
 
 // Manager 管理 BGM 和 SE 播放
@@ -136,6 +92,7 @@ type Manager struct {
 	seVolume  float64
 	seCache   map[string][]byte
 	sePlayers []*audio.Player
+	seQueue   []int // the sound ids PlaySEID started this frame
 }
 
 func NewManager(ctx *audio.Context) *Manager {
@@ -144,6 +101,10 @@ func NewManager(ctx *audio.Context) *Manager {
 
 // PlaySE 播放音效
 func (m *Manager) PlaySE(name string) {
+	m.playSE(name, 1)
+}
+
+func (m *Manager) playSE(name string, gain float64) {
 	m.cleanupSE()
 	if m.seVolume <= 0 {
 		return
@@ -154,7 +115,7 @@ func (m *Manager) PlaySE(name string) {
 	}
 	m.trimSEPlayers()
 	p := m.ctx.NewPlayerFromBytes(pcm)
-	p.SetVolume(m.seVolume)
+	p.SetVolume(m.seVolume * gain)
 	p.Play()
 	m.sePlayers = append(m.sePlayers, p)
 }
@@ -163,11 +124,12 @@ func (m *Manager) loadSEPCM(name string) ([]byte, error) {
 	if pcm, ok := m.seCache[name]; ok {
 		return pcm, nil
 	}
-	data, err := assets.Assets.ReadFile(name)
+	data, err := gamedata.ReadFile(datfs.EmbedPath(name))
 	if err != nil {
 		return nil, err
 	}
-	stream, _, err := newOggOpusStream(data)
+	// The SE mix 8/16-bit, mono/stereo and 11.025–44.1 kHz.
+	stream, err := wav.DecodeWithSampleRate(m.ctx.SampleRate(), bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -179,9 +141,11 @@ func (m *Manager) loadSEPCM(name string) ([]byte, error) {
 	return pcm, nil
 }
 
-// Update releases finished short-lived SE players. Call once per game frame.
+// Update releases finished short-lived SE players and starts a new frame of
+// the PlaySEID queue. Call once per game frame.
 func (m *Manager) Update() {
 	m.cleanupSE()
+	m.seQueue = m.seQueue[:0]
 }
 
 func (m *Manager) cleanupSE() {
@@ -220,28 +184,14 @@ func (m *Manager) trimSEPlayers() {
 	m.sePlayers = m.sePlayers[:len(m.sePlayers)-excess]
 }
 
-// PlayBGM 播放 BGM（Ogg/Opus，解码为 PCM 后带循环）。idx 为 0-based BGM 编号。
+// PlayBGM 播放 BGM：[0, Size) 先播一遍，之后循环 [Intro, Size)（thbgm.fmt）。
+// idx 为 0-based BGM 编号。
 func (m *Manager) PlayBGM(idx int) {
-	if idx < 0 || idx >= len(TH10BGM) {
-		return
-	}
-	if m.bgm != nil {
-		m.bgm.Close()
-		m.bgm = nil
-	}
-	track := &TH10BGM[idx]
-	path := fmt.Sprintf("wav/bgm/%s", bgmOpusFiles[idx])
-	data, err := assets.Assets.ReadFile(path)
+	m.StopBGM()
+	loop, err := NewBGMStream(idx, m.ctx.SampleRate())
 	if err != nil {
 		return
 	}
-	stream, totalBytes, err := newOggOpusStream(data)
-	if err != nil {
-		return
-	}
-	introBytes := track.IntroBytes(bgmPlaybackSampleRate)
-	loopBytes := track.LoopLengthBytes(bgmPlaybackSampleRate, totalBytes)
-	loop := audio.NewInfiniteLoopWithIntro(stream, introBytes, loopBytes)
 	p, err := m.ctx.NewPlayer(loop)
 	if err != nil {
 		return
@@ -249,6 +199,50 @@ func (m *Manager) PlayBGM(idx int) {
 	m.bgm = p
 	p.SetVolume(m.bgmVolume)
 	p.Play()
+}
+
+// NewBGMStream returns track idx as an endless 16-bit stereo stream at
+// sampleRate, resampled if it differs from the track's 44.1 kHz.
+func NewBGMStream(idx, sampleRate int) (*audio.InfiniteLoop, error) {
+	tracks, err := BGMTracks()
+	if err != nil {
+		return nil, err
+	}
+	if idx < 0 || idx >= len(tracks) {
+		return nil, fmt.Errorf("audio: BGM %d out of range [0, %d)", idx, len(tracks))
+	}
+	t := tracks[idx]
+	if t.Channels != 2 || t.BitsPerSample != 16 {
+		return nil, fmt.Errorf("audio: %s is not 16-bit stereo", t.Name)
+	}
+	data, err := gamedata.ReadFile(datfs.BGMPath(t.Name))
+	if err != nil {
+		return nil, err
+	}
+	src, err := vorbis.DecodeWithSampleRate(sampleRate, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("audio: %s: %w", t.Name, err)
+	}
+	intro := scalePCMByteOffset(t.Intro, t.SampleRate, sampleRate)
+	size := scalePCMByteOffset(t.Size, t.SampleRate, sampleRate)
+	return audio.NewInfiniteLoopWithIntro(src, intro, size-intro), nil
+}
+
+var (
+	bgmOnce   sync.Once
+	bgmTracks []datfs.BGMTrack
+	bgmErr    error
+)
+
+// BGMTracks returns the embedded thbgm.fmt, in BGM index order.
+func BGMTracks() ([]datfs.BGMTrack, error) {
+	bgmOnce.Do(func() {
+		var data []byte
+		if data, bgmErr = gamedata.ReadFile(datfs.EmbedPath("thbgm.fmt")); bgmErr == nil {
+			bgmTracks, bgmErr = datfs.ParseBGMFmt(data)
+		}
+	})
+	return bgmTracks, bgmErr
 }
 
 func (m *Manager) StopBGM() {
@@ -284,25 +278,6 @@ func (m *Manager) SetSEVolume(v float64) {
 			p.SetVolume(v)
 		}
 	}
-}
-
-func (t BGMTrack) IntroBytes(sampleRate int) int64 {
-	return scalePCMByteOffset(t.IntroBytes44100, bgmLoopPointSampleRate, sampleRate)
-}
-
-func (t BGMTrack) LoopLengthBytes(sampleRate int, totalPCMBytes int64) int64 {
-	introBytes := t.IntroBytes(sampleRate)
-	loopEndBytes := scalePCMByteOffset(t.LoopEndBytes44100, bgmLoopPointSampleRate, sampleRate)
-	if loopEndBytes > totalPCMBytes {
-		loopEndBytes = totalPCMBytes
-	}
-	if loopEndBytes <= introBytes {
-		if totalPCMBytes > introBytes {
-			return totalPCMBytes - introBytes
-		}
-		return totalPCMBytes
-	}
-	return loopEndBytes - introBytes
 }
 
 func scalePCMByteOffset(offset int64, fromRate, toRate int) int64 {

@@ -13,7 +13,7 @@ import (
 const (
 	ScreenWidth  = 640
 	ScreenHeight = 480
-	SampleRate   = 48000
+	SampleRate   = 44100
 
 	// 游戏区域（左侧留给弹幕，右侧留给 HUD）
 	FieldLeft   = 32
