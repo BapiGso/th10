@@ -2,11 +2,13 @@ package ecl
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"th10/entity/enemy"
 	"th10/entity/item"
 	"th10/game"
+	"th10/scene/dialog"
 	"th10/scene/stage"
 	"th10/zun"
 )
@@ -262,24 +264,25 @@ func TestVMStableFullStage(t *testing.T) {
 	}
 }
 
-// TestVMDialogBridgeBlocks verifies the 338/339 dialog bridge: each dialog event
-// opens the overlay exactly once and blocks the main task until it's dismissed,
-// without re-opening or deadlocking.
-func TestVMDialogBridgeBlocks(t *testing.T) {
+// TestVMMSGBlocksMain: ECL 338 opens each .msg entry once and 339 holds the
+// main task until the MSG signals (op 11) or ends, without re-opening or
+// deadlocking. The player presses Z every 30 frames.
+func TestVMMSGBlocksMain(t *testing.T) {
 	ctx := newTestContext()
+	ctx.LoadMSG("stage2", 0)
 	vm := NewStageVM("ecl/stage02.ecl")
 
-	opens := 0
-	active := false
-	vm.SetDialogBridge(
-		func(id int32) bool { opens++; active = true; return true },
-		func() bool { return active },
-	)
-
-	dismissCountdown := -1
-	for i := 0; i < 20000; i++ {
+	var opened []int32
+	var last *dialog.MSG
+	for i := 0; i < 20000 && !vm.MainDone(); i++ {
 		stepFrame(vm, ctx)
 		updateBullets(ctx)
+		if m := ctx.MSG(); m != nil && m != last {
+			opened, last = append(opened, m.ID), m
+			if mt := vm.main.main; mt.sub.Instrs[mt.pc].Opcode != opMSGWait {
+				t.Fatalf("frame %d: main not waiting on dialog %d", i, m.ID)
+			}
+		}
 		// Clear enemies so the boss's deathWait (340) between the two dialogs
 		// passes and the timeline reaches the post dialog.
 		for _, e := range ctx.Enemies {
@@ -287,27 +290,14 @@ func TestVMDialogBridgeBlocks(t *testing.T) {
 				e.Active = false
 			}
 		}
-		// Simulate the player dismissing the overlay 30 frames after it opens.
-		if active && dismissCountdown < 0 {
-			dismissCountdown = 30
-		}
-		if dismissCountdown >= 0 {
-			dismissCountdown--
-			if dismissCountdown == 0 {
-				active = false
-				dismissCountdown = -1
-			}
-		}
-		if vm.MainDone() {
-			break
-		}
+		ctx.UpdateMSG(i%30 == 0, false)
 	}
 	// Stage 2 has two dialog events (bossPre, post). Each must open once.
-	if opens != 2 {
-		t.Fatalf("dialog opened %d times, want 2 (bossPre + post)", opens)
+	if !reflect.DeepEqual(opened, []int32{0, 1}) {
+		t.Fatalf("opened %v, want [0 1] (bossPre + post)", opened)
 	}
-	if active {
-		t.Fatal("dialog still active at end (never dismissed / leaked)")
+	if !vm.MainDone() || !ctx.Cleared() {
+		t.Fatalf("main done %v, cleared %v; want both", vm.MainDone(), ctx.Cleared())
 	}
 }
 

@@ -48,8 +48,8 @@ func parseFlags() (diffFlags, bool) {
 	var f diffFlags
 	fs.StringVar(&f.pathA, "a", "", "trace A (original/reference)")
 	fs.StringVar(&f.pathB, "b", "", "trace B (replica)")
-	fs.Float64Var(&f.eps, "eps", 1e-3, "position epsilon in pixels")
-	fs.Float64Var(&f.angEps, "ang-eps", 1e-4, "angle epsilon in radians")
+	fs.Float64Var(&f.eps, "eps", 1e-3, "position epsilon in pixels, on top of the trace's rounding")
+	fs.Float64Var(&f.angEps, "ang-eps", 1e-4, "angle epsilon in radians, on top of the trace's rounding")
 	fs.IntVar(&f.context, "context", 3, "frames of context to print around the divergence")
 	fs.IntVar(&f.maxRows, "max-rows", 8, "max entity rows to show per side")
 	fs.IntVar(&f.shift, "shift", 0, "added to A's frame indices before matching")
@@ -80,8 +80,8 @@ func run() int {
 	defer fb.Close()
 
 	ra, rb := trace.NewReader(fa), trace.NewReader(fb)
-	diff := &differ{eps: opts.eps, angEps: opts.angEps, maxRows: opts.maxRows, context: opts.context,
-		shift: opts.shift, motion: opts.scope == "motion"}
+	diff := &differ{eps: opts.eps + posUnit + slack, angEps: opts.angEps + angUnit + slack,
+		maxRows: opts.maxRows, context: opts.context, shift: opts.shift, motion: opts.scope == "motion"}
 	code := diff.compare(ra, rb)
 	if code == 0 {
 		fmt.Printf("MATCH: %d frames compared, all within eps (pos %.4g px, ang %.4g rad)\n",
@@ -96,8 +96,18 @@ func run() int {
 	return code
 }
 
+// The trace prints positions and speeds to 3 decimals and angles to 5, so two
+// values within the budget can print up to one unit further apart (one ulp
+// apart on a rounding boundary prints a unit apart). slack absorbs the error
+// of parsing the decimals back.
+const (
+	posUnit = 1e-3
+	angUnit = 1e-5
+	slack   = 1e-9
+)
+
 type differ struct {
-	eps     float64
+	eps     float64 // budgets including posUnit/angUnit
 	angEps  float64
 	maxRows int
 	context int
@@ -195,10 +205,30 @@ func (d *differ) diffFrame(a, b *trace.Frame) string {
 			return fmt.Sprintf("player bullet count %d != %d", a.PBullets, b.PBullets)
 		}
 	}
+	if why := diffMSG(a.MSG, b.MSG); why != "" {
+		return why
+	}
 	if why := d.diffEnemies(a.E, b.E); why != "" {
 		return why
 	}
 	return d.diffBullets(a.B, b.B)
+}
+
+// diffMSG compares the dialogs: which entry is open and where it is. The
+// dialog drives ECL 339, so its timing counts for -scope motion too.
+func diffMSG(a, b *trace.MSGRow) string {
+	if (a == nil) == (b == nil) && (a == nil || *a == *b) {
+		return ""
+	}
+	return fmt.Sprintf("dialog %s != %s", msgString(a), msgString(b))
+}
+
+func msgString(m *trace.MSGRow) string {
+	if m == nil {
+		return "none"
+	}
+	return fmt.Sprintf("{entry %d clock %d wait %d signal %d at %d op %d}",
+		m.ID, m.Clock, m.Wait, m.Signal, m.At, m.Op)
 }
 
 // diffStats compares the player's counters (out of -scope motion).
@@ -291,6 +321,9 @@ func (d *differ) printFrame(tag string, f *trace.Frame) {
 		tag, f.Index, f.PX, f.PY, f.PLife, f.PPower, f.PFaith, f.PScore, f.PGraze, f.PState)
 	fmt.Printf("       enemies=%d bullets=%d items=%d playerBullets=%d\n",
 		f.Enemies, f.Bullets, f.Items, f.PBullets)
+	if f.MSG != nil {
+		fmt.Printf("       dialog %s\n", msgString(f.MSG))
+	}
 	for i, e := range f.E {
 		if i >= d.maxRows {
 			fmt.Printf("       ... %d more enemies\n", len(f.E)-i)

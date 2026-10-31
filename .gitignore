@@ -29,6 +29,8 @@ coverage.out
 # 原始大媒体文件
 *.wav
 *.WAV
+# 原作音效（th10.dat 原样拷贝，1.9 MB）需要 embed
+!assets/wav/se/*.wav
 *.mkv
 *.mp4
 *.psd

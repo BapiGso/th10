@@ -10,6 +10,10 @@ package sim
 import (
 	"fmt"
 	"io"
+	"math"
+	"os"
+	"strconv"
+	"strings"
 
 	"th10/entity/bullet"
 	"th10/entity/enemy"
@@ -17,6 +21,7 @@ import (
 	"th10/input"
 	"th10/replay"
 	"th10/scene/stage"
+	"th10/scene/stage/ecl"
 	"th10/trace"
 )
 
@@ -61,10 +66,47 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 	if maxFrames > 0 && maxFrames < limit {
 		limit = maxFrames
 	}
+	if limit > 0 {
+		// The chapter can start with keys held from before it: Aux1 is the
+		// press edge (DAT_00474e62), so seed the previous frame with the
+		// held keys that do not newly go down on frame 1.
+		r0 := ch.Records[0]
+		h.in.Restore(restoreBits(replay.Record{Keys: r0.Keys &^ r0.Aux1}))
+	}
+	// TH10SIM_BDUMP=frame or first-last dumps bullets to stderr.
+	dump0, dump1 := frameRange(os.Getenv("TH10SIM_BDUMP"))
+	// TH10SIM_ETRACE=first-last logs every ECL instruction run in those
+	// frames to stderr.
+	etrace0, etrace1 := frameRange(os.Getenv("TH10SIM_ETRACE"))
+	frame := 0
+	if etrace0 >= 0 {
+		ecl.Trace = func(sub string, in *ecl.Instr) {
+			if frame < etrace0 || frame > etrace1 {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "%d %s@%d t%d op%d", frame, sub, in.Offset, in.Time, in.Opcode)
+			for _, p := range in.Params {
+				switch {
+				case p.IsVar:
+					fmt.Fprintf(os.Stderr, " $%d", int32(p.Raw))
+				case p.Type == 'f':
+					fmt.Fprintf(os.Stderr, " %gf", math.Float32frombits(p.Raw))
+				default:
+					fmt.Fprintf(os.Stderr, " %d", int32(p.Raw))
+				}
+			}
+			fmt.Fprintln(os.Stderr)
+		}
+		defer func() { ecl.Trace = nil }()
+	}
 	for i := 0; i < limit; i++ {
+		frame = i + 1
 		rec := ch.Records[i]
 		h.step(rec)
 		tw.WriteFrame(h.sample(i + 1))
+		if i+1 >= dump0 && i+1 <= dump1 {
+			h.dumpBullets(os.Stderr, i+1)
+		}
 		if h.finished {
 			break
 		}
@@ -139,6 +181,10 @@ func (h *headless) sample(index int) *trace.Frame {
 		Items:      h.ctx.Items.ActiveCount(),
 		PBullets:   h.ctx.Player.Bullets.ActiveCount(),
 	}
+	if m := h.ctx.MSG(); m != nil {
+		clock, wait, at, op := m.Pos()
+		f.MSG = &trace.MSGRow{ID: int(m.ID), Clock: clock, Wait: wait, Signal: m.Signal, At: at, Op: op}
+	}
 	for _, e := range enemies {
 		if len(f.E) >= trace.MaxEnemyRows {
 			break
@@ -159,6 +205,36 @@ func (h *headless) sample(index int) *trace.Frame {
 	return f
 }
 
+// frameRange parses "n" or "first-last"; -1, -1 when empty or malformed.
+func frameRange(v string) (int, int) {
+	a, b, ok := strings.Cut(v, "-")
+	first, err := strconv.Atoi(a)
+	if err != nil {
+		return -1, -1
+	}
+	if !ok {
+		return first, first
+	}
+	last, err := strconv.Atoi(b)
+	if err != nil {
+		return -1, -1
+	}
+	return first, last
+}
+
+// dumpBullets writes every live bullet's motion fields at full precision,
+// with their float32 bits, for chasing sub-ulp divergences
+// (TH10SIM_BDUMP=frame).
+func (h *headless) dumpBullets(w io.Writer, frame int) {
+	n := 0
+	h.ctx.Bullets.Each(func(b *bullet.Bullet) {
+		f := func(v float32) string { return fmt.Sprintf("%.9g/%08x", v, math.Float32bits(v)) }
+		fmt.Fprintf(w, "%d B%d pos %s %s ang %s spd %s vel %s %s ex %#x state %d\n", frame, n,
+			f(b.Pos[0]), f(b.Pos[1]), f(b.Angle), f(b.Speed), f(b.Vel[0]), f(b.Vel[1]), b.ExFlags, b.State)
+		n++
+	})
+}
+
 // liveEnemies is the enemy list in the original manager's order (hidden main
 // first) when the stage runs an ECL VM, else the stage's own list.
 func liveEnemies(ctx *stage.Context) []*enemy.Enemy {
@@ -175,7 +251,7 @@ func liveEnemies(ctx *stage.Context) []*enemy.Enemy {
 }
 
 // restoreBits maps a replay record onto the input.State bit layout.
-// input.Key order: Up, Down, Left, Right, Shot, Bomb, Focus, Pause, Ok, Cancel.
+// input.Key order: Up, Down, Left, Right, Shot, Bomb, Focus, Pause, Ok, Cancel, Skip.
 func restoreBits(rec replay.Record) uint16 {
 	var bits uint16
 	set := func(k input.Key, on bool) {
@@ -193,5 +269,6 @@ func restoreBits(rec replay.Record) uint16 {
 	// KeyOk doubles as Z for menus/dialog; the original advances dialog with the
 	// shot key, so mirror it.
 	set(input.KeyOk, rec.Keys&replay.KeyShot != 0)
+	set(input.KeySkip, rec.Keys&replay.KeySkip != 0)
 	return bits
 }

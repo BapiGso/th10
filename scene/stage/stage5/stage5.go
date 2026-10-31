@@ -5,7 +5,6 @@ import (
 	"math"
 	"th10/audio"
 	"th10/render"
-	"th10/scene/dialog"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
 
@@ -19,10 +18,8 @@ type Script5 struct {
 	frame    int
 	finished bool
 	bgY      float64
-	bossBGM  bool
 	bg1, bg2 *ebiten.Image // stg5bg.png [256x256], stg5bg2.png [256x256]
 	vm       *stageecl.VM
-	dlg      *stage.DialogQueue
 }
 
 func NewScript() *Script5 {
@@ -38,9 +35,9 @@ func (s *Script5) loadBg() {
 
 func (s *Script5) Init(ctx *stage.Context) {
 	ctx.PlayBGM(audio.BGMStage5)
-	ch := ctx.State.Character
-	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage5", ch), dialog.PostC("stage5", ch))
-	s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
+	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
+	// clears the stage.
+	ctx.LoadMSG("stage5", audio.BGMStage5Boss)
 }
 
 func (s *Script5) Update(ctx *stage.Context) {
@@ -49,10 +46,6 @@ func (s *Script5) Update(ctx *stage.Context) {
 
 	if s.vm != nil {
 		s.vm.Update(ctx)
-		if !s.bossBGM && s.vm.BossActive() {
-			s.bossBGM = true
-			ctx.PlayBGM(audio.BGMStage5Boss)
-		}
 		if s.vm.MainDone() {
 			s.finished = true
 		}

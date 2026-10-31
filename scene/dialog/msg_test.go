@@ -2,50 +2,55 @@ package dialog
 
 import "testing"
 
+// texts lists an entry's text ops with the side speaking each (op 7/8).
+func texts(code []Instr) (lines []TextLine) {
+	side := 0
+	for _, in := range code {
+		switch in.Op {
+		case msgSpeakerPlayer, msgSpeakerBoss:
+			side = int(in.Op - msgSpeakerPlayer)
+		case msgLine1, msgLine2, msgText:
+			lines = append(lines, TextLine{in.Text, side})
+		}
+	}
+	return lines
+}
+
+func countOp(code []Instr, op uint8) (n int) {
+	for _, in := range code {
+		if in.Op == op {
+			n++
+		}
+	}
+	return n
+}
+
 // TestParseMSGStage2Reimu verifies the official .msg loader decodes real TH10
-// stage-2 (Reimu) dialog: correct segment count, speakers, and Shift-JIS text.
+// stage-2 (Reimu) dialog: entry count, speakers, faces and Shift-JIS text.
 func TestParseMSGStage2Reimu(t *testing.T) {
-	sd := loadStageDialog("stage2", 0)
-	if sd == nil {
-		t.Fatal("loadStageDialog(stage2, Reimu) = nil")
+	sm := LoadStage("stage2", 0)
+	if sm == nil {
+		t.Fatal("LoadStage(stage2, Reimu) = nil")
 	}
-	if len(sd.segments) != 2 {
-		t.Fatalf("stage2 segments = %d, want 2 (bossPre, post)", len(sd.segments))
+	if len(sm.Entries) != 2 {
+		t.Fatalf("stage2 entries = %d, want 2 (bossPre, post)", len(sm.Entries))
 	}
-	pre := sd.segments[0]
-	if len(pre) == 0 {
-		t.Fatal("bossPre segment empty")
+	if sm.PlayerName != "博麗霊夢" || sm.BossNames[0] != "鍵山雛" {
+		t.Errorf("speakers %q / %q, want 博麗霊夢 / 鍵山雛", sm.PlayerName, sm.BossNames[0])
 	}
-	// First line is the player (灵梦) per the decoded stream (op 12;6 then 7).
-	if pre[0].IsRight {
-		t.Errorf("first line IsRight=true, want player (left)")
+	pre := texts(sm.Entries[0])
+	if len(pre) < 4 || pre[0] != (TextLine{"しょっぱなから気持ち悪いなぁ", 0}) ||
+		pre[3] != (TextLine{"あらあらまだ居たの？", 1}) {
+		t.Fatalf("bossPre lines %+v, want the player's しょっぱなから気持ち悪いなぁ first and 雛's あらあらまだ居たの？ fourth", pre)
 	}
-	if pre[0].Expression != "n2" {
-		t.Errorf("first line expression = %q, want n2 from face id 6", pre[0].Expression)
-	}
-	// The known first boss line (雛) is "しょっぱなから気持ち悪いなぁ".
-	var foundBoss bool
-	var foundAngryBoss bool
-	for _, l := range pre {
-		if l.IsRight && l.Speaker != "鍵山雛" {
-			t.Errorf("right speaker = %q, want 鍵山雛", l.Speaker)
+	// The first face is op 12 with id 6, before the first line.
+	for _, in := range sm.Entries[0] {
+		if in.Op == msgPlayerFace {
+			if in.Arg != 6 {
+				t.Errorf("first player face id %d, want 6", in.Arg)
+			}
+			break
 		}
-		if l.Text == "しょっぱなから気持ち悪いなぁ" {
-			foundBoss = true
-		}
-		if l.IsRight && l.Expression == "an" {
-			foundAngryBoss = true
-		}
-	}
-	if !foundBoss {
-		t.Errorf("did not find expected boss line; got: %+v", pre)
-	}
-	if !foundAngryBoss {
-		t.Errorf("did not find any boss line mapped to angry expression; got: %+v", pre)
-	}
-	post := sd.segments[1]
-	if len(post) == 0 || post[0].Expression != "dp" {
-		t.Fatalf("first post expression = %q, want dp from face id 8", post[0].Expression)
 	}
 }
 
@@ -68,42 +73,58 @@ func TestMSGFaceExpressionMapping(t *testing.T) {
 	}
 }
 
-// TestBossPreCFallsBack ensures the character-aware accessor returns non-empty
-// for every stage (official .msg or hand-written fallback) and never panics.
-func TestBossPreCAllStages(t *testing.T) {
-	for _, st := range []string{"stage1", "stage2", "stage3", "stage4", "stage5", "stage6", "extra"} {
-		for _, ch := range []int{0, 1} {
-			if got := BossPreC(st, ch); len(got) == 0 {
-				t.Errorf("BossPreC(%s, %d) empty", st, ch)
+// TestStageEntries: every stage's entries load for both characters and end
+// in op 0. Only the last entry clears the stage (op 20), and the boss's
+// pre-fight entry starts the boss theme (op 18); midboss entries do not.
+func TestStageEntries(t *testing.T) {
+	for _, tc := range []struct {
+		stage   string
+		ch      int
+		entries int
+		bossPre int
+	}{
+		{"stage1", 0, 2, 0}, {"stage1", 1, 2, 0},
+		{"stage2", 0, 2, 0}, {"stage3", 0, 4, 2},
+		{"stage4", 0, 2, 0}, {"stage4", 1, 2, 0},
+		{"stage5", 0, 2, 0}, {"stage6", 0, 2, 0},
+		{"extra", 0, 3, 1}, {"extra", 1, 3, 1},
+	} {
+		sm := LoadStage(tc.stage, tc.ch)
+		if sm == nil || len(sm.Entries) != tc.entries {
+			t.Errorf("%s/%d: %v, want %d entries", tc.stage, tc.ch, sm, tc.entries)
+			continue
+		}
+		last := len(sm.Entries) - 1
+		for i, code := range sm.Entries {
+			if len(code) == 0 || code[len(code)-1].Op != msgEnd {
+				t.Errorf("%s/%d entry %d does not end in op 0", tc.stage, tc.ch, i)
+			}
+			if clears := countOp(code, msgStageClear) == 1; clears != (i == last) {
+				t.Errorf("%s/%d entry %d: clears %v, want %v", tc.stage, tc.ch, i, clears, i == last)
+			}
+			if bgm := countOp(code, msgBossBGM) == 1; bgm != (i == tc.bossPre) {
+				t.Errorf("%s/%d entry %d: boss theme %v, want %v", tc.stage, tc.ch, i, bgm, i == tc.bossPre)
 			}
 		}
+	}
+	// Stage 6 has no post-boss dialog: its last entry only clears the stage.
+	if sm := LoadStage("stage6", 0); len(texts(sm.Entries[1])) != 0 {
+		t.Errorf("stage6 entry 1 has %d lines, want none", len(texts(sm.Entries[1])))
 	}
 }
 
 func TestOfficialMSGExtraSegments(t *testing.T) {
-	sd := loadStageDialog("extra", 0)
-	if sd == nil {
-		t.Fatal("loadStageDialog(extra, Reimu) = nil")
+	sm := LoadStage("extra", 0)
+	if sm == nil {
+		t.Fatal("LoadStage(extra, Reimu) = nil")
 	}
-	if len(sd.segments) != 3 {
-		t.Fatalf("extra segments = %d, want 3 (midPre, bossPre, post)", len(sd.segments))
-	}
-	if got := sd.segments[0][0].Speaker; got != "八坂神奈子" {
-		t.Fatalf("extra segment 0 speaker = %q, want 八坂神奈子", got)
-	}
-	if !segmentHasRightSpeaker(sd.segments[1], "洩矢諏訪子") {
-		t.Fatalf("extra segment 1 has no right speaker 洩矢諏訪子: %+v", sd.segments[1])
-	}
-	if !segmentHasRightSpeaker(sd.segments[2], "洩矢諏訪子") {
-		t.Fatalf("extra segment 2 has no right speaker 洩矢諏訪子: %+v", sd.segments[2])
-	}
-}
-
-func segmentHasRightSpeaker(lines []Line, speaker string) bool {
-	for _, l := range lines {
-		if l.IsRight && l.Speaker == speaker {
-			return true
+	for i, want := range []string{"八坂神奈子", "洩矢諏訪子", "洩矢諏訪子"} {
+		m := sm.Open(int32(i), Hooks{})
+		if m == nil || m.View.BossName != want {
+			t.Fatalf("extra entry %d: %v, want boss %s", i, m, want)
 		}
 	}
-	return false
+	if sm.Open(3, Hooks{}) != nil || sm.Open(-1, Hooks{}) != nil {
+		t.Fatal("opened a missing entry")
+	}
 }

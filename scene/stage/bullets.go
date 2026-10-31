@@ -50,7 +50,7 @@ func NewContext(state *game.GameState) *Context {
 		RNG:     rng,
 		Player:  player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
 		Bullets: bullet.NewPool(),
-		Lasers:  laser.NewPool(256),
+		Lasers:  laser.NewManager(),
 		Items:   item.NewPool(256),
 		Effects: effect.NewPool(512),
 		World:   &anm.World{},
@@ -69,12 +69,27 @@ func NewContext(state *game.GameState) *Context {
 			c.Items.Spawn(float64(x)+gameX, float64(y)+gameY, item.PointItem)
 		},
 	}
+	c.LaserEnv = &laser.Env{
+		Anm:        c.Anm,
+		File:       c.BulletEnv.File,
+		Effects:    c.World,
+		Kill:       c.laserKill,
+		Graze:      c.laserGraze,
+		PlaySE:     c.BulletEnv.PlaySE,
+		CancelItem: c.BulletEnv.CancelItem,
+		Boss: func() ([3]float32, bool) {
+			if c.Boss0 == nil {
+				return [3]float32{}, false
+			}
+			return c.Boss0()
+		},
+	}
 	c.SyncPlayer()
 	return c
 }
 
-// SyncPlayer copies the player's position and hitbox into the bullet
-// environment, in game coordinates.
+// SyncPlayer copies the player's position and hitbox into the bullet and
+// laser environments, in game coordinates.
 func (c *Context) SyncPlayer() {
 	p := c.Player
 	x, y := float32(p.X-gameX), float32(p.Y-gameY)
@@ -84,13 +99,15 @@ func (c *Context) SyncPlayer() {
 	}
 	c.BulletEnv.Player = [2]float32{x, y}
 	c.BulletEnv.Box = [4]float32{x - h, y - h, x + h, y + h}
+	c.LaserEnv.Player = [2]float32{x, y}
+	c.LaserEnv.Half = [2]float32{h, h}
 }
 
-// UpdateBullets moves the lasers, then runs the bullet manager for a frame
-// (FUN_004065c0): the calc chain runs the laser manager first.
+// UpdateBullets runs the laser manager (FUN_0041c480), then the bullet
+// manager (FUN_004065c0), for a frame: the calc chain's order.
 func (c *Context) UpdateBullets() {
 	c.SyncPlayer()
-	c.Lasers.Update(game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+	c.Lasers.Calc(c.LaserEnv)
 	c.Bullets.Calc(c.BulletEnv)
 }
 
@@ -104,15 +121,16 @@ func (c *Context) UpdateWorld() {
 func (c *Context) ClearBullets() {
 	p := c.BulletEnv.Player
 	c.Bullets.CircleClear(p[0], p[1], 1000, true, true, c.BulletEnv)
-	c.Lasers.ClearAll()
+	c.Lasers.CircleClear([3]float32{p[0], p[1], 0}, 1000, true, c.LaserEnv)
 }
 
-// bulletHit is the player side of FUN_004266b0's hit: none while the player
-// is dying (states 2-4), a cancel without a kill while invulnerable.
+// bulletHit is the player side of FUN_004266b0's hit: none while a dialog is
+// up or the player is dying (states 2-4), a cancel without a kill while
+// invulnerable.
 func (c *Context) bulletHit() bool {
 	p := c.Player
 	switch {
-	case p.State == player.StateDead:
+	case c.msg != nil || p.State == player.StateDead:
 		return false
 	case p.InvincTimer > 0 || p.State != player.StateNormal:
 		return true
@@ -123,6 +141,21 @@ func (c *Context) bulletHit() bool {
 	c.PlaySE(audio.SEDead)
 	return true
 }
+
+// laserKill is the player side of a laser hit (FUN_004267f0, FUN_00426cf0):
+// only a player that can be hit is killed, and only then does the beam cut
+// round it.
+func (c *Context) laserKill() bool {
+	p := c.Player
+	if c.msg != nil || p.State != player.StateNormal || p.InvincTimer > 0 {
+		return false
+	}
+	return c.bulletHit()
+}
+
+// laserGraze counts a laser graze, as for a bullet: the laser already played
+// the sound and spawned the spark.
+func (c *Context) laserGraze() { c.bulletGraze(nil) }
 
 // bulletGraze counts a graze. The bullet already played the graze sound and
 // spawned its spark; where the binary keeps the count is not traced yet.

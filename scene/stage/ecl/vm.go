@@ -78,15 +78,6 @@ type VM struct {
 	// FUN_004127a0 whenever it checks an armed slot with a time limit.
 	hudTimer int
 
-	// dialog bridge: ins_338 records the requested id; the next ins_339 fires
-	// DialogFunc(id). If DialogFunc returns true (dialog shown), the task blocks
-	// one frame at a time until DialogActive returns false (overlay dismissed).
-	dialogID     int32
-	dialogArmed  bool                // a 338 set an id that the next 339 consumes
-	dialogFiring bool                // a 339 is currently waiting on an open overlay
-	DialogFunc   func(id int32) bool // set by the stage wrapper; nil = no dialog
-	DialogActive func() bool         // reports whether the dialog overlay is up
-
 	// screen shake (ins_337): magnitude decays linearly over the duration.
 	shakeFrames int
 	shakeTotal  int
@@ -250,12 +241,16 @@ func (vm *VM) BossHUD() stage.BossHUDInfo {
 	return info
 }
 
-// SetDialogBridge wires the ECL dialog opcodes (338/339) to the stage. open is
-// called with the ECL dialog id when a 339 fires and should display the overlay
-// (returning true if it did); active reports whether the overlay is still up.
-func (vm *VM) SetDialogBridge(open func(id int32) bool, active func() bool) {
-	vm.DialogFunc = open
-	vm.DialogActive = active
+// sweepEnemies is FUN_0040e6a0 (ECL 338, 345): every enemy but the stage's
+// main and the 0x40/0xc000 ones (0x80 ones always) is flagged 0x20000, and
+// the manager deletes it when its walk reaches it. Its death animation is
+// cosmetic.
+func (vm *VM) sweepEnemies() {
+	for _, a := range vm.order {
+		if f := a.e.ECLFlags; f&0x50 == 0 && f&0xc000 == 0 || f&0x80 != 0 {
+			a.e.ECLFlags |= 0x20000
+		}
+	}
 }
 
 // ShakeOffset returns the current screen-shake displacement (dx, dy) in pixels,
@@ -284,6 +279,7 @@ func (vm *VM) Update(ctx *stage.Context) {
 	vm.prune()
 	if ctx != nil {
 		ctx.ManagerOrder = vm.ManagerOrder
+		ctx.Boss0 = vm.boss0Pos
 	}
 
 	// Dynamic rank (FUN_00425730): +1 every 60 frames while enemies are on
@@ -292,7 +288,7 @@ func (vm *VM) Update(ctx *stage.Context) {
 	if !vm.started && ctx != nil && ctx.State != nil {
 		vm.rank = ctx.State.Rank
 	}
-	if len(vm.actors) > 0 && (vm.DialogActive == nil || !vm.DialogActive()) && vm.frame%60 == 0 {
+	if len(vm.actors) > 0 && (ctx == nil || !ctx.DialogActive()) && vm.frame%60 == 0 {
 		if vm.rank++; vm.rank > 1024 {
 			vm.rank = 1024
 		}
@@ -442,6 +438,9 @@ func (vm *VM) stepTask(ctx *stage.Context, t *eclTask) bool {
 			t.pc++
 			continue
 		}
+		if Trace != nil {
+			Trace(t.sub.Name, in)
+		}
 		vm.execInstr(ctx, t, in)
 		if t.done {
 			return false
@@ -454,6 +453,10 @@ func (vm *VM) stepTask(ctx *stage.Context, t *eclTask) bool {
 	t.clock += vm.gameSpeed
 	return true
 }
+
+// Trace, when set, sees every instruction just before it runs. It is a
+// debugging hook for tools/th10sim (TH10SIM_ETRACE).
+var Trace func(sub string, in *Instr)
 
 // end finishes t as op 1 does. Its caller frees an async context, or
 // deletes the enemy for the primary one.
@@ -548,8 +551,10 @@ func (vm *VM) execSystemOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		vm.storeVar(t, in.Params[0], intVal(v-1))
 		t.pc++
 	case opPolar: // 81 ffff: out_x, out_y = cos/sin(angle)*radius
-		angle := vm.resolveFloat(t, in.Params[2])
+		// FUN_0044e1a0 reads the radius first and normalises the angle
+		// (FUN_0044bc70) before FUN_004501b0 takes its sine and cosine.
 		radius := vm.resolveFloat(t, in.Params[3])
+		angle := normAngle(vm.resolveFloat(t, in.Params[2]))
 		x, y := polar(angle, radius)
 		vm.storeVar(t, in.Params[0], floatVal(x))
 		vm.storeVar(t, in.Params[1], floatVal(y))

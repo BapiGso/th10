@@ -5,7 +5,6 @@ import (
 	"math"
 	"th10/audio"
 	"th10/render"
-	"th10/scene/dialog"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
 
@@ -20,10 +19,8 @@ type Script2 struct {
 	frame    int
 	finished bool
 	bgY      float64
-	bossBGM  bool
 	bg1, bg2 *ebiten.Image // stg2bg.png [256x256], stg2bg2.png [512x512]
 	vm       *stageecl.VM
-	dlg      *stage.DialogQueue
 }
 
 func NewScript() *Script2 {
@@ -39,10 +36,9 @@ func (s *Script2) loadBg() {
 
 func (s *Script2) Init(ctx *stage.Context) {
 	ctx.PlayBGM(audio.BGMStage2)
-	// Stage 2 has no mid-boss dialog: the two ECL dialog events are bossPre, post.
-	ch := ctx.State.Character
-	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage2", ch), dialog.PostC("stage2", ch))
-	s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
+	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
+	// clears the stage.
+	ctx.LoadMSG("stage2", audio.BGMStage2Boss)
 }
 
 func (s *Script2) Update(ctx *stage.Context) {
@@ -51,12 +47,6 @@ func (s *Script2) Update(ctx *stage.Context) {
 
 	if s.vm != nil {
 		s.vm.Update(ctx)
-
-		// Switch to boss music the first frame a boss is alive.
-		if !s.bossBGM && s.vm.BossActive() {
-			s.bossBGM = true
-			ctx.PlayBGM(audio.BGMStage2Boss)
-		}
 
 		// Stage clears when the ECL main task finishes (boss defeated → main
 		// unblocks from deathWait and delete()s). The frame cap is only a

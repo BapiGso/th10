@@ -1,9 +1,11 @@
 package ecl
 
 import (
+	"reflect"
 	"testing"
 
 	"th10/entity/enemy"
+	"th10/scene/dialog"
 	"th10/scene/stage"
 )
 
@@ -283,31 +285,59 @@ func TestVMReturnEndsTask(t *testing.T) {
 
 // TestVMBossesTimeOutToClear: with nobody shooting, every boss phase ends on
 // its time slot, the last one's timeout sub is BossDead, and the stage main
-// (which ends after ins_340 and the post dialog in stages 1-3) finishes.
-// Stages 4-6 loop in main forever: the original clears them from MSG op 20.
+// opens the post dialog, the .msg entry whose op 20 clears the stage. Main
+// ends after it in stages 1-3; in 4-6 and Extra it loops forever, so only the
+// MSG can clear them. The player passes each wait at once.
 func TestVMBossesTimeOutToClear(t *testing.T) {
 	for _, tc := range []struct {
-		ecl    string
-		within int
+		ecl, msg string
+		within   int
+		dialogs  []int32 // the entries main opens, in order
+		mainEnds bool
 	}{
-		{"ecl/stage01.ecl", 17000},
-		{"ecl/stage02.ecl", 21000},
-		{"ecl/stage03.ecl", 33000},
+		{"ecl/stage01.ecl", "stage1", 17000, []int32{0, 1}, true},
+		{"ecl/stage02.ecl", "stage2", 21000, []int32{0, 1}, true},
+		{"ecl/stage03.ecl", "stage3", 33000, []int32{0, 2, 3}, true}, // entry 1 follows MBossDead, not MBossEscape
+		{"ecl/stage04.ecl", "stage4", 40000, []int32{0, 1}, false},
+		{"ecl/stage05.ecl", "stage5", 45000, []int32{0, 1}, false},
+		{"ecl/stage06.ecl", "stage6", 50000, []int32{0, 1}, false},
+		{"ecl/stage07.ecl", "extra", 125000, []int32{0, 1, 2}, false},
 	} {
 		ctx := newTestContext()
+		ctx.LoadMSG(tc.msg, 0)
 		vm := NewStageVM(tc.ecl)
-		vm.SetDialogBridge(func(int32) bool { return true }, func() bool { return false })
-		sawDead := false
-		f := 0
-		for ; f < tc.within && !vm.MainDone(); f++ {
+		var opened []int32
+		var last *dialog.MSG
+		step := func() {
 			stepFrame(vm, ctx)
 			updateBullets(ctx)
+			if m := ctx.MSG(); m != nil && m != last {
+				opened, last = append(opened, m.ID), m
+			}
+			ctx.UpdateMSG(true, false)
+		}
+		sawDead := false
+		f := 0
+		for ; f < tc.within && len(opened) < len(tc.dialogs); f++ {
+			step()
 			if b := vm.bossSlots[0]; b != nil && vm.actors[b].main.sub.Name == "BossDead" {
 				sawDead = true
 			}
 		}
-		if !vm.MainDone() || !sawDead {
-			t.Errorf("%s: main done %v, reached BossDead %v after %d frames", tc.ecl, vm.MainDone(), sawDead, f)
+		if !reflect.DeepEqual(opened, tc.dialogs) || !sawDead {
+			t.Errorf("%s: opened %v, want %v; reached BossDead %v after %d frames",
+				tc.ecl, opened, tc.dialogs, sawDead, f)
+			continue
+		}
+		for i := 0; i < 2000 && !ctx.Cleared(); i++ {
+			step()
+		}
+		for i := 0; i < 600 && !vm.MainDone(); i++ {
+			step()
+		}
+		if !ctx.Cleared() || vm.MainDone() != tc.mainEnds {
+			t.Errorf("%s: cleared %v, main done %v after the post dialog, want true, %v",
+				tc.ecl, ctx.Cleared(), vm.MainDone(), tc.mainEnds)
 		}
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"math"
 	"th10/audio"
 	"th10/render"
-	"th10/scene/dialog"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
 
@@ -19,12 +18,10 @@ type Script6 struct {
 	frame    int
 	finished bool
 	bgY      float64
-	bossBGM  bool
 	bg1, bg2 *ebiten.Image // stg6bg.png [512x512], stg6bg2.png [256x256]
 	bg3      *ebiten.Image // stg6bg3.png [32x256]
 	bg4, bg5 *ebiten.Image // stg6bg5.png [256x256], stg6bg6.png [32x128]
 	vm       *stageecl.VM
-	dlg      *stage.DialogQueue
 }
 
 func NewScript() *Script6 {
@@ -43,10 +40,9 @@ func (s *Script6) loadBg() {
 
 func (s *Script6) Init(ctx *stage.Context) {
 	ctx.PlayBGM(audio.BGMStage6)
-	// Stage 6 mid-boss (諏訪子) shares dialog: events are bossPre, post.
-	ch := ctx.State.Character
-	s.dlg = stage.NewDialogQueue(ctx, dialog.BossPreC("stage6", ch), dialog.PostC("stage6", ch))
-	s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
+	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
+	// clears the stage.
+	ctx.LoadMSG("stage6", audio.BGMStage6Boss)
 }
 
 func (s *Script6) Update(ctx *stage.Context) {
@@ -55,10 +51,6 @@ func (s *Script6) Update(ctx *stage.Context) {
 
 	if s.vm != nil {
 		s.vm.Update(ctx)
-		if !s.bossBGM && s.vm.BossActive() {
-			s.bossBGM = true
-			ctx.PlayBGM(audio.BGMStage6Boss)
-		}
 		if s.vm.MainDone() {
 			s.finished = true
 		}

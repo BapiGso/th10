@@ -40,7 +40,22 @@ func DrawVM(dst *ebiten.Image, vm *anm.VM, dx, dy float64) {
 		sy = -sy
 	}
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(-float64(b.Dx())/2, -float64(b.Dy())/2)
+	// The anchor (flag bits 18-19 across, 20-21 down): 0 centres the sprite
+	// on the position, 1 puts its left/top edge there, 2 its right/bottom.
+	ax, ay := -float64(b.Dx())/2, -float64(b.Dy())/2
+	switch vm.Flags >> 18 & 3 {
+	case 1:
+		ax = 0
+	case 2:
+		ax = -float64(b.Dx())
+	}
+	switch vm.Flags >> 20 & 3 {
+	case 1:
+		ay = 0
+	case 2:
+		ay = -float64(b.Dy())
+	}
+	op.GeoM.Translate(ax, ay)
 	op.GeoM.Scale(sx, sy)
 	op.GeoM.Rotate(float64(vm.Rot[2]))
 	op.GeoM.Translate(

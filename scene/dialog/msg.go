@@ -1,30 +1,17 @@
 package dialog
 
-// TH10 stage dialog (.msg) binary loader.
-//
-// Faithful to the format thtk decodes: a small instruction VM driving two
-// portraits + a textbox. We parse the raw stXX_0C.msg bytes (C = character:
-// 00 = Reimu, 01 = Marisa) that th10.exe itself loads, rather than relying on a
-// hand-written script table.
+// TH10 stage dialog (.msg) loader: the raw stXX_0C.msg th10.exe loads (C =
+// character: 00 = Reimu, 01 = Marisa), decoded into the instructions
+// FUN_00415e90 runs (msgvm.go).
 //
 // On-disk layout (little-endian):
 //
 //	u32 entry_count
 //	entry_count × { u32 offset; u32 id }   (offset = byte offset of the stream)
 //	per entry @offset: a stream of instructions until the next entry / EOF
-//	instr: i16 time; u8 opcode; u8 length; [length bytes of args]
+//	instr: u16 time; u8 opcode; u8 length; [length bytes of args]
 //
-// Opcodes we interpret (names/semantics from thtk th10_msg_fmts + ExpHP's RE,
-// cross-checked against the decoded streams):
-//
-//	7        speakerPlayer — following text lines are the player's (left)
-//	8        speakerBoss   — following text lines are the boss's (right)
-//	12 S     playerFace    — set the left portrait face id
-//	13 S     bossFace      — set the right portrait face id
-//	16 m     textAdd       — one dialog line (XOR-encrypted Shift-JIS)
-//
-// All other opcodes (end/show/hide/wait/music/intro/score…) don't affect the
-// text content we surface, so they're skipped.
+// Text arguments are XOR-encrypted Shift-JIS (thtk util_xor 0x77, 7, 0x10).
 
 import (
 	"encoding/binary"
@@ -36,32 +23,15 @@ import (
 	"golang.org/x/text/encoding/japanese"
 )
 
-const (
-	msgOpSpeakerPlayer = 7
-	msgOpSpeakerBoss   = 8
-	msgOpPlayerFace    = 12
-	msgOpBossFace      = 13
-	msgOpText          = 16
-)
-
-// MsgLine is one decoded dialog line: who speaks, their portrait face id, and
-// the UTF-8 text.
-type MsgLine struct {
-	IsRight bool   // true = boss/right speaker, false = player/left
-	FaceID  int    // portrait face id from the last 12/13 before this line
-	Text    string // decoded UTF-8 text
-}
-
-// ParseMSG decodes a TH10 .msg byte slice into ordered dialog lines. Entries
-// (conversation segments, e.g. boss-pre / boss-post) are concatenated in file
-// order; callers split them via the returned segment boundaries.
-func ParseMSG(data []byte) (lines []MsgLine, segments [][]MsgLine) {
+// ParseMSG decodes a TH10 .msg byte slice into its entries in file order, the
+// order ECL 338 selects them by.
+func ParseMSG(data []byte) [][]Instr {
 	if len(data) < 4 {
-		return nil, nil
+		return nil
 	}
 	count := int(binary.LittleEndian.Uint32(data))
 	if count <= 0 || 4+count*8 > len(data) {
-		return nil, nil
+		return nil
 	}
 	offsets := make([]int, count)
 	for i := 0; i < count; i++ {
@@ -69,56 +39,40 @@ func ParseMSG(data []byte) (lines []MsgLine, segments [][]MsgLine) {
 	}
 
 	dec := japanese.ShiftJIS.NewDecoder()
+	entries := make([][]Instr, count)
 	for i, start := range offsets {
 		end := len(data)
 		if i+1 < count {
 			end = offsets[i+1]
 		}
-		seg := parseMSGStream(data, start, end, dec)
-		if len(seg) > 0 {
-			segments = append(segments, seg)
-			lines = append(lines, seg...)
-		}
+		entries[i] = parseMSGStream(data, start, end, dec)
 	}
-	return lines, segments
+	return entries
 }
 
 func parseMSGStream(data []byte, p, end int, dec interface {
 	Bytes([]byte) ([]byte, error)
-}) []MsgLine {
-	var out []MsgLine
-	isRight := false
-	faceL, faceR := 0, 0
+}) []Instr {
+	var out []Instr
 	for p+4 <= end {
-		op := data[p+2]
+		in := Instr{Time: binary.LittleEndian.Uint16(data[p:]), Op: data[p+2]}
 		length := int(data[p+3])
 		argOff := p + 4
 		if argOff+length > end {
 			break
 		}
 		args := data[argOff : argOff+length]
-		switch op {
-		case msgOpSpeakerPlayer:
-			isRight = false
-		case msgOpSpeakerBoss:
-			isRight = true
-		case msgOpPlayerFace:
+		switch in.Op {
+		case msgLine1, msgLine2, msgText:
+			in.Text = decodeMSGText(args, dec)
+		default:
 			if len(args) >= 4 {
-				faceL = int(int32(binary.LittleEndian.Uint32(args)))
-			}
-		case msgOpBossFace:
-			if len(args) >= 4 {
-				faceR = int(int32(binary.LittleEndian.Uint32(args)))
-			}
-		case msgOpText:
-			if txt := decodeMSGText(args, dec); txt != "" {
-				face := faceL
-				if isRight {
-					face = faceR
-				}
-				out = append(out, MsgLine{IsRight: isRight, FaceID: face, Text: txt})
+				in.Arg = int32(binary.LittleEndian.Uint32(args))
+			} else if len(args) > 0 {
+				in.Arg = int32(args[0])
 			}
 		}
+		out = append(out, in)
 		p = argOff + length
 	}
 	return out
@@ -151,24 +105,24 @@ func decodeMSGText(enc []byte, dec interface {
 }
 
 // ---------------------------------------------------------------------------
-// Stage-level loader: official .msg → []Line, cached, mapped to our portraits.
+// Stage-level loader: official .msg, cached, with our speaker names.
 // ---------------------------------------------------------------------------
 
-// stageMsgSpeakers names the left (player) and right (boss/enemy) speakers for
-// each .msg segment of a stage, so the official text gets our portrait + name.
-// Index = segment order in the file. The right speaker varies by segment for
-// stages whose mid-boss differs from the boss (e.g. stage 3).
+// stageMsgSpeakers names the right (boss/enemy) speaker of each .msg entry of
+// a stage, so the overlay can pick our portraits. Index = entry order in the
+// file.
 type stageMsgSpeakers struct {
-	// rightBySeg[i] = boss/enemy speaker name for segment i (must exist in
-	// speakerFaces). Player name is derived from the character at load time.
+	// rightBySeg[i] = boss/enemy speaker name for entry i (must exist in
+	// speakerFaces).
 	rightBySeg []string
 }
 
-// msgSpeakers maps stageN → per-segment right-speaker names. Segment layout
-// (from the decoded files): most stages = [bossPre, post]; stage 3 has a
-// mid-boss = [midPre, midPost, bossPre, post].
+// msgSpeakers maps stageN → per-entry right-speaker names. Entry layout (from
+// the decoded files): most stages = [bossPre, post]; stage 3 = [midPre,
+// midPost, bossPre, post]; extra = [midPre, bossPre, post]. Stage 1's
+// mid-boss (静葉) has no dialog; stage 6's post entry has no text.
 var msgSpeakers = map[string]stageMsgSpeakers{
-	"stage1": {rightBySeg: []string{"秋静葉", "秋穣子"}}, // mid 静葉(pre), 穣子(boss)
+	"stage1": {rightBySeg: []string{"秋穣子", "秋穣子"}},
 	"stage2": {rightBySeg: []string{"鍵山雛", "鍵山雛"}},
 	"stage3": {rightBySeg: []string{"河城にとり", "河城にとり", "河城にとり", "河城にとり"}},
 	"stage4": {rightBySeg: []string{"射命丸文", "射命丸文"}},
@@ -177,20 +131,22 @@ var msgSpeakers = map[string]stageMsgSpeakers{
 	"extra":  {rightBySeg: []string{"八坂神奈子", "洩矢諏訪子", "洩矢諏訪子"}},
 }
 
-type stageDialog struct {
-	segments [][]Line
+// StageMSG is a stage's .msg for one character.
+type StageMSG struct {
+	Entries    [][]Instr
+	PlayerName string
+	BossNames  []string // the right speaker of each entry
 }
 
 var (
-	msgCache   = map[string]*stageDialog{}
+	msgCache   = map[string]*StageMSG{}
 	msgCacheMu sync.Mutex
 )
 
-// loadStageDialog parses & caches stXX_0C.msg for a stage ("stage2") and
-// character (0=Reimu, 1=Marisa), converting each segment into []Line with our
-// speaker names/portraits. Returns nil if the file is missing or unparsable
-// (callers then fall back to the hand-written scripts table).
-func loadStageDialog(stage string, character int) *stageDialog {
+// LoadStage parses and caches stXX_0C.msg for a stage ("stage2", "extra")
+// and character (0=Reimu, 1=Marisa). Nil when the file is missing or
+// unparsable.
+func LoadStage(stage string, character int) *StageMSG {
 	stageNum := stageIndex(stage)
 	if stageNum == 0 {
 		return nil
@@ -198,51 +154,36 @@ func loadStageDialog(stage string, character int) *stageDialog {
 	key := fmt.Sprintf("%s_%d", stage, character&1)
 	msgCacheMu.Lock()
 	defer msgCacheMu.Unlock()
-	if sd, ok := msgCache[key]; ok {
-		return sd
+	if sm, ok := msgCache[key]; ok {
+		return sm
 	}
 
+	var sm *StageMSG
 	path := fmt.Sprintf("msg/st%02d_%02d.msg", stageNum, character&1)
-	data, err := gamedata.ReadFile(path)
-	if err != nil {
-		msgCache[key] = nil
-		return nil
-	}
-	_, rawSegs := ParseMSG(data)
-	if len(rawSegs) == 0 {
-		msgCache[key] = nil
-		return nil
-	}
-
-	spk := msgSpeakers[stage]
-	playerName := "博麗霊夢"
-	if character&1 == 1 {
-		playerName = "霧雨魔理沙"
-	}
-
-	sd := &stageDialog{}
-	for i, seg := range rawSegs {
-		right := ""
-		if i < len(spk.rightBySeg) {
-			right = spk.rightBySeg[i]
-		}
-		var lines []Line
-		for _, ml := range seg {
-			speaker := playerName
-			if ml.IsRight {
-				speaker = right
+	if data, err := gamedata.ReadFile(path); err == nil {
+		if entries := ParseMSG(data); len(entries) > 0 {
+			sm = &StageMSG{Entries: entries, PlayerName: "博麗霊夢", BossNames: msgSpeakers[stage].rightBySeg}
+			if character&1 == 1 {
+				sm.PlayerName = "霧雨魔理沙"
 			}
-			lines = append(lines, Line{
-				Speaker:    speaker,
-				Expression: msgFaceExpression(ml.FaceID),
-				Text:       ml.Text,
-				IsRight:    ml.IsRight,
-			})
 		}
-		sd.segments = append(sd.segments, lines)
 	}
-	msgCache[key] = sd
-	return sd
+	msgCache[key] = sm
+	return sm
+}
+
+// Open starts entry id (ECL 338's FUN_00415db0); nil when there is no such
+// entry.
+func (s *StageMSG) Open(id int32, hooks Hooks) *MSG {
+	if s == nil || id < 0 || int(id) >= len(s.Entries) {
+		return nil
+	}
+	m := NewMSG(id, s.Entries[id], hooks)
+	m.View.PlayerName = s.PlayerName
+	if int(id) < len(s.BossNames) {
+		m.View.BossName = s.BossNames[id]
+	}
+	return m
 }
 
 // stageIndex extracts the stage number from a stage key (0 = unknown).

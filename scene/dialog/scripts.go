@@ -1,7 +1,7 @@
 package dialog
 
-// Line 字面量是 Speaker / Text / IsRight，stage 脚本通过 MidPre/BossPre/Post 取这里的对白。
-// 资源被硬编码进二进制，无需附带任何 JSON。
+// 手写的中文对白，Line 字面量是 Speaker / Text / IsRight。关卡对话已改用官方 .msg
+// （StageEntries），这里只剩被排除在构建外的 Deprecated/stage1 引用；M5 移植 MSG VM 时删除。
 
 func r(s, t string) Line { return Line{Speaker: s, Text: t, IsRight: true} }
 func l(s, t string) Line { return Line{Speaker: s, Text: t, IsRight: false} }
@@ -272,55 +272,3 @@ func BossPre(stage string) []Line { return cloneLines(scripts[stage].bossPre) }
 // Post 关底BOSS被击败后对话。
 func Post(stage string) []Line { return cloneLines(scripts[stage].post) }
 
-// --- 官方 .msg 版（优先）：按角色加载原版对话，缺失时回退到手写表 ---
-
-// msgSegment 返回某关某角色的第 seg 段官方对话（从 0 起）。无则 nil。
-func msgSegment(stage string, character, seg int) []Line {
-	sd := loadStageDialog(stage, character)
-	if sd == nil || seg < 0 || seg >= len(sd.segments) {
-		return nil
-	}
-	return cloneLines(sd.segments[seg])
-}
-
-// segmentLayout 描述某关 .msg 段顺序到 (midPre,bossPre,post) 的映射；-1=该段不存在。
-// 多数关 [bossPre, post]；stage3 有中Boss = [midPre, midPost(忽略), bossPre, post]。
-type segmentLayout struct{ midPre, bossPre, post int }
-
-var msgLayouts = map[string]segmentLayout{
-	"stage1": {midPre: 0, bossPre: 1, post: -1}, // 秋姉妹: 静葉(中), 穣子(底)
-	"stage2": {midPre: -1, bossPre: 0, post: 1},
-	"stage3": {midPre: 0, bossPre: 2, post: 3},
-	"stage4": {midPre: -1, bossPre: 0, post: 1},
-	"stage5": {midPre: -1, bossPre: 0, post: 1},
-	"stage6": {midPre: -1, bossPre: 0, post: 1},
-	"extra":  {midPre: 0, bossPre: 1, post: 2},
-}
-
-// MidPreC / BossPreC / PostC：角色感知的对话获取。优先官方 .msg，回退手写表。
-func MidPreC(stage string, character int) []Line {
-	if l, ok := msgLayouts[stage]; ok && l.midPre >= 0 {
-		if seg := msgSegment(stage, character, l.midPre); seg != nil {
-			return seg
-		}
-	}
-	return MidPre(stage)
-}
-
-func BossPreC(stage string, character int) []Line {
-	if l, ok := msgLayouts[stage]; ok && l.bossPre >= 0 {
-		if seg := msgSegment(stage, character, l.bossPre); seg != nil {
-			return seg
-		}
-	}
-	return BossPre(stage)
-}
-
-func PostC(stage string, character int) []Line {
-	if l, ok := msgLayouts[stage]; ok && l.post >= 0 {
-		if seg := msgSegment(stage, character, l.post); seg != nil {
-			return seg
-		}
-	}
-	return Post(stage)
-}

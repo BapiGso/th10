@@ -57,6 +57,9 @@ func (p *Player) updateReimuAShot(in *input.State) {
 	focused := in.IsPressed(input.KeyFocus)
 	s.updateOptions(p.X, p.Y, p.GS.Power, focused)
 	held := in.IsPressed(input.KeyShot)
+	if p.NoAttack {
+		s.clock, held = -1, false // FUN_004281d0 is skipped and its timer reset
+	}
 	if s.clock < 0 && held {
 		s.clock = 0
 	}

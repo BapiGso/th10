@@ -5,7 +5,6 @@ import (
 	"math"
 	"th10/audio"
 	"th10/render"
-	"th10/scene/dialog"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
 
@@ -27,13 +26,11 @@ type eclScript struct {
 	frame    int
 	finished bool
 	bgX, bgY float64
-	bossBGM  bool
 
 	bg1, bg2 *ebiten.Image
 	bg3, bg4 *ebiten.Image
 
-	vm  *stageecl.VM
-	dlg *stage.DialogQueue
+	vm *stageecl.VM
 }
 
 func NewScript() stage.Script {
@@ -55,13 +52,9 @@ func (s *eclScript) loadBg() {
 
 func (s *eclScript) Init(ctx *stage.Context) {
 	ctx.PlayBGM(audio.BGMStage1)
-	// Stage 1 has a mid-boss and a boss, but no post-boss dialog.
-	ch := ctx.State.Character
-	s.dlg = stage.NewDialogQueue(ctx,
-		dialog.MidPreC("stage1", ch), dialog.BossPreC("stage1", ch))
-	if s.vm != nil {
-		s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
-	}
+	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
+	// clears the stage.
+	ctx.LoadMSG("stage1", audio.BGMStage1Boss)
 }
 
 func (s *eclScript) Update(ctx *stage.Context) {
@@ -71,14 +64,10 @@ func (s *eclScript) Update(ctx *stage.Context) {
 	s.bgY = cam.y
 	if s.vm != nil {
 		s.vm.Update(ctx)
-		if !s.bossBGM && s.vm.BossActive() {
-			s.bossBGM = true
-			ctx.PlayBGM(audio.BGMStage1Boss)
-		}
 	}
-	// Stage clears when the ECL main task finishes (after the boss is defeated:
-	// main blocks on deathWait then delete()). The frame cap is only a safety
-	// net against a stuck VM, well beyond a real playthrough.
+	// The stage clears from the post dialog's MSG op 20 (stage.Context.LoadMSG).
+	// Main ending (it deletes itself after that dialog) and the frame cap are
+	// only fallbacks against a dialog that never comes or a stuck VM.
 	if s.vm != nil && s.vm.MainDone() {
 		s.finished = true
 	}

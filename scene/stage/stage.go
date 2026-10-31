@@ -40,8 +40,8 @@ type Script interface {
 type Context struct {
 	State   *game.GameState
 	Player  *player.Player
-	Bullets *bullet.Pool // 敌弹管理器（DAT_004776f0）
-	Lasers  *laser.Pool  // 敌方激光（激光管理器尚未移植）
+	Bullets *bullet.Pool   // 敌弹管理器（DAT_004776f0）
+	Lasers  *laser.Manager // 激光管理器（DAT_0047781c）
 	Items   *item.Pool
 	Effects *effect.Pool
 	Enemies []*enemy.Enemy // 活跃敌人列表
@@ -51,6 +51,7 @@ type Context struct {
 	World     *anm.World
 	Anm       *anm.Env
 	BulletEnv *bullet.Env
+	LaserEnv  *laser.Env
 	// RNG 是原作的游戏随机数（DAT_004918b0），ECL 与子弹自身的 ANM 脚本共用。
 	RNG   *zun.RNG
 	stage *Stage // 反向引用（用于触发对话等）
@@ -58,16 +59,21 @@ type Context struct {
 	// ManagerOrder 由 ECL VM 设置：按原作敌人管理器链表顺序列出存活敌人，
 	// 包括隐藏的 main 敌人（trace 采样用，与 th10probe 对齐）。
 	ManagerOrder func() []*enemy.Enemy
+	// Boss0 由 ECL VM 设置：0 号 Boss 槽敌人的位置（跟随 Boss 的无限激光用）。
+	Boss0 func() ([3]float32, bool)
+
+	// msg 是正在播放的对话（nil = 无），msgs 是本关的 .msg，bossBGM 是 op 18
+	// 切换的 Boss 曲，fadeFrames 是 op 21 的淡出帧数。cleared 表示 op 20 已执行。
+	msg        *dialog.MSG
+	msgs       *dialog.StageMSG
+	bossBGM    int
+	fadeFrames int
+	cleared    bool
 }
 
 // AddEnemy 脚本用：添加敌人
 func (c *Context) AddEnemy(e *enemy.Enemy) {
 	c.Enemies = append(c.Enemies, e)
-}
-
-// StartDialog 脚本用：触发对话覆盖层
-func (c *Context) StartDialog(lines []dialog.Line) {
-	c.stage.dialog = dialog.NewOverlay(lines)
 }
 
 // BossHUDInfo 顶部 Boss 血条/符卡 HUD 数据。脚本可选实现 BossHUD() 提供。
@@ -81,46 +87,59 @@ type BossHUDInfo struct {
 	Bonus     int64
 }
 
-// DialogActive 报告对话覆盖层是否正在显示（ECL VM 的 339 用它阻塞 main 任务）。
+// DialogActive 报告是否有对话（MSG 对象存在）：对话期间自机不能射击和放灵击，
+// 敌弹不判定，rank 不增长。
 func (c *Context) DialogActive() bool {
-	return c.stage.dialog != nil
+	return c.msg != nil
 }
 
-// DialogQueue 为 ECL 驱动的关卡桥接对话：ECL 的每个对话事件 (339) 依次消费
-// 一段预设台词。ECL 的对话 id 在各关并不一致，故按出现顺序消费而非按 id 索引。
-type DialogQueue struct {
-	ctx   *Context
-	lines [][]dialog.Line
-	next  int
-}
+// MSG 返回正在播放的对话，nil = 无。
+func (c *Context) MSG() *dialog.MSG { return c.msg }
 
-// NewDialogQueue 按顺序提供若干段对话（如 bossPre, post）。空段会被跳过。
-func NewDialogQueue(ctx *Context, segments ...[]dialog.Line) *DialogQueue {
-	return &DialogQueue{ctx: ctx, lines: segments}
-}
-
-// Open 由 VM 在对话事件触发时调用，弹出下一段非空台词；无更多台词返回 false。
-func (q *DialogQueue) Open(_ int32) bool {
-	for q.next < len(q.lines) {
-		seg := q.lines[q.next]
-		q.next++
-		if len(seg) > 0 {
-			q.ctx.StartDialog(seg)
-			return true
-		}
+// LoadMSG loads the stage's .msg ("stage4", "extra") for the player's
+// character; op 18 starts bossBGM. Op 21 fades the music out over 2 s, 8 s on
+// stage 6 (FUN_00420c30).
+func (c *Context) LoadMSG(stage string, bossBGM int) {
+	c.msgs = dialog.LoadStage(stage, c.State.Character)
+	c.bossBGM = bossBGM
+	c.fadeFrames = 120
+	if stage == "stage6" {
+		c.fadeFrames = 480
 	}
-	return false
 }
 
-func (c *Context) PlayerName() string {
-	if c.State != nil && c.State.Character == game.CharMarisa {
-		return "魔理沙"
+// OpenMSG starts entry id for ECL 338 (FUN_00415db0). The MSG's constructor
+// (FUN_00415b00) cancels every bullet (the lasers are cleared by ECL 338
+// itself); a missing entry opens nothing.
+func (c *Context) OpenMSG(id int32) {
+	m := c.msgs.Open(id, dialog.Hooks{
+		SE:      c.PlaySEID,
+		BossBGM: func() { c.PlayBGM(c.bossBGM) },
+		Clear:   func() { c.cleared = true },
+		FadeBGM: func() { c.FadeBGM(c.fadeFrames) },
+	})
+	if m == nil {
+		return
 	}
-	return "灵梦"
+	c.msg = m
+	c.Bullets.CancelAll(c.BulletEnv)
 }
 
-func (c *Context) PlayerLine(text string) dialog.Line {
-	return dialog.Line{Speaker: c.PlayerName(), Text: text, IsRight: false}
+// Cleared reports whether a dialog's op 20 has cleared the stage.
+func (c *Context) Cleared() bool { return c.cleared }
+
+// MSGWaiting is ECL 339's condition: a dialog is up and has not signalled
+// (op 11) this frame.
+func (c *Context) MSGWaiting() bool {
+	return c.msg != nil && c.msg.Signal == 0
+}
+
+// UpdateMSG runs the dialog for a frame, late in the calc chain: advance is
+// the shot key's press edge, skip whether Ctrl is held.
+func (c *Context) UpdateMSG(advance, skip bool) {
+	if c.msg != nil && !c.msg.Update(advance, skip) {
+		c.msg = nil
+	}
 }
 
 // Stage 通用关卡场景，驱动一关的全部逻辑
@@ -130,7 +149,6 @@ type Stage struct {
 	field        *ebiten.Image // 游戏区域离屏缓冲
 	frontFrame   *ebiten.Image
 	hud          *hud                                                 // 状态栏（ebitenui 排版）
-	dialog       *dialog.Overlay                                      // 对话覆盖层（nil=无对话）
 	wasBombing   bool                                                 // 上一帧是否处于 Bomb 态（检测起爆沿）
 	bossNameFace ebitext.Face                                         // 符卡名字体（系统黑体，懒加载）
 	bossNumFace  ebitext.Face                                         // 符卡时限数字字体（HUD 字体，懒加载）
@@ -180,8 +198,15 @@ func (s *Stage) UpdateHeadless(in *input.State) {
 	s.update(in)
 }
 
-// FinishedHeadless 报告脚本是否已结束（无头模拟的终止条件）。
-func (s *Stage) FinishedHeadless() bool { return s.script.Finished() }
+// FinishedHeadless 报告关卡是否已结束（无头模拟的终止条件）。
+func (s *Stage) FinishedHeadless() bool { return s.finished() }
+
+// finished reports the stage's end: the MSG's op 20, else the script's own
+// condition once no dialog is up. Stages 4-6 and Extra loop in their main sub
+// forever after the boss, so only op 20 ends them.
+func (s *Stage) finished() bool {
+	return s.ctx.cleared || (s.ctx.msg == nil && s.script.Finished())
+}
 
 // ExportContext 暴露内部 Context 给 sim 包（无头模拟需要直接读写实体池）。
 func ExportContext(s *Stage) *Context { return s.ctx }
@@ -216,7 +241,7 @@ func (s *Stage) Update(g *game.Game) error {
 		}
 		return nil
 	}
-	if s.script.Finished() {
+	if s.finished() {
 		if s.NextScene != nil {
 			g.GoTo(s.NextScene(g, ctx.State))
 		} else {
@@ -230,20 +255,13 @@ func (s *Stage) Update(g *game.Game) error {
 func (s *Stage) update(in *input.State) error {
 	ctx := s.ctx
 
-	// 对话覆盖层：暂停实体更新，只推进对话
-	if s.dialog != nil {
-		if !s.dialog.Update(in.JustPressed(input.KeyOk)) {
-			s.dialog = nil
-		}
-		return nil
-	}
-
 	ctx.State.Frame++
 
 	// 信仰值自然衰减
 	ctx.State.DecayFaith()
 
-	// 1. 玩家
+	// 1. 玩家（对话期间不能射击和放灵击，FUN_004281d0 与灵击检查都要求没有 MSG）
+	ctx.Player.NoAttack = ctx.msg != nil
 	s.updatePlayer(in)
 	ctx.SyncPlayer() // the script aims at this frame's position
 
@@ -283,7 +301,10 @@ func (s *Stage) update(in *input.State) error {
 		lu.LateUpdate(ctx)
 	}
 
-	// 8. 清理
+	// 8. 对话（calc chain 末尾的 GUI/MSG）
+	ctx.UpdateMSG(in.JustPressed(input.KeyOk), in.IsPressed(input.KeySkip))
+
+	// 9. 清理
 	s.cleanEnemies()
 
 	return nil
@@ -314,7 +335,7 @@ func (s *Stage) checkCollisions() {
 	ctx := s.ctx
 	p := ctx.Player
 	st := ctx.State
-	px, py, pr := p.X, p.Y, p.HitboxRadius
+	px, py := p.X, p.Y
 
 	// 自机子弹 vs 敌人
 	for _, e := range ctx.Enemies {
@@ -333,29 +354,6 @@ func (s *Stage) checkCollisions() {
 			if killed {
 				s.defeatEnemy(e)
 			}
-		}
-	}
-
-	// 激光 vs 自机（敌弹的命中与擦弹由子弹管理器自己判定，见 bullets.go）
-	if !p.IsInvincible() {
-		ctx.Lasers.Each(func(l *laser.Laser) {
-			if l.HitPlayer(px, py, pr) {
-				ctx.bulletHit()
-			}
-		})
-	}
-	if p.State == player.StateNormal || p.State == player.StateRespawn {
-		grazed := false
-		ctx.Lasers.Each(func(l *laser.Laser) {
-			if l.Age > 4 && l.GrazePlayer(px, py, p.GrazeRadius) {
-				st.Graze++
-				st.AddFaith(3)
-				st.AddScore(100)
-				grazed = true
-			}
-		})
-		if grazed {
-			ctx.PlaySE(audio.SEGraze)
 		}
 	}
 
@@ -520,6 +518,11 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 	op.GeoM.Translate(game.FieldLeft+sx, game.FieldTop+sy)
 	screen.DrawImage(s.field, op)
 
+	// 3b. 对话（立绘与对话框都在 Field 范围内）
+	if ctx.msg != nil {
+		dialog.Draw(screen, &ctx.msg.View)
+	}
+
 	// 4. 游戏框体/HUD 底板
 	if s.frontFrame != nil {
 		screen.DrawImage(s.frontFrame, nil)
@@ -533,11 +536,6 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 		vector.FillRect(screen, 0, 0, game.ScreenWidth, game.ScreenHeight,
 			color.RGBA{0, 0, 0, 128}, false)
 		ebitenutil.DebugPrintAt(screen, "PAUSED  (Esc to resume)", game.ScreenWidth/2-80, game.ScreenHeight/2)
-	}
-
-	// 7. 对话覆盖层
-	if s.dialog != nil {
-		s.dialog.Draw(screen)
 	}
 }
 
@@ -662,7 +660,7 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 }
 
 // drawBullets draws the bullets layer by layer as the manager sorted them,
-// then the lasers.
+// then the lasers, each beam under its emitter.
 func (s *Stage) drawBullets(field *ebiten.Image) {
 	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
 	for l := range bullet.Layers {
@@ -670,8 +668,11 @@ func (s *Stage) drawBullets(field *ebiten.Image) {
 			sprite.DrawVM(field, &b.VM, -fl, -ft)
 		})
 	}
-	s.ctx.Lasers.Each(func(l *laser.Laser) {
-		drawLaser(field, l, l.X-fl, l.Y-ft)
+	s.ctx.Lasers.Each(s.ctx.LaserEnv, func(beam, emitter *anm.VM) {
+		sprite.DrawVM(field, beam, -fl, -ft)
+		if emitter != nil {
+			sprite.DrawVM(field, emitter, -fl, -ft)
+		}
 	})
 }
 
@@ -683,37 +684,6 @@ func (s *Stage) drawWorld(field *ebiten.Image) {
 			sprite.DrawVM(field, vm, -fl, -ft)
 		})
 	}
-}
-
-func drawLaser(field *ebiten.Image, l *laser.Laser, x, y float64) {
-	x2 := x + math.Cos(l.Angle)*l.Length
-	y2 := y + math.Sin(l.Angle)*l.Length
-	c := laserColor(l.Color, 120)
-	width := l.Width
-	vector.StrokeLine(field, float32(x), float32(y), float32(x2), float32(y2), float32(width+6), color.RGBA{255, 255, 255, 48}, false)
-	vector.StrokeLine(field, float32(x), float32(y), float32(x2), float32(y2), float32(width), c, false)
-	vector.StrokeLine(field, float32(x), float32(y), float32(x2), float32(y2), float32(math.Max(2, width*0.28)), color.RGBA{255, 255, 255, 190}, false)
-}
-
-func laserColor(idx int, alpha uint8) color.RGBA {
-	palette := []color.RGBA{
-		{255, 80, 80, alpha},
-		{255, 150, 64, alpha},
-		{255, 230, 80, alpha},
-		{100, 230, 120, alpha},
-		{80, 190, 255, alpha},
-		{110, 120, 255, alpha},
-		{220, 110, 255, alpha},
-		{255, 120, 190, alpha},
-	}
-	if len(palette) == 0 {
-		return color.RGBA{255, 255, 255, alpha}
-	}
-	idx %= len(palette)
-	if idx < 0 {
-		idx += len(palette)
-	}
-	return palette[idx]
 }
 
 func (s *Stage) drawPlayer(field *ebiten.Image) {

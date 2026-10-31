@@ -9,15 +9,15 @@ package ecl
 // order: a var arg of -1 pops the data stack, so a tier op that reads only
 // the chosen pair must not read the others.
 //
-// The lasers are still the first-pass model in entity/laser: the binary's
-// laser manager (FUN_0041c510 and its per-kind vtables) is not ported, so
-// the laser ops below keep their params' resolve order but map them onto
-// that model.
+// The laser ops 412-434 build a line or infinite laser template and fire it
+// through the laser manager (FUN_0041c510, entity/laser), or look a laser up
+// by its handle (FUN_0040cf90) and write one of its fields.
 
 import (
 	"math"
 
 	"th10/entity/bullet"
+	"th10/entity/laser"
 	"th10/scene/stage"
 )
 
@@ -99,7 +99,7 @@ func (vm *VM) execBulletOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	case opETClearAll: // FUN_00408210(1), FUN_0041c850
 		if ctx != nil && ctx.Bullets != nil {
 			ctx.Bullets.RectClear(true, ctx.BulletEnv)
-			ctx.Lasers.ClearAll()
+			ctx.Lasers.ClearAll(true, ctx.LaserEnv)
 		}
 	case opETCopy: // the source is resolved first
 		src := ri(1)
@@ -112,8 +112,7 @@ func (vm *VM) execBulletOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		if ctx != nil && ctx.Bullets != nil {
 			pos := a.mv.final.pos
 			ctx.Bullets.CircleClear(pos[0], pos[1], r, in.Opcode == opETCancel, false, ctx.BulletEnv)
-			x, y := eclToWorld(float64(pos[0]), float64(pos[1]))
-			ctx.Lasers.ClearCircle(x, y, float64(r))
+			ctx.Lasers.CircleClear(pos, r, in.Opcode == opETCancel, ctx.LaserEnv)
 		}
 	case opETSpeedR3:
 		s := ri(0)
@@ -263,57 +262,81 @@ func rankBlend(delta int32, rank int) int32 {
 	return v >> 11
 }
 
-// fireLaserLine is 412, 428, 431 and 433 (FUN_0041c510(0)): a line laser from
-// the enemy plus slot 0's offset. The params are type, colour, then six
-// floats; the model takes the angle, speed, length and width from them.
-func (vm *VM) fireLaserLine(ctx *stage.Context, t *eclTask, a *eclActor, in *Instr) {
-	p := in.Params
-	vm.resolveInt(t, p[0])
-	col := vm.resolveInt(t, p[1])
-	var f [6]float32
-	for i := range f {
-		f[i] = vm.resolveFloat(t, p[2+i])
+// laserPos is where the enemy's lasers start: the enemy plus slot 0's fire
+// offset.
+func (a *eclActor) laserPos() [3]float32 {
+	var p [3]float32
+	for k := range p {
+		p[k] = a.tplOff[0][k] + a.mv.final.pos[k]
 	}
-	if ctx == nil || ctx.Lasers == nil {
-		return
-	}
-	angle, speed, head, length, width := float64(f[0]), float64(f[1]), float64(f[2]), float64(f[3]), float64(f[5])
-	x, y := vm.laserOrigin(a, head, angle)
-	ctx.Lasers.Fire(x, y, speed, angle, length, width, int(col), 240)
+	return p
 }
 
-// fireLaserInfinite is 413, 429, 432 and 434 (FUN_0041c510(1)): a laser held
-// for a set of phase lengths, its handle stored into the var param 0 names.
+// fireLaserLine is 412, 428, 431 and 433 (FUN_0041c510(0)): a line laser
+// from the enemy plus slot 0's offset, drawn additively by 412 and 431. 431
+// and 433 take slot 0's transform entries.
+func (vm *VM) fireLaserLine(ctx *stage.Context, t *eclTask, a *eclActor, in *Instr) {
+	p := in.Params
+	var tpl laser.LineTemplate
+	if in.Opcode == opLaserOnAEx || in.Opcode == opLaserOnBEx {
+		tpl.Ex = a.tpl[0].Ex
+	}
+	tpl.Pos = a.laserPos()
+	tpl.Type = int16(vm.resolveInt(t, p[0]))
+	tpl.Colour = int16(vm.resolveInt(t, p[1]))
+	tpl.Angle = vm.resolveFloat(t, p[2])
+	tpl.Speed = vm.resolveFloat(t, p[3])
+	tpl.Init = vm.resolveFloat(t, p[4])
+	tpl.Full = vm.resolveFloat(t, p[5])
+	tpl.MaxDist = vm.resolveFloat(t, p[6])
+	tpl.Width = vm.resolveFloat(t, p[7])
+	if in.Opcode == opLaserOnA || in.Opcode == opLaserOnAEx {
+		tpl.Flags |= 1
+	}
+	if ctx != nil && ctx.Lasers != nil {
+		ctx.Lasers.FireLine(&tpl, ctx.LaserEnv)
+	}
+}
+
+// fireLaserInfinite is 413, 429, 432 and 434 (FUN_0041c510(1)): an infinite
+// laser from the enemy plus slot 0's offset, its handle stored into the var
+// param 0 names. 413 and 432 draw it additively; 432 and 434 take slot 0's
+// transform entries.
 func (vm *VM) fireLaserInfinite(ctx *stage.Context, t *eclTask, a *eclActor, in *Instr) {
 	p := in.Params
-	vm.resolveInt(t, p[1])
-	col := vm.resolveInt(t, p[2])
-	angle := vm.resolveFloat(t, p[3])
-	head := vm.resolveFloat(t, p[4])
-	length := vm.resolveFloat(t, p[5])
-	life := 0
-	for i := 6; i <= 9; i++ {
-		life += max(0, int(vm.resolveInt(t, p[i])))
+	tpl := laser.InfiniteTemplate{Speed: 8}
+	if in.Opcode == opLaserStOnEx || in.Opcode == opLaserStBEx {
+		tpl.Ex = a.tpl[0].Ex
 	}
-	width := vm.resolveFloat(t, p[10])
-	vm.resolveInt(t, p[11])
-	if life == 0 {
-		life = 180
+	tpl.Pos = a.laserPos()
+	tpl.Type = int16(vm.resolveInt(t, p[1]))
+	tpl.Colour = int16(vm.resolveInt(t, p[2]))
+	tpl.Angle = vm.resolveFloat(t, p[3])
+	tpl.Init = vm.resolveFloat(t, p[4])
+	tpl.Max = vm.resolveFloat(t, p[5])
+	tpl.Delay = vm.resolveInt(t, p[6])
+	tpl.Expand = vm.resolveInt(t, p[7])
+	tpl.Hold = vm.resolveInt(t, p[8])
+	tpl.Shrink = vm.resolveInt(t, p[9])
+	tpl.Width = vm.resolveFloat(t, p[10])
+	tpl.Flags = uint32(vm.resolveInt(t, p[11]))
+	if in.Opcode == opLaserStOn || in.Opcode == opLaserStOnEx {
+		tpl.Flags |= 2
+	} else {
+		tpl.Flags &^= 2
 	}
 	var id int32
 	if ctx != nil && ctx.Lasers != nil {
-		x, y := vm.laserOrigin(a, float64(head), float64(angle))
-		if l := ctx.Lasers.Fire(x, y, 0, float64(angle), float64(length), float64(width), int(col), life); l != nil {
-			id = l.ID
-		}
+		id = ctx.Lasers.FireInfinite(&tpl, ctx.LaserEnv)
 	}
 	if p[0].IsVar {
 		vm.storeVar(t, p[0], intVal(id))
 	}
 }
 
-// changeLaser is 414-419: when the handle names a live laser, resolve the
-// rest and apply it. Only 414's (x, y) position (+0x24) maps onto the model.
+// changeLaser is 414-419: when the handle names a laser, resolve the rest
+// and write it: 414 the tail (+0x24), 415 the template's +0x430 (FUN_0040cf60),
+// 416 the speed, 417 the width, 418 the angle, 419 the template's +0x440.
 func (vm *VM) changeLaser(ctx *stage.Context, t *eclTask, in *Instr) {
 	id := vm.resolveInt(t, in.Params[0])
 	if ctx == nil || ctx.Lasers == nil {
@@ -323,27 +346,23 @@ func (vm *VM) changeLaser(ctx *stage.Context, t *eclTask, in *Instr) {
 	if l == nil {
 		return
 	}
+	b := l.Base()
 	switch in.Opcode {
 	case opLaserPos, opLaserMove: // y is resolved first
 		y := vm.resolveFloat(t, in.Params[2])
 		x := vm.resolveFloat(t, in.Params[1])
 		if in.Opcode == opLaserPos {
-			l.X, l.Y = eclToWorld(float64(x), float64(y))
+			b.Pos = [3]float32{x, y, 0}
+		} else {
+			l.SetTpl430([3]float32{x, y, 0})
 		}
-	default:
-		vm.resolveFloat(t, in.Params[1])
+	case opLaser416:
+		b.Speed = vm.resolveFloat(t, in.Params[1])
+	case opLaser417:
+		b.Width = vm.resolveFloat(t, in.Params[1])
+	case opLaser418:
+		b.Angle = vm.resolveFloat(t, in.Params[1])
+	case opLaser419:
+		l.SetTpl440(vm.resolveFloat(t, in.Params[1]))
 	}
-}
-
-// laserOrigin is the enemy plus slot 0's offset in world coordinates, moved
-// head pixels along the angle.
-func (vm *VM) laserOrigin(a *eclActor, head, angle float64) (float64, float64) {
-	off := a.tplOff[0]
-	pos := a.mv.final.pos
-	x, y := eclToWorld(float64(off[0]+pos[0]), float64(off[1]+pos[1]))
-	if !eclUnset(head) && head != 0 {
-		x += math.Cos(angle) * head
-		y += math.Sin(angle) * head
-	}
-	return x, y
 }

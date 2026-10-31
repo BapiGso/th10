@@ -46,6 +46,9 @@ type Player struct {
 	DeathTimer  int // 决死判定计时
 	BombTimer   int // 符卡持续计时
 	ShootTimer  int // 射击间隔计时
+	// NoAttack 由关卡在对话期间置位：射击（FUN_004281d0）和灵击都要求没有
+	// MSG，决死灵击不受限。
+	NoAttack bool
 
 	// 行走图动画
 	AnimState AnimState
@@ -135,7 +138,7 @@ func (p *Player) UpdateInput(in *input.State) {
 		return
 
 	case StateRespawn:
-		if in.IsPressed(input.KeyBomb) && p.tryBomb() {
+		if !p.NoAttack && in.IsPressed(input.KeyBomb) && p.tryBomb() {
 			return
 		}
 		p.InvincTimer--
@@ -161,7 +164,7 @@ func (p *Player) UpdateInput(in *input.State) {
 		if p.InvincTimer > 0 {
 			p.InvincTimer--
 		}
-		if in.IsPressed(input.KeyBomb) && p.tryBomb() {
+		if !p.NoAttack && in.IsPressed(input.KeyBomb) && p.tryBomb() {
 			return
 		}
 		p.move(in)
@@ -221,7 +224,7 @@ func (p *Player) shoot(in *input.State) {
 	if p.reimuA != nil {
 		return
 	}
-	if !in.IsPressed(input.KeyShot) {
+	if p.NoAttack || !in.IsPressed(input.KeyShot) {
 		p.ShootTimer = 0
 		return
 	}

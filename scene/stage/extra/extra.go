@@ -5,7 +5,6 @@ import (
 	"math"
 	"th10/audio"
 	"th10/render"
-	"th10/scene/dialog"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
 
@@ -20,11 +19,9 @@ type ScriptExtra struct {
 	frame    int
 	finished bool
 	bgY      float64
-	bossBGM  bool
 	bg1, bg2 *ebiten.Image // stg7bg.png [256x256], stg7bg2.png [256x256]
 	bg3      *ebiten.Image // stg7bg3.png [32x256]
 	vm       *stageecl.VM
-	dlg      *stage.DialogQueue
 }
 
 func NewScript() *ScriptExtra {
@@ -41,10 +38,9 @@ func (s *ScriptExtra) loadBg() {
 
 func (s *ScriptExtra) Init(ctx *stage.Context) {
 	ctx.PlayBGM(audio.BGMExtra)
-	ch := ctx.State.Character
-	s.dlg = stage.NewDialogQueue(ctx,
-		dialog.MidPreC("extra", ch), dialog.BossPreC("extra", ch), dialog.PostC("extra", ch))
-	s.vm.SetDialogBridge(s.dlg.Open, ctx.DialogActive)
+	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
+	// clears the stage.
+	ctx.LoadMSG("extra", audio.BGMExtraBoss)
 }
 
 func (s *ScriptExtra) Update(ctx *stage.Context) {
@@ -53,10 +49,6 @@ func (s *ScriptExtra) Update(ctx *stage.Context) {
 
 	if s.vm != nil {
 		s.vm.Update(ctx)
-		if !s.bossBGM && s.vm.BossActive() {
-			s.bossBGM = true
-			ctx.PlayBGM(audio.BGMExtraBoss)
-		}
 		if s.vm.MainDone() {
 			s.finished = true
 		}

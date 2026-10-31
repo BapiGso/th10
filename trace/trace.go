@@ -49,6 +49,8 @@ type Frame struct {
 	E []EnemyRow
 	// Enemy bullets (bounded sample, in pool slot order)
 	B []BulletRow
+	// The playing .msg entry, nil without one
+	MSG *MSGRow
 }
 
 // EnemyRow is one enemy's sampled state.
@@ -66,6 +68,14 @@ type BulletRow struct {
 	Speed float64
 	Type  int
 	Color int
+}
+
+// MSGRow is the playing dialog (FUN_00415e90's object): the entry ECL 338
+// opened, its clock (+0x1c), op 10's timer (+0x30), op 11's signal (+0x78)
+// and the time and opcode of the instruction it is at (+0x5c).
+type MSGRow struct {
+	ID, Clock, Wait, Signal int
+	At, Op                  int
 }
 
 // MaxEnemyRows and MaxBulletRows bound the per-frame sample so traces stay
@@ -98,6 +108,12 @@ func (tw *Writer) WriteFrame(f *Frame) {
 		f.Enemies, f.Bullets, f.Items, f.PBullets)
 	if tw.err != nil {
 		return
+	}
+	if m := f.MSG; m != nil {
+		if _, tw.err = fmt.Fprintf(tw.w, "M %d clock %d wait %d signal %d at %d op %d\n",
+			m.ID, m.Clock, m.Wait, m.Signal, m.At, m.Op); tw.err != nil {
+			return
+		}
 	}
 	for i := range f.E {
 		e := &f.E[i]
@@ -196,6 +212,15 @@ func (tr *Reader) Next() (*Frame, error) {
 				return nil, err
 			}
 			tr.held.B = append(tr.held.B, b)
+		case "M":
+			if tr.held == nil {
+				continue
+			}
+			var m MSGRow
+			if err := parseMSGLine(&m, fields); err != nil {
+				return nil, err
+			}
+			tr.held.MSG = &m
 		}
 	}
 }
@@ -278,6 +303,22 @@ func parseEnemyLine(e *EnemyRow, t []string) error {
 	parseAt(6, &act)
 	parseAt(8, &e.Type)
 	e.Active = act != 0
+	return err
+}
+
+func parseMSGLine(m *MSGRow, t []string) error {
+	// M <id> clock <n> wait <n> signal <n> at <n> op <n>
+	if len(t) < 12 {
+		return fmt.Errorf("trace: short M line %q", strings.Join(t, " "))
+	}
+	var err error
+	for i, dst := range []*int{&m.ID, &m.Clock, &m.Wait, &m.Signal, &m.At, &m.Op} {
+		v, e := strconv.Atoi(t[1+2*i])
+		if e != nil && err == nil {
+			err = e
+		}
+		*dst = v
+	}
 	return err
 }
 

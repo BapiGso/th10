@@ -89,6 +89,15 @@ func (vm *VM) boss0() *eclActor {
 	return nil
 }
 
+// boss0Pos is boss slot 0's position (enemy +0x1068), for the infinite
+// lasers that follow it.
+func (vm *VM) boss0Pos() ([3]float32, bool) {
+	if a := vm.boss0(); a != nil {
+		return a.mv.final.pos, true
+	}
+	return [3]float32{}, false
+}
+
 // set reports a float arg that is not the "keep the current value" sentinel.
 func set(v float32) bool { return float64(v) > unsetArg }
 
@@ -295,24 +304,21 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 				vm.shakeFrames, vm.shakeTotal, vm.shakeMag = dur, dur, mag
 			}
 		}
-	case opDialogRead: // 338 S: select & arm the dialog the next 339 will start
+	case opMSGOpen: // 338 S (case 0x152): open .msg entry id (FUN_00415db0),
+		// whose constructor cancels every bullet, then clear the rect and the
+		// lasers (FUN_0041c850) and sweep the enemies.
 		if len(in.Params) >= 1 {
-			vm.dialogID = vm.resolveInt(t, in.Params[0])
-			vm.dialogArmed = true
+			id := vm.resolveInt(t, in.Params[0])
+			if ctx != nil {
+				ctx.OpenMSG(id)
+				ctx.Bullets.RectClear(false, ctx.BulletEnv)
+				ctx.Lasers.ClearAll(false, ctx.LaserEnv)
+			}
+			vm.sweepEnemies()
 		}
-	case opDialogWait: // 339: a 338-armed 339 runs a dialog & blocks until dismissed.
-		// A bare 339 (no preceding 338) is a spell-name/banner cue → not a dialog.
-		switch {
-		case vm.dialogFiring && vm.DialogActive != nil && vm.DialogActive():
-			t.blocked = true // overlay still open: keep blocking
-		case vm.dialogFiring:
-			vm.dialogFiring = false // overlay closed: this event is done
-		case vm.dialogArmed && vm.DialogFunc != nil && vm.DialogFunc(vm.dialogID):
-			vm.dialogArmed = false
-			vm.dialogFiring = true
-			t.blocked = true // opened this frame: block until it closes
-		default:
-			vm.dialogArmed = false // bare 339 or no bridge: nothing to do
+	case opMSGWait: // 339 (case 0x153): wait for the MSG's op 11 or its end
+		if ctx != nil && ctx.MSGWaiting() {
+			t.blocked = true
 		}
 	case opBossWait: // 340: block while boss slot 0 is taken
 		if vm.boss0() != nil {
@@ -358,6 +364,8 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 				ctx.Anm.GameSpeed = vm.gameSpeed
 			}
 		}
+	case opEnemySweep: // 345 (case 0x159)
+		vm.sweepEnemies()
 	case 346: // case 0x15a: 401 holds fire while the player is within r
 		if t.owner != nil && len(in.Params) >= 1 {
 			r := vm.resolveFloat(t, in.Params[0])
@@ -365,8 +373,8 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		}
 	default:
 		// Remaining no-ops with known-but-cosmetic binary effects: 272/273 spawn
-		// ANM effect objects at the enemy (case 0x110/0x111), 344/345 chapter
-		// bookkeeping (345 is FUN_0040e6a0), 360 stars, 361 (FUN_00405410),
+		// ANM effect objects at the enemy (case 0x110/0x111), 344 chapter
+		// bookkeeping, 360 stars, 361 (FUN_00405410),
 		// 362 HUD flag |8, 363 (FUN_0040cea0), 365 (FUN_0041c7d0), 366 dialog
 		// sprite-swap flags. UI/spell-frame ops likewise.
 	}

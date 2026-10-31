@@ -22,6 +22,14 @@ func (b *Bullet) Cancel(env *Env) bool {
 	return true
 }
 
+// CancelAll cancels every live bullet, as the MSG constructor (FUN_00415b00)
+// does.
+func (p *Pool) CancelAll(env *Env) {
+	for i := range p.Slots {
+		p.Slots[i].Cancel(env)
+	}
+}
+
 // CircleClear is FUN_00408100: cancel every bullet whose hit circle touches
 // the circle of radius r round (cx, cy), skipping cancel-immune bullets when
 // checkImmune is set. A cancelled bullet on the playfield leaves an item when

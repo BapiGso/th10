@@ -39,6 +39,10 @@ const (
 // SE ids (table 0x4749c8).
 const seGraze = 28
 
+// ScriptID is bullet.anm's script for type t in colour c (FUN_00404f30's
+// callers: 0x474170[type] + colour). The lasers use it for their beams.
+func ScriptID(t int16, c int32) int32 { return scriptBase[typeIndex(t)] + c }
+
 func typeIndex(t int16) int {
 	if t < 0 || int(t) >= len(sizes) {
 		return 0

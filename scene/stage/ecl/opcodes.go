@@ -153,13 +153,14 @@ const (
 	opSetInvuln    = 335
 	opPlaySound    = 336
 	opScreenShake  = 337
-	opDialogRead   = 338
-	opDialogWait   = 339
+	opMSGOpen      = 338
+	opMSGWait      = 339
 	opBossWait     = 340
 	opSetTimeout   = 341
 	opSpellBg      = 342
 	opSpellEnd     = 343
 	opSetChapter   = 344
+	opEnemySweep   = 345
 	opLifeMarker   = 347
 	opAnmRank      = 348
 	opRankPickI    = 355

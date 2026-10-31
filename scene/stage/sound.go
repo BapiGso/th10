@@ -7,6 +7,7 @@ type Sound interface {
 	PlaySEID(id int)
 	PlayBGM(idx int)
 	StopBGM()
+	FadeOutBGM(frames int)
 }
 
 // PlaySE 播放音效；Audio 为 nil 时静默（无头模拟）。
@@ -34,5 +35,12 @@ func (c *Context) PlayBGM(idx int) {
 func (c *Context) StopBGM() {
 	if c.Audio != nil {
 		c.Audio.StopBGM()
+	}
+}
+
+// FadeBGM 用 frames 帧淡出 BGM；Audio 为 nil 时静默（无头模拟）。
+func (c *Context) FadeBGM(frames int) {
+	if c.Audio != nil {
+		c.Audio.FadeOutBGM(frames)
 	}
 }

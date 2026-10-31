@@ -16,6 +16,7 @@ const (
 	KeyPause  // Esc
 	KeyOk     // Z / Enter
 	KeyCancel // X / Esc
+	KeySkip   // Ctrl：对话快进（MSG op 9 允许时）
 	keyCount
 )
 
@@ -31,6 +32,7 @@ var defaultKeyMap = map[Key][]ebiten.Key{
 	KeyPause:  {ebiten.KeyEscape},
 	KeyOk:     {ebiten.KeyZ, ebiten.KeyEnter},
 	KeyCancel: {ebiten.KeyX, ebiten.KeyEscape},
+	KeySkip:   {ebiten.KeyControlLeft, ebiten.KeyControlRight},
 }
 
 // State 每帧输入状态快照，用于 Update 阶段读取

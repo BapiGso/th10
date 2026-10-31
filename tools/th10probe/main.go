@@ -25,6 +25,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 	"unsafe"
@@ -83,6 +84,18 @@ const (
 	enemyFlags    = 0x2480
 )
 
+// The dialog: the stage object at DAT_0047770c holds the MSG ECL 338 builds
+// (FUN_00415db0, 0x90 bytes) at +0x9eb8; ECL 339 reads its +0x78.
+const (
+	addrStageObj = 0x0047770c
+	stageMSG     = 0x9eb8
+	msgSize      = 0x90
+	msgClock     = 0x1c // timer +0x18: the current int
+	msgWait      = 0x30 // op 10's timer, current int
+	msgPC        = 0x5c // the instruction: u16 time, u8 op
+	msgSignal    = 0x78
+)
+
 // Bullet manager (FUN_004065c0/FUN_004067d0): 2000 bullets inline from +0x60,
 // stride 0x7f0, then a sentinel slot with state 5.
 const (
@@ -110,6 +123,7 @@ func run() int {
 		outPath  = flag.String("out", "-", "output trace path (- = stdout)")
 		pollUS   = flag.Int("poll-us", 500, "frame-poll interval in microseconds")
 		settleUS = flag.Int("settle-us", 3000, "wait after a frame tick before sampling, so the frame's update has finished")
+		stableUS = flag.Int("stable-us", 2000, "gap between the reads that must agree before a sample is kept")
 		noWait   = flag.Bool("no-wait-start", false, "sample from the current frame instead of waiting for a stage start")
 		skipHash = flag.Bool("skip-hash", false, "skip the exe SHA-256 check")
 		counters = flag.Bool("probe-counters", false, "print which frame-counter candidate ticks, then exit")
@@ -182,14 +196,17 @@ func run() int {
 				return 2
 			}
 			if fc >= 0 && fc <= 2 && fc != prev { // zeroed or first tick
+				fmt.Fprintf(os.Stderr, "th10probe: stage started (frame %d); sampling, this takes about %d s\n", fc, (*frames-int(fc))/60)
 				break
 			}
 			prev = fc
 			time.Sleep(poll)
 		}
 	}
-	sampled, torn := 0, 0
+	sampled, torn, unsettled := 0, 0, 0
+	lastReport := int32(0)
 	settle := time.Duration(*settleUS) * time.Microsecond
+	stable := time.Duration(*stableUS) * time.Microsecond
 	deadline := time.Now().Add(30 * time.Minute)
 	for lastFrame < int32(*frames) {
 		if time.Now().After(deadline) {
@@ -218,19 +235,29 @@ func run() int {
 			break
 		}
 		time.Sleep(settle)
-		f, err := rd.sampleFrame(int(fc))
+		f, reread, err := rd.sampleSettled(fc, stable)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "th10probe: sample:", err)
 			return 2
 		}
+		if reread {
+			unsettled++
+		}
 		// A sample that straddles the next frame's update mixes two frames;
 		// drop it rather than report a false divergence.
-		if after, err := rd.i32(addrFrameCounter); err == nil && after != fc {
+		if f == nil {
 			torn++
 			continue
 		}
 		sampled++
 		tw.WriteFrame(f)
+		if fc/600 != lastReport {
+			lastReport = fc / 600
+			fmt.Fprintf(os.Stderr, "th10probe: frame %d/%d\n", fc, *frames)
+		}
+	}
+	if unsettled > 0 {
+		fmt.Fprintf(os.Stderr, "th10probe: %d frames were still updating after -settle-us and were re-read\n", unsettled)
 	}
 	if torn > 0 {
 		fmt.Fprintf(os.Stderr, "th10probe: dropped %d torn samples (lower -settle-us?)\n", torn)
@@ -429,6 +456,32 @@ func le32(b []byte) uint32 {
 
 func le16(b []byte) uint16 { return uint16(b[0]) | uint16(b[1])<<8 }
 
+// sampleSettled samples frame fc until two reads gap apart agree, so a frame
+// whose update outlasts the settle wait is not caught half done (MSG op 16
+// renders its text with GDI: at frame 4915 of th10_05 a single read saw op 9
+// run and the clock not yet stepped). reread reports whether the first two
+// reads differed. The frame is nil once the next frame has begun, as the reads
+// may then mix the two; a NaN field never agrees and ends the same way.
+func (r *reader) sampleSettled(fc int32, gap time.Duration) (f *trace.Frame, reread bool, err error) {
+	prev, err := r.sampleFrame(int(fc))
+	if err != nil {
+		return nil, false, err
+	}
+	for {
+		time.Sleep(gap)
+		if f, err = r.sampleFrame(int(fc)); err != nil {
+			return nil, reread, err
+		}
+		if after, err := r.i32(addrFrameCounter); err == nil && after != fc {
+			return nil, reread, nil
+		}
+		if reflect.DeepEqual(prev, f) {
+			return f, reread, nil
+		}
+		prev, reread = f, true
+	}
+}
+
 func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
 	f := &trace.Frame{Index: index}
 
@@ -504,6 +557,23 @@ func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
 					Type:  int(int16(le16(b[bulletType:]))),
 					Color: int(int16(le16(b[bulletSprite:]))),
 				})
+			}
+		}
+	}
+
+	if so, err := r.u32(addrStageObj); err == nil && so != 0 {
+		if mp, err := r.u32(so + stageMSG); err == nil && mp != 0 {
+			if b, err := r.bytes(mp, msgSize); err == nil {
+				f.MSG = &trace.MSGRow{
+					ID:     int(int32(le32(b[0:]))),
+					Clock:  int(int32(le32(b[msgClock:]))),
+					Wait:   int(int32(le32(b[msgWait:]))),
+					Signal: int(int32(le32(b[msgSignal:]))),
+					At:     -1, Op: -1,
+				}
+				if in, err := r.bytes(le32(b[msgPC:]), 3); err == nil {
+					f.MSG.At, f.MSG.Op = int(le16(in)), int(in[2])
+				}
 			}
 		}
 	}

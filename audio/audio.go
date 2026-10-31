@@ -89,6 +89,8 @@ type Manager struct {
 	ctx       *audio.Context
 	bgm       *audio.Player
 	bgmVolume float64
+	fadeLeft  int // FadeOutBGM: frames left, 0 = not fading
+	fadeTotal int
 	seVolume  float64
 	seCache   map[string][]byte
 	sePlayers []*audio.Player
@@ -146,6 +148,13 @@ func (m *Manager) loadSEPCM(name string) ([]byte, error) {
 func (m *Manager) Update() {
 	m.cleanupSE()
 	m.seQueue = m.seQueue[:0]
+	if m.fadeLeft > 0 {
+		if m.fadeLeft--; m.fadeLeft == 0 {
+			m.StopBGM()
+		} else if m.bgm != nil {
+			m.bgm.SetVolume(m.bgmVolume * float64(m.fadeLeft) / float64(m.fadeTotal))
+		}
+	}
 }
 
 func (m *Manager) cleanupSE() {
@@ -188,6 +197,7 @@ func (m *Manager) trimSEPlayers() {
 // idx 为 0-based BGM 编号。
 func (m *Manager) PlayBGM(idx int) {
 	m.StopBGM()
+	m.fadeLeft = 0
 	loop, err := NewBGMStream(idx, m.ctx.SampleRate())
 	if err != nil {
 		return
@@ -252,6 +262,15 @@ func (m *Manager) StopBGM() {
 	}
 }
 
+// FadeOutBGM fades the BGM out linearly over frames game frames, then stops
+// it (MSG op 21, FUN_00420c30).
+func (m *Manager) FadeOutBGM(frames int) {
+	if m.bgm == nil || frames <= 0 {
+		return
+	}
+	m.fadeLeft, m.fadeTotal = frames, frames
+}
+
 func (m *Manager) SetBGMVolume(v float64) {
 	if v < 0 {
 		v = 0
@@ -260,7 +279,7 @@ func (m *Manager) SetBGMVolume(v float64) {
 		v = 1
 	}
 	m.bgmVolume = v
-	if m.bgm != nil {
+	if m.bgm != nil && m.fadeLeft == 0 {
 		m.bgm.SetVolume(v)
 	}
 }
