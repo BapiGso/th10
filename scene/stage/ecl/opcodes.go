@@ -95,6 +95,7 @@ const (
 	opSin  = 79
 	opCos  = 80
 	opNegI = 84
+	opNegF = 85 // negates the float's bit pattern as an int (see vm.go)
 
 	opPolar    = 81 // ffff: (outX, outY, angle, radius) polar->rect into two vars
 	opValidRad = 82 // f: normalize angle var to (-pi,pi]

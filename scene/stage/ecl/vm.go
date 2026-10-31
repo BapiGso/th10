@@ -675,6 +675,17 @@ func (vm *VM) execStackMath(t *eclTask, in *Instr) bool {
 		t.push(floatVal(float32(math.Cos(float64(vm.popFloat(t))))))
 	case opNegI:
 		t.push(intVal(-vm.popInt(t)))
+	case opNegF:
+		// FUN_0044e1a0 case 0x55 (0x44f812) negates the popped dword with an
+		// integer neg, not fchs (an int is converted to float bits first), so
+		// the result is the two's complement of the float's bits:
+		// -0.032725f comes out as -124.979f (stage 3 Girl02_at).
+		v := t.pop()
+		bits := v.bits
+		if !v.isFloat {
+			bits = math.Float32bits(float32(int32(v.bits)))
+		}
+		t.push(eVal{true, uint32(-int32(bits))})
 	case opSqrt:
 		t.push(floatVal(float32(math.Sqrt(float64(vm.popFloat(t))))))
 	default:

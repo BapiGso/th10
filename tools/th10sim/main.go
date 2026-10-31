@@ -18,6 +18,7 @@ import (
 	"th10/game"
 	"th10/replay"
 	"th10/scene/stage"
+	"th10/scene/stage/extra"
 	"th10/scene/stage/stage1"
 	"th10/scene/stage/stage2"
 	"th10/scene/stage/stage3"
@@ -71,8 +72,8 @@ func run() int {
 	if *stageNum > 0 {
 		stage = *stageNum
 	}
-	if stage < 1 || stage > 6 {
-		fmt.Fprintf(os.Stderr, "th10sim: stage %d not simulatable (1..6)\n", stage)
+	if stage < 1 || stage > 7 {
+		fmt.Fprintf(os.Stderr, "th10sim: stage %d not simulatable (1..7)\n", stage)
 		return 2
 	}
 	cfg := sim.Config{
@@ -80,11 +81,16 @@ func run() int {
 		Character:  int(rp.Global.Character),
 		ShotType:   int(rp.Global.ShotType),
 		Difficulty: int(rp.Global.Difficulty),
-		Power:      startingPower(rp),
+		Power:      int(ch.Power) * 5, // 0.05 units to hundredths
+		Lives:      int(ch.Lives),
 		Seed:       ch.Seed,
 		Rank:       int(ch.Rank),
+		PlayerX:    ch.PlayerX,
+		PlayerY:    ch.PlayerY,
 	}
-	if cfg.Difficulty > game.DiffLuna {
+	// Extra (stage 7) runs at game.DiffExtra, which is above Luna but valid.
+	// Any other difficulty above Luna is out of range and runs as Normal.
+	if cfg.Difficulty > game.DiffLuna && !(stage == 7 && cfg.Difficulty == game.DiffExtra) {
 		cfg.Difficulty = game.DiffNormal
 	}
 
@@ -109,11 +115,6 @@ func run() int {
 	return 0
 }
 
-// startingPower returns the replay's recorded power when available. The
-// original stores it in the chapter header; we do not decode that field yet,
-// so runs start from zero as a normal new game does.
-func startingPower(_ *replay.Replay) int { return 0 }
-
 func scriptFactory(stageNum int) stage.Script {
 	switch stageNum {
 	case 1:
@@ -128,6 +129,8 @@ func scriptFactory(stageNum int) stage.Script {
 		return stage5.NewScript()
 	case 6:
 		return stage6.NewScript()
+	case 7:
+		return extra.NewScript()
 	default:
 		return stage1.NewScript()
 	}

@@ -74,7 +74,7 @@ func TestReimuAPowerLevelsAndBirths(t *testing.T) {
 
 func TestReimuAOptionFocusInterpolation(t *testing.T) {
 	p := testPlayer(game.CharReimu)
-	p.X, p.Y = 200, 200
+	p.SetPos(200, 200)
 	p.GS.Power = 400
 	var in input.State
 	p.UpdateInput(&in)

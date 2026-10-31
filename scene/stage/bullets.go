@@ -57,6 +57,7 @@ func NewContext(state *game.GameState) *Context {
 	}
 	// The alternate RNG's seed is not traced yet.
 	c.Anm = &anm.Env{GameSpeed: 1, RNG: rng, Alt: &zun.RNG{}, Spawn: c.World.Add}
+	c.Player.GameSpeed = func() float32 { return c.Anm.GameSpeed }
 	c.BulletEnv = &bullet.Env{
 		Anm:     c.Anm,
 		File:    bulletFile(),

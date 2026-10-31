@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -145,6 +147,48 @@ func TestDiffDialog(t *testing.T) {
 	}
 }
 
+// TestDiffBulletTriage: -bullets lists exactly the bullet rows that differ
+// beyond the budget (indices 1 and 3 here), and when the counts differ it lists
+// the extra rows of the longer side.
+func TestDiffBulletTriage(t *testing.T) {
+	dir := t.TempDir()
+	frame := "F 1 p 224.000 416.000 life 2 power 0 faith 49999 score 0 graze 0 state 0 invinc 0 bomb 0 | e 0 b 5 i 0 pb 0\n" +
+		"B 10.000 20.000 ang 1.00000 spd 2.000 type 1 color 2\n" +
+		"B 30.000 40.000 ang 1.10000 spd 2.000 type 1 color 2\n" +
+		"B 50.000 60.000 ang 1.20000 spd 2.000 type 1 color 2\n" +
+		"B 70.000 80.000 ang 1.30000 spd 2.000 type 1 color 2\n" +
+		"B 90.000 100.000 ang 1.40000 spd 2.000 type 1 color 2\n"
+	a := writeTrace(t, dir, "a.txt", frame)
+	b := writeTrace(t, dir, "b.txt", strings.NewReplacer(
+		"B 30.000 40.000", "B 31.000 40.000", // bullet 1: x off by 1 px
+		"ang 1.30000", "ang 1.30500", // bullet 3: angle off by 0.005 rad
+	).Replace(frame))
+
+	code, out := runDiffStdout(t, a, b, "-bullets")
+	if code != 1 {
+		t.Fatalf("divergent traces returned %d, want 1", code)
+	}
+	if !strings.Contains(out, "--- differing bullets at frame 1 (A count 5, B count 5) ---") {
+		t.Fatalf("missing triage header:\n%s", out)
+	}
+	var got []string
+	for _, m := range regexp.MustCompile(`(?m)^  bullet\[(\d+)\] A `).FindAllStringSubmatch(out, -1) {
+		got = append(got, m[1])
+	}
+	if want := []string{"1", "3"}; !slices.Equal(got, want) {
+		t.Fatalf("listed bullets %v, want %v\n%s", got, want, out)
+	}
+
+	// B drops its last row: the counts differ, so A's row 4 is listed as extra.
+	short := strings.NewReplacer("b 5 i", "b 4 i").Replace(frame)
+	short = short[:strings.LastIndex(short, "B 90.000")]
+	_, out = runDiffStdout(t, a, writeTrace(t, dir, "c.txt", short), "-bullets")
+	if !strings.Contains(out, "extra bullets beyond index 4: A 1, B 0") ||
+		!strings.Contains(out, "A bullet[4] (90.000,100.000)") {
+		t.Fatalf("extra-row listing missing:\n%s", out)
+	}
+}
+
 // runDiff invokes the command's run() with flags parsed from args.
 func runDiff(t *testing.T, a, b string, extra ...string) int {
 	t.Helper()
@@ -152,4 +196,26 @@ func runDiff(t *testing.T, a, b string, extra ...string) int {
 	defer func() { os.Args = oldArgs }()
 	os.Args = append([]string{"th10diff", "-a", a, "-b", b, "-context", "1"}, extra...)
 	return run()
+}
+
+// runDiffStdout is runDiff with stdout captured into a file, for the report.
+func runDiffStdout(t *testing.T, a, b string, extra ...string) (int, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stdout.txt")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	old := os.Stdout
+	os.Stdout = f
+	code := func() int {
+		defer func() { os.Stdout = old }()
+		return runDiff(t, a, b, extra...)
+	}()
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code, string(out)
 }

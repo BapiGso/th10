@@ -4,7 +4,7 @@
 // Usage:
 //
 //	th10diff -a original.trace -b replica.trace [-eps 0.001] [-context 3]
-//	         [-shift 0] [-scope all|motion]
+//	         [-shift 0] [-scope all|motion] [-bullets]
 //
 // Frames are matched by index (A's index plus -shift), so frames the sampler
 // dropped are skipped instead of misaligning the rest. Comparison ends when
@@ -13,6 +13,10 @@
 // -scope motion compares only the player, enemy and bullet positions, enemy
 // HP, angles, speeds and counts: what the ECL and the RNG decide on their own
 // in a replay that never shoots.
+//
+// -bullets adds a triage listing to a divergence: every enemy bullet in the
+// divergent frame whose position, angle or speed differs, with both sides'
+// values and the deltas, then the rows beyond the shorter side.
 //
 // Exit code is 0 when the traces match within the epsilon budget, 1 when they
 // diverge, and 2 on usage/IO errors.
@@ -41,6 +45,7 @@ type diffFlags struct {
 	maxRows int
 	shift   int
 	scope   string
+	bullets bool
 }
 
 func parseFlags() (diffFlags, bool) {
@@ -54,6 +59,7 @@ func parseFlags() (diffFlags, bool) {
 	fs.IntVar(&f.maxRows, "max-rows", 8, "max entity rows to show per side")
 	fs.IntVar(&f.shift, "shift", 0, "added to A's frame indices before matching")
 	fs.StringVar(&f.scope, "scope", "all", "fields to compare: all or motion")
+	fs.BoolVar(&f.bullets, "bullets", false, "on divergence, list every differing enemy bullet in the frame")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		return f, false
 	}
@@ -81,7 +87,8 @@ func run() int {
 
 	ra, rb := trace.NewReader(fa), trace.NewReader(fb)
 	diff := &differ{eps: opts.eps + posUnit + slack, angEps: opts.angEps + angUnit + slack,
-		maxRows: opts.maxRows, context: opts.context, shift: opts.shift, motion: opts.scope == "motion"}
+		maxRows: opts.maxRows, context: opts.context, shift: opts.shift, motion: opts.scope == "motion",
+		bullets: opts.bullets}
 	code := diff.compare(ra, rb)
 	if code == 0 {
 		fmt.Printf("MATCH: %d frames compared, all within eps (pos %.4g px, ang %.4g rad)\n",
@@ -113,6 +120,7 @@ type differ struct {
 	context int
 	shift   int
 	motion  bool // -scope motion
+	bullets bool // -bullets
 	frames  int
 	gaps    int            // B frames with no A frame at that index
 	tail    int            // B frames after A ended
@@ -281,20 +289,71 @@ func (d *differ) diffBullets(ba, bb []trace.BulletRow) string {
 		if !d.motion && (a.Type != b.Type || a.Color != b.Color) {
 			return fmt.Sprintf("bullet[%d] type/color (%d,%d) != (%d,%d)", i, a.Type, a.Color, b.Type, b.Color)
 		}
-		if math.Abs(a.X-b.X) > d.eps || math.Abs(a.Y-b.Y) > d.eps {
-			return fmt.Sprintf("bullet[%d] pos (%.3f,%.3f) != (%.3f,%.3f)", i, a.X, a.Y, b.X, b.Y)
-		}
-		if math.Abs(a.Angle-b.Angle) > d.angEps {
-			return fmt.Sprintf("bullet[%d] angle %.5f != %.5f", i, a.Angle, b.Angle)
-		}
-		if math.Abs(a.Speed-b.Speed) > d.eps {
-			return fmt.Sprintf("bullet[%d] speed %.3f != %.3f", i, a.Speed, b.Speed)
+		if why := d.bulletDiff(i, a, b); why != "" {
+			return why
 		}
 	}
 	if len(ba) != len(bb) {
 		return fmt.Sprintf("bullet row count %d != %d", len(ba), len(bb))
 	}
 	return ""
+}
+
+// bulletDiff describes the first of position, angle or speed that differs
+// between a bullet and its counterpart beyond the budget, or returns "".
+// diffBullets and the -bullets listing share it so they agree on what differs.
+func (d *differ) bulletDiff(i int, a, b *trace.BulletRow) string {
+	if math.Abs(a.X-b.X) > d.eps || math.Abs(a.Y-b.Y) > d.eps {
+		return fmt.Sprintf("bullet[%d] pos (%.3f,%.3f) != (%.3f,%.3f)", i, a.X, a.Y, b.X, b.Y)
+	}
+	if math.Abs(a.Angle-b.Angle) > d.angEps {
+		return fmt.Sprintf("bullet[%d] angle %.5f != %.5f", i, a.Angle, b.Angle)
+	}
+	if math.Abs(a.Speed-b.Speed) > d.eps {
+		return fmt.Sprintf("bullet[%d] speed %.3f != %.3f", i, a.Speed, b.Speed)
+	}
+	return ""
+}
+
+// triageExtra is how many rows past the shorter side the -bullets listing shows.
+const triageExtra = 5
+
+// printBulletTriage lists every bullet index both sides have whose position,
+// angle or speed differs under the budget, then the first rows the longer side
+// has beyond the shorter one.
+func (d *differ) printBulletTriage(a, b *trace.Frame) {
+	fmt.Printf("\n--- differing bullets at frame %d (A count %d, B count %d) ---\n", a.Index, len(a.B), len(b.B))
+	n := min(len(a.B), len(b.B))
+	differing := 0
+	for i := 0; i < n; i++ {
+		x, y := &a.B[i], &b.B[i]
+		if d.bulletDiff(i, x, y) == "" {
+			continue
+		}
+		differing++
+		fmt.Printf("  bullet[%d] A %s | B %s | dx=%+.3f dy=%+.3f dAng=%+.5f dSpd=%+.3f\n",
+			i, bulletString(x), bulletString(y), x.X-y.X, x.Y-y.Y, x.Angle-y.Angle, x.Speed-y.Speed)
+	}
+	if differing == 0 {
+		fmt.Println("  no bullet differs in position, angle or speed within the budget")
+	}
+	extraA, extraB := len(a.B)-n, len(b.B)-n
+	if extraA == 0 && extraB == 0 {
+		return
+	}
+	fmt.Printf("  extra bullets beyond index %d: A %d, B %d\n", n, extraA, extraB)
+	longer, tag := a.B, "A"
+	if extraB > 0 {
+		longer, tag = b.B, "B"
+	}
+	for i := n; i < len(longer) && i < n+triageExtra; i++ {
+		fmt.Printf("  %s bullet[%d] %s\n", tag, i, bulletString(&longer[i]))
+	}
+}
+
+// bulletString prints a bullet at the trace's own precision.
+func bulletString(b *trace.BulletRow) string {
+	return fmt.Sprintf("(%.3f,%.3f) ang=%.5f spd=%.3f type=%d color=%d", b.X, b.Y, b.Angle, b.Speed, b.Type, b.Color)
 }
 
 func (d *differ) report(why string, a, b *trace.Frame) {
@@ -310,6 +369,9 @@ func (d *differ) report(why string, a, b *trace.Frame) {
 	d.printFrame("A", a)
 	fmt.Println("\n--- B (replica) ---")
 	d.printFrame("B", b)
+	if d.bullets {
+		d.printBulletTriage(a, b)
+	}
 }
 
 func (d *differ) printFrame(tag string, f *trace.Frame) {

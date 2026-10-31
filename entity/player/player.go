@@ -31,12 +31,18 @@ const (
 
 // Player 玩家实体
 type Player struct {
-	X, Y                              float64 // 位置
-	Speed                             float64 // 移动速度（非集中）
-	FocusSpeed                        float64 // 集中移动速度
-	DiagonalSpeed, FocusDiagonalSpeed float64 // SHT 转换后的百分之一像素步长
-	HitboxRadius                      float64 // 判定圈半径
-	GrazeRadius                       float64 // 擦弹范围
+	X, Y float64 // 屏幕坐标，由 IX/IY 导出（player +0x3c0/+0x3c4 加上场地原点）
+	// IX, IY 是以百分之一像素计、相对场地顶边中点的整数位置
+	// （player +0x3cc/+0x3d0）。移动只改它们，X/Y 每次按
+	// (float)int*0.01f 重算。
+	IX, IY int32
+	// steps 是每帧步长（百分之一像素）：高速、低速、高速斜向、低速斜向
+	// （player +0x3d4/+0x3d8/+0x3dc/+0x3e0）。
+	steps        [4]int32
+	HitboxRadius float64 // 判定圈半径
+	GrazeRadius  float64 // 擦弹范围
+	// GameSpeed 返回 DAT_00476f78（ECL 367 写入）；nil 或 0 视为 1。
+	GameSpeed func() float32
 
 	// 直接引用游戏状态，消除双源同步
 	GS *game.GameState
@@ -75,7 +81,6 @@ const (
 )
 
 func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
-	centerX := (fieldL + fieldR) / 2
 	path := fmt.Sprintf("sht/pl%02d%c.sht", gs.Character, 'a'+gs.ShotType)
 	data, err := gamedata.ReadFile(path)
 	if err != nil {
@@ -86,17 +91,16 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 		panic(fmt.Sprintf("load player movement %s: %v", path, err))
 	}
 	p := &Player{
-		X: centerX, Y: fieldB - 48,
-		Speed: float64(movement.Fast) / 100, FocusSpeed: float64(movement.Slow) / 100,
-		DiagonalSpeed:      float64(movement.FastDiagonal) / 100,
-		FocusDiagonalSpeed: float64(movement.SlowDiagonal) / 100,
-		HitboxRadius:       2, GrazeRadius: 16,
+		steps: [4]int32{int32(movement.Fast), int32(movement.Slow),
+			int32(movement.FastDiagonal), int32(movement.SlowDiagonal)},
+		HitboxRadius: 2, GrazeRadius: 16,
 		GS:        gs,
 		State:     StateNormal,
 		FieldLeft: fieldL, FieldTop: fieldT,
 		FieldRight: fieldR, FieldBottom: fieldB,
 		Bullets: playerbullet.NewPool(256),
 	}
+	p.SetFixed(0, 40000) // FUN_004247f0: (0, 400.0)
 	if gs.Character == game.CharReimu && gs.ShotType == game.ShotA {
 		shots, err := sht.Parse(data)
 		if err != nil {
@@ -189,35 +193,75 @@ func (p *Player) tryBomb() bool {
 	return true
 }
 
+// Bounds of the fixed-point position (FUN_004250b0): X ±184, Y 32..432.
+const (
+	fixedMaxX = 0x47e0
+	fixedMinY = 0xc80
+	fixedMaxY = 0xa8c0
+)
+
+// SetFixed places the player at a fixed-point position (hundredths of a
+// pixel from the playfield's top-centre), as FUN_00428e10 does when a replay
+// chapter starts.
+func (p *Player) SetFixed(ix, iy int32) {
+	p.IX, p.IY = ix, iy
+	p.syncPos()
+}
+
+// SetPos places the player at screen coordinates, rounded to the
+// fixed-point grid.
+func (p *Player) SetPos(x, y float64) {
+	p.SetFixed(int32(math.Round((x-p.originX())*100)), int32(math.Round((y-p.FieldTop)*100)))
+}
+
+func (p *Player) originX() float64 { return (p.FieldLeft + p.FieldRight) / 2 }
+
+// syncPos derives the float position: (float)int * 0.01f (DAT_00470b00),
+// rounded to float32 as the x87 does at 24-bit precision.
+func (p *Player) syncPos() {
+	p.X = p.originX() + float64(float32(p.IX)*float32(0.01))
+	p.Y = p.FieldTop + float64(float32(p.IY)*float32(0.01))
+}
+
+// move ports the stepping in FUN_004250b0: an 8-way direction picks the
+// cardinal or diagonal step, the focus key the slow pair, and each axis moves
+// by ftol(step * game speed), truncated, before the fixed-point clamp.
 func (p *Player) move(in *input.State) {
-	speed := p.Speed
-	if in.IsPressed(input.KeyFocus) {
-		speed = p.FocusSpeed
+	focused := in.IsPressed(input.KeyFocus)
+	up, down := in.IsPressed(input.KeyUp), in.IsPressed(input.KeyDown)
+	left, right := in.IsPressed(input.KeyLeft), in.IsPressed(input.KeyRight)
+	straight, diag := p.steps[0], p.steps[2]
+	if focused {
+		straight, diag = p.steps[1], p.steps[3]
 	}
-	dx, dy := 0.0, 0.0
-	if in.IsPressed(input.KeyUp) {
-		dy -= 1
+	var vx, vy int32
+	switch {
+	case up && left: // 5
+		vx, vy = -diag, -diag
+	case down && left: // 7
+		vx, vy = -diag, diag
+	case up && right: // 6
+		vx, vy = diag, -diag
+	case down && right: // 8
+		vx, vy = diag, diag
+	case down: // 2
+		vy = straight
+	case up: // 1
+		vy = -straight
+	case left: // 3
+		vx = -straight
+	case right: // 4
+		vx = straight
 	}
-	if in.IsPressed(input.KeyDown) {
-		dy += 1
-	}
-	if in.IsPressed(input.KeyLeft) {
-		dx -= 1
-	}
-	if in.IsPressed(input.KeyRight) {
-		dx += 1
-	}
-	if dx != 0 && dy != 0 {
-		speed = p.DiagonalSpeed
-		if in.IsPressed(input.KeyFocus) {
-			speed = p.FocusDiagonalSpeed
+	gs := float32(1)
+	if p.GameSpeed != nil {
+		if v := p.GameSpeed(); v != 0 {
+			gs = v
 		}
 	}
-	p.X = math.Round((p.X+dx*speed)*100) / 100
-	p.Y = math.Round((p.Y+dy*speed)*100) / 100
-	// Original bounds: X [-184,184], Y [32,432], relative to field center/top.
-	p.X = math.Max(p.FieldLeft+8, math.Min(p.FieldRight-8, p.X))
-	p.Y = math.Max(p.FieldTop+32, math.Min(p.FieldBottom-16, p.Y))
+	p.IX = min(max(p.IX+int32(float32(vx)*gs), -fixedMaxX), fixedMaxX)
+	p.IY = min(max(p.IY+int32(float32(vy)*gs), fixedMinY), fixedMaxY)
+	p.syncPos()
 }
 
 func (p *Player) shoot(in *input.State) {

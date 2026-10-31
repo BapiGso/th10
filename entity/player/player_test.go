@@ -123,7 +123,8 @@ func TestSHTMovement(t *testing.T) {
 			for _, focused := range []bool{false, true} {
 				for _, diagonal := range []bool{false, true} {
 					p := New(game.NewState(character, shot, game.DiffNormal), game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
-					p.X, p.Y = 200, 200
+					p.SetPos(200, 200)
+					x0, y0 := p.IX, p.IY
 					bits := uint16(1 << input.KeyRight)
 					step := 4.5
 					if character == game.CharMarisa {
@@ -146,11 +147,12 @@ func TestSHTMovement(t *testing.T) {
 					var in input.State
 					in.Restore(bits)
 					p.UpdateInput(&in)
-					wantY := 200.0
+					stepInt := int32(math.Round(step * 100))
+					wantY := y0
 					if diagonal {
-						wantY += step
+						wantY += stepInt
 					}
-					if p.X != 200+step || p.Y != wantY {
+					if p.IX != x0+stepInt || p.IY != wantY {
 						t.Fatalf("%d/%d focus=%v diagonal=%v: %v,%v", character, shot, focused, diagonal, p.X, p.Y)
 					}
 				}
@@ -174,8 +176,8 @@ func TestMovementBoundsAndRepeatability(t *testing.T) {
 		if p.X != q.X || p.Y != q.Y {
 			t.Fatal("same snapshots diverged")
 		}
-		if math.Abs(p.X*100-math.Round(p.X*100)) > 1e-8 {
-			t.Fatal("position left fixed-point grid")
+		if p.X != 224+float64(float32(p.IX)*float32(0.01)) {
+			t.Fatal("float position not derived from the fixed-point one")
 		}
 	}
 	a.Restore(1<<input.KeyUp | 1<<input.KeyLeft)

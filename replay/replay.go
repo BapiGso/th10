@@ -110,14 +110,22 @@ func (r Record) Right() bool { d := r.Direction(); return d == 4 || d == 6 || d 
 // Chapter is one stage run inside a replay.
 //
 // Field offsets are from the 0x1c4-byte block header; the loader FUN_00428f60
-// restores the RNG seed from +2 and the frame clock from +0x18.
+// restores the RNG seed from +2 and the frame clock from +0x18, and the
+// save/restore routine at 0x42a460 (mode 1) the player state from +0x24 on.
 type Chapter struct {
-	Index   uint16 // +0x00: chapter/stage index (1..7)
-	Seed    uint16 // +0x02: RNG seed captured at chapter start (DAT_004918b0)
-	Frame   int32  // +0x18: starting frame clock (0 for a fresh chapter)
-	Rank    int32  // +0x20: dynamic rank (DAT_00474c98) at chapter start
-	Records []Record
-	Raw     []byte // full 0x1c4-byte header, for fields not yet decoded
+	Index uint16 // +0x00: chapter/stage index (1..7)
+	Seed  uint16 // +0x02: RNG seed captured at chapter start (DAT_004918b0)
+	Power int16  // +0x10: power (DAT_00474c48) in units of 0.05
+	Frame int32  // +0x18: starting frame clock (0 for a fresh chapter)
+	Lives int32  // +0x1c: lives in stock (DAT_00474c70)
+	Rank  int32  // +0x20: dynamic rank (DAT_00474c98) at chapter start
+	// PlayerX, PlayerY are the player's fixed-point position (player
+	// +0x3cc/+0x3d0, hundredths of a pixel from the playfield's top-centre),
+	// which FUN_00428e10 restores. The 33-entry position history that follows
+	// (+0x2c, player +0x436c) and the option state are not decoded.
+	PlayerX, PlayerY int32
+	Records          []Record
+	Raw              []byte // full 0x1c4-byte header, for fields not yet decoded
 }
 
 // slowRateStride is how often the game appends a slow-rate sample byte while
@@ -250,8 +258,12 @@ func parseChapters(b []byte, n int) []Chapter {
 		ch := Chapter{
 			Index:   idx,
 			Seed:    seed,
+			Power:   int16(binary.LittleEndian.Uint16(b[pos+0x10:])),
 			Frame:   int32(binary.LittleEndian.Uint32(b[pos+0x18:])),
+			Lives:   int32(binary.LittleEndian.Uint32(b[pos+0x1c:])),
 			Rank:    int32(binary.LittleEndian.Uint32(b[pos+0x20:])),
+			PlayerX: int32(binary.LittleEndian.Uint32(b[pos+0x24:])),
+			PlayerY: int32(binary.LittleEndian.Uint32(b[pos+0x28:])),
 			Records: make([]Record, count),
 			Raw:     append([]byte(nil), b[pos:pos+chapterHeaderSize]...),
 		}

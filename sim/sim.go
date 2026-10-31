@@ -32,8 +32,12 @@ type Config struct {
 	ShotType   int // game.ShotA/B/C
 	Difficulty int // game.DiffEasy..DiffExtra
 	Power      int // starting power in hundredths
+	Lives      int // lives in stock at the chapter's start
 	Seed       uint16
 	Rank       int // dynamic rank at the chapter's start
+	// PlayerX, PlayerY are the player's fixed-point start position from the
+	// chapter header (FUN_00428e10).
+	PlayerX, PlayerY int32
 }
 
 // ScriptFactory builds the stage script for a stage number. Wired by the
@@ -133,6 +137,7 @@ func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
 	state.SingleStage = true
 	state.DebugMode = true
 	state.Power = cfg.Power
+	state.Life = cfg.Lives
 	state.RNGSeed, state.HasSeed = cfg.Seed, true
 	state.Rank = cfg.Rank
 	if cfg.Difficulty == game.DiffExtra {
@@ -144,6 +149,7 @@ func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("sim: stage context unavailable")
 	}
+	ctx.Player.SetFixed(cfg.PlayerX, cfg.PlayerY)
 	return &headless{st: st, ctx: ctx, state: state, gameRef: g}, nil
 }
 
@@ -189,8 +195,10 @@ func (h *headless) sample(index int) *trace.Frame {
 		if len(f.E) >= trace.MaxEnemyRows {
 			break
 		}
+		// The probe's Active is "not flagged 0x20000": an enemy swept by
+		// FUN_0040e6a0 stays listed until the manager's next walk deletes it.
 		f.E = append(f.E, trace.EnemyRow{
-			X: e.X - gameOriginX, Y: e.Y - gameOriginY, HP: e.HP, Active: e.Active, Type: int(e.Type),
+			X: e.X - gameOriginX, Y: e.Y - gameOriginY, HP: e.HP, Active: e.ECLFlags&0x20000 == 0, Type: int(e.Type),
 		})
 	}
 	h.ctx.Bullets.Each(func(b *bullet.Bullet) {

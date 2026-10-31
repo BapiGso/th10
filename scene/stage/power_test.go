@@ -50,7 +50,7 @@ func TestDeathDropsPowerButDeathbombDoesNot(t *testing.T) {
 		s := powerTestStage()
 		p := s.ctx.Player
 		p.GS.Power = 500
-		p.X, p.Y = 100, 200
+		p.SetPos(100, 200)
 		p.Hit()
 		var in input.State
 		if bomb {
