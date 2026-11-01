@@ -141,14 +141,11 @@ const (
 // once, and at HP < 1 the defeat unless the enemy is immortal (0x40).
 func (vm *VM) hurt(a *eclActor, dmg int) int {
 	e := a.e
-	if vm.spell.active && e.ECLFlags&0x8000 != 0 {
+	if vm.card.Active && e.ECLFlags&0x8000 != 0 {
 		dmg = max(dmg/5, 1)
 	}
 	if e.ECLFlags&0x8 == 0 && a.invuln.cur < 1 {
 		e.HP -= dmg
-		if vm.ctx != nil {
-			vm.ctx.EnemyHurt(dmg)
-		}
 	}
 	if name, ok := vm.checkInterrupt(e, a); ok {
 		vm.interrupt(e, a, name)
@@ -165,7 +162,7 @@ func (vm *VM) hurt(a *eclActor, dmg int) int {
 }
 
 // damaged is installed as Enemy.Damaged for damage dealt outside the enemy's
-// update (the placeholder bomb). It reports whether the hit destroyed e.
+// update (tests). It reports whether the hit destroyed e.
 func (vm *VM) damaged(e *enemy.Enemy, dmg int) bool {
 	a := vm.actors[e]
 	if a == nil || e.ECLFlags&0x11 != 0 || dmg == 0 {
@@ -178,10 +175,14 @@ func (vm *VM) damaged(e *enemy.Enemy, dmg int) bool {
 	return r == hurtKilled
 }
 
-// LateUpdate runs after the stage's collisions: it forgets the enemies
-// deleted this frame.
+// LateUpdate runs after the items: the spell card's timer (FUN_00408d60,
+// calc priority 0x16) ticks while the card is up, and the enemies deleted
+// this frame are forgotten.
 func (vm *VM) LateUpdate(ctx *stage.Context) {
 	vm.ctx = ctx
+	if vm.card.Active {
+		vm.card.Timer.Tick(vm.gameSpeed)
+	}
 	vm.prune()
 }
 

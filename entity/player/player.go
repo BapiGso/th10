@@ -64,9 +64,9 @@ type Player struct {
 	// DeathPos is +0x440, where the player died, in game coordinates. The
 	// respawn's clears are centred on it.
 	DeathPos [2]float32
-	// BombTimer stands in for the bomb object (DAT_004776ec): a bomb is
-	// active, +0x28 set, while it is positive. M7 ports the real lifecycle.
-	BombTimer  int
+	// Bomb is the bomb object (DAT_004776ec); nil leaves the player unable
+	// to bomb.
+	Bomb       Bomber
 	ShootTimer int // 射击间隔计时（尚未移植的机体）
 	// NoAttack 由关卡在对话期间置位：射击（FUN_004281d0）和灵击都要求没有
 	// MSG，决死灵击不受限。
@@ -100,11 +100,16 @@ type Player struct {
 	reimuA  *reimuAShot
 }
 
+// Bomber is the bomb object (DAT_004776ec) as the player drives it.
+type Bomber interface {
+	Active() bool // +0x28: a bomb is running
+	Start()       // FUN_00405860
+}
+
 const (
-	shootInterval  = 3   // Legacy shot approximation; SHT firing records not yet executed.
-	bombDuration   = 300 // Placeholder until the original ANM-controlled lifecycle is wired.
-	frontFrameTime = 8   // 正面/侧身动画帧间隔
-	transFrameTime = 6   // 转身过渡动画帧间隔
+	shootInterval  = 3 // Legacy shot approximation; SHT firing records not yet executed.
+	frontFrameTime = 8 // 正面/侧身动画帧间隔
+	transFrameTime = 6 // 转身过渡动画帧间隔
 )
 
 func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
@@ -162,9 +167,6 @@ func (p *Player) gameSpeed() float32 {
 // UpdateInput advances one tick from an input snapshot, without polling the
 // OS: FUN_00425730.
 func (p *Player) UpdateInput(in *input.State) {
-	if p.BombTimer > 0 {
-		p.BombTimer--
-	}
 	switch p.State {
 	case StateRespawn:
 		if !p.respawn() {
@@ -175,6 +177,7 @@ func (p *Player) UpdateInput(in *input.State) {
 		if !p.NoAttack && p.canBomb(in) {
 			p.Invinc.Set(270)
 			p.bomb()
+			p.GS.LoseFaith(3000)
 		}
 		if p.StateTimer.Cur < 30 {
 			p.cancelAll()
@@ -234,15 +237,16 @@ func (p *Player) cancelAll() {
 // canBomb is the bomb test shared by states 1 and 4: no bomb running, at
 // least 1.00 power, and the bomb key held (DAT_00474e5c bit 1).
 func (p *Player) canBomb(in *input.State) bool {
-	return p.BombTimer == 0 && p.GS.Power >= game.BombPowerCost && in.IsPressed(input.KeyBomb)
+	return p.Bomb != nil && !p.Bomb.Active() && p.GS.Power >= game.BombPowerCost &&
+		in.IsPressed(input.KeyBomb)
 }
 
-// bomb starts a bomb (FUN_00405860, a placeholder until M7) for 1.00 power
-// and refreshes the options (FUN_00426f70).
+// bomb starts a bomb (FUN_00405860) for 1.00 power and refreshes the options
+// (FUN_00426f70). The power gauge (FUN_004054b0) is the HUD's.
 func (p *Player) bomb() {
-	p.BombTimer = bombDuration
+	p.Bomb.Start()
 	p.GS.Power -= game.BombPowerCost
-	p.refreshOptions()
+	p.RefreshOptions()
 }
 
 // die is FUN_004269d0, the end of the deathbomb window: a life, a third of
@@ -261,7 +265,7 @@ func (p *Player) die() {
 	if p.reimuA != nil {
 		p.reimuA.optionCount = 0
 	}
-	p.GS.Rank = min(max(p.GS.Rank-0x400, -0x400), 0x400)
+	p.GS.AddRank(-0x400)
 }
 
 // dying is state 2. On frame 3 the player loses 3.20 power, scattered as 7
@@ -283,7 +287,7 @@ func (p *Player) dying() {
 				p.SpawnItem(x, y, kind, a, 3)
 			}
 		}
-		p.refreshOptions()
+		p.RefreshOptions()
 	}
 	if t < 30 || p.GS.Life < 0 { // the stage handles the game over
 		return
@@ -612,6 +616,3 @@ func (p *Player) updateAnim(in *input.State) {
 func (p *Player) AddPower(n int) {
 	p.GS.Power = max(0, min(p.GS.Power+n, p.GS.MaxPower))
 }
-
-// BombDuration 返回符卡持续帧数，供 UI（如 Bomb 闪光）计算进度。
-func BombDuration() int { return bombDuration }

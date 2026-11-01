@@ -133,7 +133,7 @@ func TestExistingShotsAdvanceThroughDeathAndBomb(t *testing.T) {
 	p.GS.Power = 100
 	in.Restore(1<<input.KeyBomb | 1<<input.KeyShot)
 	p.UpdateInput(&in)
-	if p.State != StateNormal || p.BombTimer == 0 {
+	if p.State != StateNormal || !p.Bomb.Active() {
 		t.Fatal("expected deathbomb")
 	}
 	p.Bullets.Each(func(b *playerbullet.Bullet) {

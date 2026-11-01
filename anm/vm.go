@@ -11,6 +11,7 @@ package anm
 
 import (
 	"math"
+	"slices"
 
 	"th10/zun"
 )
@@ -186,6 +187,12 @@ type VM struct {
 	// stores into the script bytes themselves (no shipped script does this).
 	scratchI int32
 	scratchF float32
+
+	// chain is the children op 88 spawned under this object and under them
+	// (the list at +0x10 FUN_00413200 links each child into, after its
+	// parent); root is the object whose chain holds a child, nil on a root.
+	chain []*VM
+	root  *VM
 
 	env *Env
 	gs  float32
@@ -721,6 +728,29 @@ func (vm *VM) spawnChild(id int) {
 	c.Offset = vm.Offset
 	if vm.env.Spawn != nil {
 		vm.env.Spawn(c)
+	}
+	root := vm
+	if vm.root != nil {
+		root = vm.root
+	}
+	c.root = root
+	if len(root.chain) == cap(root.chain) {
+		root.chain = slices.DeleteFunc(root.chain, (*VM).Ended)
+	}
+	root.chain = append(root.chain, c)
+}
+
+// SetOffset is FUN_004492f0: the object's Offset, and on a root that of every
+// child in its chain.
+func (vm *VM) SetOffset(pos [3]float32) {
+	vm.Offset = pos
+	if vm.root != nil {
+		return
+	}
+	for _, c := range vm.chain {
+		if !c.Ended() {
+			c.Offset = pos
+		}
 	}
 }
 

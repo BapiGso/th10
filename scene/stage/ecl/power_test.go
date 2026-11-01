@@ -15,9 +15,9 @@ func dropTestActor(vm *VM) (*enemy.Enemy, *eclActor, *eclTask) {
 	return e, a, &eclTask{owner: e}
 }
 
-func countItems(p *item.Pool) map[item.ItemType]int {
-	counts := map[item.ItemType]int{}
-	p.Each(func(it *item.Item) { counts[it.Type]++ })
+func countItems(m *item.Manager) map[int32]int {
+	counts := map[int32]int{}
+	m.Each(func(it *item.Item) { counts[it.Kind]++ })
 	return counts
 }
 
@@ -33,8 +33,8 @@ func TestOriginalPowerDropIDs(t *testing.T) {
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropItems})
 	counts := countItems(ctx.Items)
 	// 1 is small power (2: the second ins_327 replaced the first), 4 big
-	// power (not an extend), 5 big point (not a bomb), 7 an extend.
-	for kind, want := range map[item.ItemType]int{item.PowerItem: 2, item.BigPower: 3, item.BigPoint: 4, item.LifeFragment: 1} {
+	// power (not an extend), 5 a full point item (not a bomb), 7 an extend.
+	for kind, want := range map[int32]int{item.KindPower: 2, item.KindBigPower: 3, item.KindFullPoint: 4, item.KindLife: 1} {
 		if counts[kind] != want {
 			t.Fatalf("drop %d: %d, want %d", kind, counts[kind], want)
 		}
@@ -60,12 +60,13 @@ func TestDropMainItem(t *testing.T) {
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropClear})
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropItems})
 	counts := countItems(ctx.Items)
-	if counts[item.BigPower] != 1 || ctx.Items.ActiveCount() != 1 {
+	if counts[item.KindBigPower] != 1 || ctx.Items.ActiveCount() != 1 {
 		t.Fatalf("items %v, want the main big power alone", counts)
 	}
+	pos := a.mv.final.pos
 	ctx.Items.Each(func(it *item.Item) {
-		if it.X != e.X || it.Y != e.Y {
-			t.Fatalf("main item at %.2f,%.2f, want the enemy at %.2f,%.2f", it.X, it.Y, e.X, e.Y)
+		if it.Pos != pos {
+			t.Fatalf("main item at %v, want the enemy at %v", it.Pos, pos)
 		}
 	})
 	if a.drops.items[0] != 0 {
@@ -86,7 +87,8 @@ func TestDropMainItem(t *testing.T) {
 func TestVMDropAreaSpreadsOpcodeDrops(t *testing.T) {
 	ctx := newTestContext()
 	vm := newTestVM()
-	e, _, task := dropTestActor(vm)
+	_, a, task := dropTestActor(vm)
+	pos := a.mv.final.pos
 
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropClear})
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropExtra, Params: []Param{intParam(1), intParam(4)}})
@@ -100,9 +102,9 @@ func TestVMDropAreaSpreadsOpcodeDrops(t *testing.T) {
 	count := 0
 	ctx.Items.Each(func(it *item.Item) {
 		count++
-		dx, dy := (it.X-e.X)/64, (it.Y-e.Y)/32
+		dx, dy := (it.Pos[0]-pos[0])/64, (it.Pos[1]-pos[1])/32
 		if r2 := dx*dx + dy*dy; r2 < 0.25-1e-4 || r2 > 1+1e-4 {
-			t.Fatalf("item at %.2f,%.2f: %.3f of the ellipse's radius squared", it.X, it.Y, r2)
+			t.Fatalf("item at %.2f,%.2f: %.3f of the ellipse's radius squared", it.Pos[0], it.Pos[1], r2)
 		}
 	})
 	if count != 4 {
@@ -136,7 +138,7 @@ func TestKillScoresAndDrops(t *testing.T) {
 	if got := ctx.State.Score; got < 1230 {
 		t.Fatalf("score %d, want at least the defeat's 1230", got)
 	}
-	if counts := countItems(ctx.Items); counts[item.PowerItem] != 1 {
+	if counts := countItems(ctx.Items); counts[item.KindPower] != 1 {
 		t.Fatalf("drops %v, want one small power", counts)
 	}
 	if n := vm.rng.Count - before; n != 2 {
@@ -154,7 +156,7 @@ func TestFullPowerDropsFaith(t *testing.T) {
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropMain, Params: []Param{intParam(1)}})
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropExtra, Params: []Param{intParam(4), intParam(2)}})
 	vm.execGameOp(ctx, task, &Instr{Opcode: opDropItems})
-	if counts := countItems(ctx.Items); counts[item.FaithItem] != 3 || ctx.Items.ActiveCount() != 3 {
+	if counts := countItems(ctx.Items); counts[item.KindFaith] != 3 || ctx.Items.ActiveCount() != 3 {
 		t.Fatalf("drops %v, want three faith items", counts)
 	}
 }

@@ -96,10 +96,10 @@ func (p *Player) fireReimuA(held bool) {
 	}
 }
 
-// refreshOptions is FUN_00426f70 for Reimu A: when the option count (one per
+// RefreshOptions is FUN_00426f70 for Reimu A: when the option count (one per
 // 1.00 power, at most 4) changes, the options are put on their offsets from
 // the player and snap there on the next move.
-func (p *Player) refreshOptions() {
+func (p *Player) RefreshOptions() {
 	s := p.reimuA
 	if s == nil {
 		return
@@ -119,7 +119,7 @@ func (p *Player) refreshOptions() {
 // updateOptions is the option loop at the end of FUN_004250b0, run by state
 // 1 after the move: each option eases 30% of the way to its offset from the
 // player, or snaps there. A count change the items made without
-// refreshOptions snaps too.
+// RefreshOptions snaps too.
 func (s *reimuAShot) updateOptions(x, y float64, power int, focused bool) {
 	offsets := s.file.OptionOffsets(power, focused)
 	changed := s.snap || len(offsets) != s.optionCount

@@ -5,6 +5,8 @@ package anm
 // spawns without an owner. It runs once a frame at calc priority 0x1a, after
 // the items.
 
+import "slices"
+
 // More VM flag bits.
 const (
 	// FlagAutoRotate (op 82) makes a bullet's sprite follow its heading.
@@ -72,6 +74,12 @@ func (w *World) Run(env *Env) {
 		clear(w.list[n:])
 		w.list = w.list[:n]
 	}
+}
+
+// Contains is FUN_004491c0's lookup: whether vm is still in the list, which
+// a Run leaves once the object has ended or was marked for deletion.
+func (w *World) Contains(vm *VM) bool {
+	return vm != nil && slices.Contains(w.list, vm)
 }
 
 // Len is the number of live objects.

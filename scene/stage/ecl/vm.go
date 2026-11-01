@@ -87,17 +87,17 @@ type VM struct {
 	shakeTotal  int
 	shakeMag    float64
 
-	// boss spell-card HUD state, driven by 357/359 (declare) and 343 (end).
-	// The timer is hudTimer. Decoded from the ECL itself.
+	// card is the spell card state (DAT_004776f4) the bomb reads through
+	// Context.Spell, driven by the declarations (342/348/357-359) and 343;
+	// spell is the rest of the card for the HUD, whose timer is hudTimer.
+	card  stage.SpellCard
 	spell spellState
 }
 
-// spellState tracks the currently-declared boss spell card for the HUD.
+// spellState is the declared card's HUD details.
 type spellState struct {
-	active bool
-	name   string // UTF-8 (decoded from the ECL's Shift-JIS 357/359 arg)
-	bonus  int64  // base bonus score
-	owner  *enemy.Enemy
+	name  string // UTF-8 (decoded from the ECL's Shift-JIS name)
+	owner *enemy.Enemy
 }
 
 // eVal is a typed value on the data stack / in a variable (raw 32-bit bits).
@@ -238,10 +238,10 @@ func (vm *VM) BossHUD() stage.BossHUDInfo {
 			info.TimeLeft = vm.hudTimer
 		}
 	}
-	if vm.spell.active && vm.spell.owner == boss {
+	if vm.card.Active && vm.spell.owner == boss {
 		info.Spell = true
 		info.Name = vm.spell.name
-		info.Bonus = vm.spell.bonus
+		info.Bonus = vm.card.Bonus
 	}
 	return info
 }
@@ -285,6 +285,7 @@ func (vm *VM) Update(ctx *stage.Context) {
 	if ctx != nil {
 		ctx.ManagerOrder = vm.ManagerOrder
 		ctx.Boss0 = vm.boss0Pos
+		ctx.Spell = &vm.card
 		if ctx.Anm != nil {
 			vm.gameSpeed = ctx.Anm.GameSpeed // the player's respawn resets it
 		}
@@ -311,8 +312,8 @@ func (vm *VM) Update(ctx *stage.Context) {
 	}
 
 	// Drop the spell HUD when the card's owner dies.
-	if vm.spell.active && vm.spell.owner != nil && !vm.spell.owner.Active {
-		vm.spell.active = false
+	if vm.card.Active && vm.spell.owner != nil && !vm.spell.owner.Active {
+		vm.card.Active = false
 	}
 	if ctx != nil {
 		if ctx.State != nil {
@@ -393,6 +394,7 @@ func (vm *VM) updateActor(a *eclActor) bool {
 		return false
 	}
 	a.syncPos()
+	vm.bombSwap(a)
 	if !vm.runActor(a) {
 		return false
 	}
@@ -410,6 +412,26 @@ func (vm *VM) updateActor(a *eclActor) bool {
 	}
 	a.phase.tick(vm.gameSpeed)
 	return true
+}
+
+// bombSwap is ins_366's part of FUN_0040dc80: an enemy armed with it takes
+// no damage (0x1) and shows its bomb sprites while a bomb runs, and gets its
+// own back after.
+func (vm *VM) bombSwap(a *eclActor) {
+	e := a.e
+	if e.ECLFlags&0x100000 == 0 {
+		return
+	}
+	bomb := vm.ctx != nil && vm.ctx.Bomb != nil && vm.ctx.Bomb.Active()
+	swapped := e.ECLFlags&0x200000 != 0
+	switch {
+	case bomb && !swapped:
+		a.dirScript = a.bombScript
+		e.ECLFlags |= 0x200001
+	case !bomb && swapped:
+		a.dirScript = a.savedScript
+		e.ECLFlags &^= 0x200001
+	}
 }
 
 // runActor is FUN_0044fd10: the primary context, then the async contexts

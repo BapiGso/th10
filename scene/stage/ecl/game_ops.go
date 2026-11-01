@@ -35,6 +35,8 @@ type eclActor struct {
 	// script (+0xec), the slot-0 script (+0xf0) and ins_262's script, which
 	// ins_269 offsets (+0xf4).
 	anmFile, bodyFile, curScript, dirScript int
+	// bombScript and savedScript are ins_366's swap (+0x1448, +0x144c).
+	bombScript, savedScript int
 
 	drops   dropTable
 	score   int32               // the defeat score (enemy +0x23f8)
@@ -339,10 +341,22 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 				a.slots[i].timeoutSub = in.Params[1].Str
 			}
 		}
-	case opSpellEnd: // case 0x157 leaves the bullets alone
-		vm.spell.active = false // 符卡结束：撤下 HUD
-	case opSpellBg, opSpell, opSpell3: // 342/357/359 SSSx: (idx, timeLimit, bonus, name)
+	case opSpellEnd: // case 0x157 (FUN_00409c00) leaves the bullets alone
+		vm.card.Active = false // 符卡结束：撤下 HUD
+	case opSpellBg, opSpellAlt, opSpell, opSpell2, opSpell3: // SSSx: (idx, timeLimit, bonus, name)
 		vm.declareSpell(t, in)
+	case opBombSwap: // case 0x16e: (armed, bomb script)
+		if t.owner != nil && len(in.Params) >= 2 {
+			a := vm.actorFor(t.owner)
+			if vm.resolveInt(t, in.Params[0])&1 != 0 {
+				t.owner.ECLFlags |= 0x100000
+			} else {
+				t.owner.ECLFlags &^= 0x100000
+			}
+			a.bombScript = int(vm.resolveInt(t, in.Params[1]))
+			t.owner.ECLFlags &^= 0x200000
+			a.savedScript = a.dirScript
+		}
 	case opLifeMarker:
 		vm.addLifeMarker(t, in)
 	case opRankPickI:
@@ -383,8 +397,8 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		// Remaining no-ops with known-but-cosmetic binary effects: 272/273 spawn
 		// ANM effect objects at the enemy (case 0x110/0x111), 344 chapter
 		// bookkeeping, 360 stars, 361 (FUN_00405410),
-		// 362 HUD flag |8, 363 (FUN_0040cea0), 365 (FUN_0041c7d0), 366 dialog
-		// sprite-swap flags. UI/spell-frame ops likewise.
+		// 362 HUD flag |8, 363 (FUN_0040cea0), 365 (FUN_0041c7d0). UI/spell-frame
+		// ops likewise.
 	}
 }
 
@@ -889,7 +903,7 @@ func (vm *VM) kill(a *eclActor) {
 		return
 	}
 	if ctx.State != nil {
-		ctx.State.AddScoreRaw(int64(a.score/10) * 10)
+		ctx.State.AddPoints(int64(a.score))
 	}
 	if a.deathSE >= 0 {
 		ctx.PlaySEID(int(a.deathSE))
@@ -966,25 +980,34 @@ func (vm *VM) rankIndex(n int) int {
 // 'x' string; here we convert its Shift-JIS bytes to UTF-8 for display.
 var spellSJISDec = japanese.ShiftJIS.NewDecoder()
 
-// declareSpell handles 342/357/359: (idx, timeLimit, bonus, name). It records
-// the boss spell card for the HUD; the time limit is the interrupt slot's.
+// declareSpell handles 342/348/357-359 (cases 0x156, 0x15c, 0x165-0x167):
+// (idx, timeLimit, bonus, name). The card's index is idx, plus the difficulty
+// for 357, less one for 358 and two for 359 (FUN_00409280's param); its timer
+// restarts and the capture is open. The time limit is the interrupt slot's.
 func (vm *VM) declareSpell(t *eclTask, in *Instr) {
 	if len(in.Params) < 4 {
 		return
 	}
-	vm.resolveInt(t, in.Params[0])
+	id := vm.resolveInt(t, in.Params[0])
+	switch in.Opcode {
+	case opSpell:
+		id += int32(vm.difficulty)
+	case opSpell2:
+		id += int32(vm.difficulty) - 1
+	case opSpell3:
+		id += int32(vm.difficulty) - 2
+	}
 	bonus := vm.resolveInt(t, in.Params[2])
 	vm.resolveInt(t, in.Params[1])
 	name := in.Params[3].Str
 	if utf, err := spellSJISDec.String(name); err == nil && utf != "" {
 		name = utf
 	}
-	vm.spell = spellState{
-		active: true,
-		name:   name,
-		bonus:  int64(bonus),
-		owner:  t.owner,
-	}
+	vm.card.Active, vm.card.Capture = true, true
+	vm.card.ID = id
+	vm.card.Timer.Reset()
+	vm.card.Bonus = int64(bonus)
+	vm.spell = spellState{name: name, owner: t.owner}
 }
 
 // addLifeMarker is 347 SfS: (index, hp, colour), read last to first.

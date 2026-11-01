@@ -51,7 +51,7 @@ func NewContext(state *game.GameState) *Context {
 		Player:  player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
 		Bullets: bullet.NewPool(),
 		Lasers:  laser.NewManager(),
-		Items:   item.NewPool(256),
+		Items:   item.NewManager(),
 		Effects: effect.NewPool(512),
 		World:   &anm.World{},
 	}
@@ -65,17 +65,23 @@ func NewContext(state *game.GameState) *Context {
 		c.Lasers.ClearAll(false, c.LaserEnv)
 	}
 	c.Player.SpawnItem = c.SpawnItem // the death drops
+	c.Bomb = &Bomb{ctx: c}
+	c.Player.Bomb = c.Bomb
 	c.BulletEnv = &bullet.Env{
 		Anm:     c.Anm,
 		File:    bulletFile(),
 		Effects: c.World,
 		Hit:     c.bulletHit,
 		Graze:   c.bulletGraze,
-		PlaySE:  func(id int32, _ float32, _ bool) { c.PlaySEID(int(id)) },
-		// FUN_0041bb00 type 8; the item kind is not ported yet.
-		CancelItem: func(x, y float32) {
-			c.Items.Spawn(float64(x)+gameX, float64(y)+gameY, item.PointItem)
-		},
+		PlaySE:     func(id int32, _ float32, _ bool) { c.PlaySEID(int(id)) },
+		CancelItem: c.cancelItem,
+	}
+	c.ItemEnv = &item.Env{
+		State:   state,
+		Anm:     c.Anm,
+		File:    c.BulletEnv.File,
+		PlaySE:  func(id int32) { c.PlaySEID(int(id)) },
+		Options: c.Player.RefreshOptions,
 	}
 	c.LaserEnv = &laser.Env{
 		Anm:        c.Anm,
@@ -122,14 +128,6 @@ func (c *Context) UpdateBullets() {
 // UpdateWorld runs the effect objects for a frame.
 func (c *Context) UpdateWorld() {
 	c.World.Run(c.Anm)
-}
-
-// ClearBullets cancels every bullet and laser round the player, leaving items:
-// the bomb's clear until the bombs are ported (M7).
-func (c *Context) ClearBullets() {
-	p := c.BulletEnv.Player
-	c.Bullets.CircleClear(p[0], p[1], 1000, true, true, c.BulletEnv)
-	c.Lasers.CircleClear([3]float32{p[0], p[1], 0}, 1000, true, c.LaserEnv)
 }
 
 // respawnClear is the respawn's clear round (x, y), radius r (FUN_00425730

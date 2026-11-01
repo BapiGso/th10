@@ -6,6 +6,7 @@ import (
 	"th10/entity/item"
 	"th10/game"
 	"th10/input"
+	"th10/zun"
 )
 
 func powerTestStage() *Stage {
@@ -15,33 +16,69 @@ func powerTestStage() *Stage {
 	return &Stage{ctx: ctx}
 }
 
+// dropOnPlayer drops a still item of kind on the player, in its collect box.
+func dropOnPlayer(s *Stage, kind int32) {
+	p := s.ctx.Player
+	s.ctx.SpawnItem(float32(p.X-gameX), float32(p.Y-gameY), kind, -zun.HalfPi, 0)
+}
+
 func TestCollectedPowerValues(t *testing.T) {
 	for _, tc := range []struct {
-		kind         item.ItemType
+		kind         int32
 		before, want int
 	}{
-		{item.PowerItem, 0, 5}, {item.BigPower, 0, 100},
-		{item.PowerItem, 499, 500}, {item.BigPower, 450, 500},
+		{item.KindPower, 0, 5}, {item.KindBigPower, 0, 100},
+		{item.KindPower, 495, 500}, {item.KindBigPower, 450, 500},
+		{item.KindBossPower, 0, 5}, {item.KindBossBigPower, 0, 100},
 	} {
 		s := powerTestStage()
 		s.ctx.State.Power = tc.before
-		p := s.ctx.Player
-		s.ctx.Items.Spawn(p.X, p.Y, tc.kind)
-		s.checkCollisions()
-		if s.ctx.State.Power != tc.want {
+		dropOnPlayer(s, tc.kind)
+		s.ctx.UpdateItems(false)
+		if s.ctx.State.Power != tc.want || s.ctx.Items.ActiveCount() != 0 {
 			t.Fatalf("item %d: %d -> %d, want %d", tc.kind, tc.before, s.ctx.State.Power, tc.want)
 		}
 	}
 }
 
-func TestBigPointIsNotBombStock(t *testing.T) {
+// TestPointItemValue: a point item (FUN_0041afd0 kind 2) is worth the faith
+// times ten above y 144, and less the lower the player is below it.
+func TestPointItemValue(t *testing.T) {
+	for _, tc := range []struct {
+		y     float64 // the player's game y
+		score int64
+		rank  int
+	}{
+		{130, 80000, 8},
+		// Half of 80000, less 1.00000012 of 8000/2-5000, truncated.
+		{448, 41000, 1},
+	} {
+		s := powerTestStage()
+		s.ctx.State.Faith = 80000
+		s.ctx.Player.SetPos(gameX, gameY+tc.y)
+		dropOnPlayer(s, item.KindPoint)
+		s.ctx.UpdateItems(false)
+		st := s.ctx.State
+		if st.Score != tc.score || st.HiScore != tc.score || st.Rank != tc.rank || st.Power != 0 {
+			t.Fatalf("point item at y %v: score %d rank %d, want %d and %d", tc.y, st.Score, st.Rank, tc.score, tc.rank)
+		}
+	}
+}
+
+// TestCancelItemRisesThenCollects: a cancel item waits out its delay (0 for
+// the first slot), appears, then is collected for 10 faith and 10 points.
+func TestCancelItemRisesThenCollects(t *testing.T) {
 	s := powerTestStage()
-	p := s.ctx.Player
-	s.ctx.State.Faith = 80000
-	s.ctx.Items.Spawn(p.X, p.Y, item.BigPoint)
-	s.checkCollisions()
-	if s.ctx.State.Score != 80000 || s.ctx.State.HiScore != 80000 || s.ctx.State.Power != 0 {
-		t.Fatalf("big point reward: %+v", s.ctx.State)
+	faith := s.ctx.State.Faith
+	s.ctx.Player.SetPos(gameX, gameY+400)
+	s.ctx.cancelItem(0, 400)
+	s.ctx.UpdateItems(false)
+	if n := s.ctx.Items.ActiveCount(); n != 1 || s.ctx.State.Score != 0 {
+		t.Fatalf("collected while appearing: %d items, score %d", n, s.ctx.State.Score)
+	}
+	s.ctx.UpdateItems(false)
+	if n := s.ctx.Items.ActiveCount(); n != 0 || s.ctx.State.Score != 10 || s.ctx.State.Faith != faith+10 {
+		t.Fatalf("%d items, score %d, faith %d", n, s.ctx.State.Score, s.ctx.State.Faith-faith)
 	}
 }
 
@@ -61,13 +98,13 @@ func TestDeathDropsPowerButDeathbombDoesNot(t *testing.T) {
 		}
 		small, big := 0, 0
 		s.ctx.Items.Each(func(it *item.Item) {
-			if it.X != 100 || it.Y != 200 {
+			if it.Pos[0] != 100-gameX || it.Pos[1] != 200-gameY {
 				t.Fatal("drop emitted at respawn position")
 			}
-			if it.Type == item.PowerItem {
+			if it.Kind == item.KindPower {
 				small++
 			}
-			if it.Type == item.BigPower {
+			if it.Kind == item.KindBigPower {
 				big++
 			}
 		})

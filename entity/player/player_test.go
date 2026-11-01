@@ -8,8 +8,17 @@ import (
 )
 
 func testPlayer(character int) *Player {
-	return New(game.NewState(character, game.ShotA, game.DiffNormal), game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+	p := New(game.NewState(character, game.ShotA, game.DiffNormal), game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom)
+	p.Bomb = &fakeBomb{}
+	return p
 }
+
+// fakeBomb stands in for the stage's bomb object: started, it runs until
+// the test stops it.
+type fakeBomb struct{ on bool }
+
+func (b *fakeBomb) Active() bool { return b.on }
+func (b *fakeBomb) Start()       { b.on = true }
 
 func TestBombConsumesPower(t *testing.T) {
 	// States 1 and 4 bomb; the respawn (before its last frame) and dying
@@ -17,8 +26,8 @@ func TestBombConsumesPower(t *testing.T) {
 	for _, state := range []State{StateNormal, StateDeathbomb, StateRespawn, StateDying} {
 		for _, power := range []int{0, 5, 95, 99, 100, 105, 400, 500} {
 			p := testPlayer(game.CharReimu)
-			p.State, p.GS.Power = state, power
-			life := p.GS.Life
+			p.State, p.GS.Power, p.GS.Faith = state, power, 100000
+			life, faith := p.GS.Life, p.GS.Faith
 			var in input.State
 			in.Restore(1 << input.KeyBomb)
 			p.UpdateInput(&in)
@@ -27,8 +36,16 @@ func TestBombConsumesPower(t *testing.T) {
 			if bombs {
 				want -= 100
 			}
-			if p.GS.Power != want || (p.BombTimer > 0) != bombs {
+			if p.GS.Power != want || p.Bomb.Active() != bombs {
 				t.Fatalf("state %d power %d: power=%d state=%d", state, power, p.GS.Power, p.State)
+			}
+			// FUN_00412e70(3000) on a state-1 bomb only: 300 faith, x10 here.
+			if wantFaith := faith; bombs && state == StateNormal {
+				if wantFaith -= 3000; p.GS.Faith != wantFaith {
+					t.Fatalf("state %d: faith %d, want %d", state, p.GS.Faith, wantFaith)
+				}
+			} else if p.GS.Faith != faith {
+				t.Fatalf("state %d: faith %d, want %d", state, p.GS.Faith, faith)
 			}
 			if bombs && p.State != StateNormal {
 				t.Fatalf("state %d: bomb left state %d", state, p.State)
@@ -58,7 +75,7 @@ func TestBombUsesHeldInput(t *testing.T) {
 		t.Fatal("test must use held input")
 	}
 	p.UpdateInput(&in)
-	if p.BombTimer == 0 || p.GS.Power != 0 {
+	if !p.Bomb.Active() || p.GS.Power != 0 {
 		t.Fatal("original held-X trigger not honored")
 	}
 }
@@ -81,7 +98,7 @@ func TestDeathbombWindow(t *testing.T) {
 		if frame <= 8 {
 			// FUN_00425730 state 4: StateTimer 60, 200 frames invulnerable.
 			if p.State != StateNormal || p.GS.Life != life || p.GS.Power != 400 ||
-				p.BombTimer == 0 || p.StateTimer.Cur != 61 || p.Invinc.Cur != 199 {
+				!p.Bomb.Active() || p.StateTimer.Cur != 61 || p.Invinc.Cur != 199 {
 				t.Fatalf("deathbomb at %d: %+v", frame, p)
 			}
 			continue

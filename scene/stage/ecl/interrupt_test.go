@@ -97,7 +97,7 @@ func TestVMInterruptOnHP(t *testing.T) {
 	if n := liveAsyncs(vm, boss); n != 0 {
 		t.Fatalf("%d asyncs survived the interrupt", n)
 	}
-	if !vm.spell.active || vm.spell.owner != boss {
+	if !vm.card.Active || vm.spell.owner != boss {
 		t.Fatal("BossCard1's ins_357 did not declare the card")
 	}
 	breakers := 0

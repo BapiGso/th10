@@ -73,7 +73,7 @@ func NewState(character, shotType, difficulty int) *GameState {
 		Power:      0,
 		MaxPower:   PowerMax,
 		Faith:      50000,
-		MaxFaith:   100000,
+		MaxFaith:   999990, // 99999 in the binary
 		Difficulty: difficulty,
 		Character:  character,
 		ShotType:   shotType,
@@ -96,6 +96,48 @@ func (s *GameState) AddScoreRaw(v int64) {
 	if s.Score > s.HiScore {
 		s.HiScore = s.Score
 	}
+}
+
+// AddPoints is FUN_00409d90: a tenth of n to the stored score, which shows
+// times ten, capped at 999999999.
+func (s *GameState) AddPoints(n int64) {
+	s.Score = min(s.Score+n/10*10, 9999999990)
+	if s.Score > s.HiScore {
+		s.HiScore = s.Score
+	}
+}
+
+// GainFaith is FUN_0041be80: a tenth of n to the faith (DAT_00474c4c, which
+// this state keeps x10), capped at 99999.
+func (s *GameState) GainFaith(n int64) {
+	s.Faith += n / 10 * 10
+	if s.Faith/10 > 99999 {
+		s.Faith = 999990
+	}
+}
+
+// GainPower is FUN_00418930: n units of 0.05 power (DAT_00474c48, which this
+// state keeps x5) unless already full, capped at 1.00 x5. It reports whether
+// the power level, one per 1.00, changed.
+func (s *GameState) GainPower(n int) bool {
+	p := s.Power / 5
+	if p > 99 {
+		return false
+	}
+	p = min(p+n, 100)
+	s.Power = p * 5
+	return (p-n)/20 != p/20
+}
+
+// LoseFaith is FUN_00412e70: a tenth of n off the faith (DAT_00474c4c, which
+// this state keeps x10), floored at 5000.
+func (s *GameState) LoseFaith(n int64) {
+	s.Faith = max(s.Faith/10-n/10, 5000) * 10
+}
+
+// AddRank is FUN_00405b60: n to the rank, held to -0x400..0x400.
+func (s *GameState) AddRank(n int) {
+	s.Rank = min(max(s.Rank+n, -0x400), 0x400)
 }
 
 // AddFaith 增加信仰值

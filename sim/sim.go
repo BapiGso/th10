@@ -198,6 +198,10 @@ const (
 // sample snapshots the current world into a trace frame.
 func (h *headless) sample(index int) *trace.Frame {
 	enemies := liveEnemies(h.ctx)
+	bomb := 0
+	if b := h.ctx.Bomb; b.Active() {
+		bomb = int(b.Timer.Cur)
+	}
 	f := &trace.Frame{
 		Index:      index,
 		PX:         h.ctx.Player.X - gameOriginX,
@@ -209,7 +213,7 @@ func (h *headless) sample(index int) *trace.Frame {
 		PGraze:     h.state.Graze,
 		PState:     int(h.ctx.Player.State),
 		PInvinc:    int(h.ctx.Player.Invinc.Cur),
-		PBombTimer: h.ctx.Player.BombTimer,
+		PBombTimer: bomb,
 		Enemies:    len(enemies),
 		Bullets:    h.ctx.Bullets.Live(),
 		Items:      h.ctx.Items.ActiveCount(),

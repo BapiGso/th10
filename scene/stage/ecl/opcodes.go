@@ -163,12 +163,14 @@ const (
 	opSetChapter   = 344
 	opEnemySweep   = 345
 	opLifeMarker   = 347
-	opAnmRank      = 348
+	opSpellAlt     = 348
 	opRankPickI    = 355
 	opRankPickF    = 356
-	opSpell        = 357
-	opSpell3       = 359
+	opSpell        = 357 // index + difficulty
+	opSpell2       = 358 // index + difficulty - 1
+	opSpell3       = 359 // index + difficulty - 2
 	opStars        = 360
+	opBombSwap     = 366
 	opWaitRank     = 368 // SSSS: difficulty-indexed wait (Easy,Normal,Hard,Lunatic)
 
 	// Bullet and laser ops (bullet_ops.go).

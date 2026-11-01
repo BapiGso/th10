@@ -44,7 +44,7 @@ type Context struct {
 	Player  *player.Player
 	Bullets *bullet.Pool   // 敌弹管理器（DAT_004776f0）
 	Lasers  *laser.Manager // 激光管理器（DAT_0047781c）
-	Items   *item.Pool
+	Items   *item.Manager  // 道具管理器（DAT_00477818）
 	Effects *effect.Pool
 	Enemies []*enemy.Enemy // 活跃敌人列表
 	Audio   Sound          // 音频管理器；无头模拟（sim 包）保持 nil
@@ -54,6 +54,7 @@ type Context struct {
 	Anm       *anm.Env
 	BulletEnv *bullet.Env
 	LaserEnv  *laser.Env
+	ItemEnv   *item.Env
 	// RNG 是原作的游戏随机数（DAT_004918b0），ECL 与子弹自身的 ANM 脚本共用。
 	RNG *zun.RNG
 	// STD 是本关 .std 的相机脚本（FUN_00403c80）；ECL 270/271 的敌人读它的
@@ -66,6 +67,10 @@ type Context struct {
 	ManagerOrder func() []*enemy.Enemy
 	// Boss0 由 ECL VM 设置：0 号 Boss 槽敌人的位置（跟随 Boss 的无限激光用）。
 	Boss0 func() ([3]float32, bool)
+	// Spell 由 ECL VM 设置：符卡状态（DAT_004776f4），灵击读写它。nil = 无符卡。
+	Spell *SpellCard
+	// Bomb 是灵击对象（DAT_004776ec），见 bomb.go。
+	Bomb *Bomb
 
 	// msg 是正在播放的对话（nil = 无），msgs 是本关的 .msg，bossBGM 是 op 18
 	// 切换的 Boss 曲，fadeFrames 是 op 21 的淡出帧数。cleared 表示 op 20 已执行。
@@ -288,12 +293,8 @@ func (s *Stage) update(in *input.State) error {
 	s.updatePlayer(in)
 	ctx.SyncPlayer() // the script aims at this frame's position
 
-	// 1b. Bomb 起爆沿：灵击开始的那一帧播放符卡音效、信仰惩罚、屏幕全屏闪光
-	if ctx.Player.BombTimer == player.BombDuration() {
-		ctx.PlaySE(audio.SEBomb)
-		ctx.State.AddFaith(-15000) // 使用符卡折损信仰倍率
-		ctx.Effects.Spawn(ctx.Player.X, ctx.Player.Y, effect.TypeExplosion, 40)
-	}
+	// 1b. 灵击（FUN_00405750，calc 0x11）：随世界中的 ANM 对象上升、取半径并消弹
+	ctx.Bomb.Update()
 
 	// 2. 脚本驱动（敌人/弹幕生成）
 	s.script.Update(ctx)
@@ -306,19 +307,14 @@ func (s *Stage) update(in *input.State) error {
 	// 4. 敌弹与激光（子弹自身的命中、擦弹判定在这里完成）
 	ctx.UpdateBullets()
 
-	// 5. 道具
-	focused := in.IsPressed(input.KeyFocus)
-	attract := ctx.Player.State != player.StateDying && ctx.Player.State != player.StateDeathbomb
-	ctx.Items.Update(ctx.Player.X, ctx.Player.Y, focused, attract, game.FieldBottom)
+	// 5. 道具（移动与拾取都在 FUN_0041afd0 里）
+	ctx.UpdateItems(in.IsPressed(input.KeyFocus))
 
 	// 6. 特效
 	ctx.Effects.Update()
 	ctx.UpdateWorld()
 
-	// 7. 碰撞
-	s.checkCollisions()
-
-	// 7b. 脚本的伤害后处理：ECL 的阶段中断（超时）与计时器，见 FUN_0040dc80
+	// 7. 脚本的伤害后处理：ECL 的阶段中断（超时）与计时器，见 FUN_0040dc80
 	if lu, ok := s.script.(interface{ LateUpdate(*Context) }); ok {
 		lu.LateUpdate(ctx)
 	}
@@ -338,75 +334,6 @@ func (s *Stage) updatePlayer(in *input.State) {
 	p := s.ctx.Player
 	p.SetHomingCandidates(s.ctx.Enemies)
 	p.UpdateInput(in)
-}
-
-// ---------- 碰撞检测 ----------
-
-func (s *Stage) checkCollisions() {
-	ctx := s.ctx
-	p := ctx.Player
-	st := ctx.State
-	px, py := p.X, p.Y
-
-	// 自机子弹与伤害圈对敌人的伤害在敌人自己的更新里（FUN_0040dc80，
-	// scene/stage/ecl 的 updateActor）。
-
-	// 道具拾取：自机死亡中（状态 2）不拾取（FUN_0041afd0）
-	if p.State != player.StateDying {
-		ctx.Items.CollectCallback(px, py, func(t item.ItemType) {
-			ctx.PlaySE(audio.SEItem)
-			switch t {
-			case item.PowerItem:
-				p.AddPower(game.SmallPowerValue)
-				st.AddFaith(8)
-			case item.BigPower:
-				p.AddPower(game.BigPowerValue)
-				st.AddFaith(20)
-			case item.PointItem:
-				st.Point++
-				st.AddFaith(15)
-				st.AddScore(500)
-			case item.LifeFragment:
-				st.Life++
-				st.AddFaith(100)
-			case item.BigPoint:
-				st.Point++
-				st.AddScoreRaw(st.Faith)
-			case item.FullPower:
-				st.Power = st.MaxPower
-				st.AddFaith(50)
-			case item.FaithItem:
-				st.AddFaith(1000) // FUN_0041be80(100)，本项目信仰值 x10
-			}
-		})
-	}
-
-	// Bomb 清屏（灵击移植前的占位，M7）
-	if p.BombTimer > 0 {
-		ctx.ClearBullets()
-		s.applyBombDamage()
-	}
-}
-
-func (s *Stage) applyBombDamage() {
-	ctx := s.ctx
-	st := ctx.State
-	p := ctx.Player
-	if p.BombTimer%10 != 0 {
-		return
-	}
-	damage := 40 + st.Power/20
-	for _, e := range ctx.Enemies {
-		if !e.Shootable() {
-			continue
-		}
-		prevHP := e.HP
-		e.TakeDamage(damage) // 击破的得分与掉落由 ECL VM 结算（FUN_0040e5f0）
-		if e.HP < prevHP {
-			st.AddScore(int64(damage) * 8)
-			ctx.Effects.Spawn(e.X, e.Y, effect.TypeBulletCancel, 10)
-		}
-	}
 }
 
 // cleanEnemies drops deleted enemies. Leaving the field is the ECL's call
@@ -445,9 +372,6 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 	s.drawEffects(s.field)
 	s.drawWorld(s.field)
 
-	// Bomb 全屏闪光：起爆后渐弱的白色叠层（叠在 field 上，跟随震动）
-	s.drawBombFlash(s.field)
-
 	// Boss 血条/符卡 HUD（顶部横条），叠在 field 顶部
 	s.drawBossHUD(s.field)
 
@@ -483,23 +407,11 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 
 // 以下绘制全部用几何占位，后续替换为贴图
 
+// drawItems draws the items by FUN_0041ba30.
 func (s *Stage) drawItems(field *ebiten.Image) {
 	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
-	s.ctx.Items.Each(func(it *item.Item) {
-		x := float32(it.X - fl)
-		y := float32(it.Y - ft)
-		var c color.RGBA
-		switch it.Type {
-		case item.PowerItem:
-			c = color.RGBA{255, 64, 64, 255}
-		case item.PointItem:
-			c = color.RGBA{64, 128, 255, 255}
-		case item.FaithItem:
-			c = color.RGBA{64, 255, 96, 255}
-		default:
-			c = color.RGBA{255, 255, 64, 255}
-		}
-		vector.FillRect(field, x-4, y-4, 8, 8, c, false)
+	s.ctx.Items.Draw(func(vm *anm.VM) {
+		sprite.DrawVM(field, vm, -fl, -ft)
 	})
 }
 
@@ -729,28 +641,6 @@ func (s *Stage) drawBossHUD(field *ebiten.Image) {
 			int(barPad), nameY-2,
 			color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 200}, 1, 1)
 	}
-}
-
-// drawBombFlash 在使用符卡期间绘制全屏白色闪光：起爆瞬间最亮，随符卡剩余时间衰减。
-func (s *Stage) drawBombFlash(field *ebiten.Image) {
-	p := s.ctx.Player
-	if p.BombTimer <= 0 {
-		return
-	}
-	// BombTimer 从 bombDuration 递减到 0：起爆头一道强闪，之后保留淡幕。
-	frac := float64(p.BombTimer) / float64(player.BombDuration())
-	var alpha float64
-	if frac > 0.85 {
-		alpha = (frac - 0.85) / 0.15 * 0.6
-	} else {
-		alpha = frac * 0.18
-	}
-	if alpha <= 0.004 {
-		return
-	}
-	w := float32(field.Bounds().Dx())
-	h := float32(field.Bounds().Dy())
-	vector.FillRect(field, 0, 0, w, h, color.RGBA{255, 255, 255, uint8(alpha * 255)}, false)
 }
 
 func (s *Stage) drawEffects(field *ebiten.Image) {
