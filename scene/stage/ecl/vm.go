@@ -207,6 +207,14 @@ func (vm *VM) BossActive() bool {
 	return false
 }
 
+// BossSlot0Busy reports whether boss slot 0 (DAT_00477704+0x10) holds a live
+// enemy. FUN_0040dae0 clears the slot when its enemy is deleted, so an
+// inactive occupant counts as empty.
+func (vm *VM) BossSlot0Busy() bool {
+	b := vm.bossSlots[0]
+	return b != nil && b.Active
+}
+
 // BossHUD returns the current boss/spell HUD snapshot for the enemy in boss
 // slot 0 (ins_332(0); mid-bosses use it too).
 func (vm *VM) BossHUD() stage.BossHUDInfo {
@@ -399,9 +407,17 @@ func (vm *VM) updateActor(a *eclActor) bool {
 		return false
 	}
 	e.ECLFlags &^= 0x2000
-	if e.ECLFlags&0x11 == 0 && vm.ctx != nil && vm.ctx.Player != nil {
-		if dmg := vm.ctx.EnemyDamage(e); dmg != 0 && vm.hurt(a, dmg) != hurtAlive {
-			return false
+	if e.ECLFlags&0x11 == 0 && vm.ctx != nil {
+		if vm.ctx.Player != nil {
+			if dmg := vm.ctx.EnemyDamage(e); dmg != 0 && vm.hurt(a, dmg) != hurtAlive {
+				return false
+			}
+		}
+		// DAT_00474c50 = 1 (FUN_0040dc80 0x40e26b): every enemy that gets this
+		// far, hit or not, sets the faith decay rate to 1 for this frame's
+		// decay step (TickFaith). A removal returns before this line.
+		if vm.ctx.State != nil {
+			vm.ctx.State.FaithRate = 1
 		}
 	}
 	if name, ok := vm.checkInterrupt(e, a); ok {

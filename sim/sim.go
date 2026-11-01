@@ -67,6 +67,14 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 	if err != nil {
 		return err
 	}
+	// FUN_00428f60 restores the chapter's score (DAT_00474c44, from +0x0c) and
+	// faith (DAT_00474c4c, from +0x14 through FUN_00418b80, which stores a tenth
+	// of its argument). GameState keeps both times ten.
+	h.state.Score = int64(ch.Score) * 10
+	h.state.Faith = int64(ch.Faith) * 10
+	// FUN_0042a6a0 then takes the chapter's +0x18 as the faith hold timer
+	// (DAT_00474c58) and its accumulator.
+	h.state.RestoreFaithHold(int(ch.Hold))
 	tw := trace.NewWriter(out)
 	limit := len(ch.Records)
 	if maxFrames > 0 && maxFrames < limit {
@@ -210,7 +218,7 @@ func (h *headless) sample(index int) *trace.Frame {
 		PPower:     h.state.Power,
 		PFaith:     h.state.Faith,
 		PScore:     h.state.Score,
-		PGraze:     h.state.Graze,
+		PGraze:     0, // TH10 keeps no graze count (FUN_00406240 / FUN_0041d3d0 only set bullet flag 4, spark, sound)
 		PState:     int(h.ctx.Player.State),
 		PInvinc:    int(h.ctx.Player.Invinc.Cur),
 		PBombTimer: bomb,

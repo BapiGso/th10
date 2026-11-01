@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"math"
 
+	"th10/anm"
 	"th10/zun"
 )
 
@@ -38,6 +39,18 @@ type VM struct {
 	shake  byte
 	shakeT zun.Timer
 	Op13   int32
+
+	// The stage's ANM objects (objects.go), idle until Enable. Quads[k] is
+	// the VM of the k-th quad in FUN_00404450's order (Entries in order,
+	// then each entry's Quads), the index the original writes into quad+6
+	// (array +0x17c). Slots are the eight VMs at +0x180 that op 14 starts.
+	// Active is each entry's +3 bit 0.
+	Quads  []anm.VM
+	Slots  [8]anm.VM
+	Active []bool
+	anm    *anm.File // +0x178, the stage's .anm (File.ANM)
+	env    *anm.Env  // what the objects run with
+	first  []int     // Quads index of each entry's first quad
 }
 
 // New starts f's script with the camera FUN_00402230 sets up: at
@@ -45,6 +58,9 @@ type VM struct {
 // the camera defaults (FUN_004216f0).
 func New(f *File) *VM {
 	v := &VM{f: f}
+	for i := range v.Slots {
+		v.Slots[i] = *anm.New() // no script until op 14
+	}
 	v.Cam.Pos = [3]float32{0, 0, -600}
 	v.Cam.Facing = [3]float32{0, 300, 600}
 	v.Cam.Up = [3]float32{0, 1, 0}
@@ -53,12 +69,28 @@ func New(f *File) *VM {
 	return v
 }
 
-// Update is one frame of the STD calc FUN_00402720: clear the frame's
-// position delta, then run the script (FUN_00403c80). gs is the game speed
-// DAT_00476f78.
+// Update is one frame of the STD calc FUN_00402720 (m4_render_re.md §4.3):
+// clear the frame's position delta; once Enable has run, step the entries
+// (stepEntries, FUN_00403990); run the script (FUN_00403c80); once Enable
+// has run, step each of Slots in order with Run(env). gs is the game speed
+// DAT_00476f78 (the objects read theirs from env.GameSpeed, the same value).
+//
+// Not ported: the condition the calc runs under (stage+0x2a18 bits 4 and 8,
+// always met in play), the facing it normalises into the camera at +0x24,
+// the colour it stores at +0x1ee8, the three VMs at +0x1f08, +0x22b4 and
+// +0x2660 stepped while +0x1eec != 0 (writer not traced), and the camera
+// block copy to DAT_00491d7c (the caller reads Cam).
 func (v *VM) Update(gs float32) {
 	v.Cam.Delta = [3]float32{}
+	if v.env != nil {
+		v.stepEntries()
+	}
 	v.run(gs)
+	if v.env != nil {
+		for i := range v.Slots {
+			v.Slots[i].Run(v.env)
+		}
+	}
 }
 
 // u32, f32 read the script at byte offset o.
@@ -128,7 +160,18 @@ func (v *VM) run(gs float32) {
 		case 13:
 			v.Op13 = v.i32(a)
 		case 14:
-			// Interrupts one of the stage's ANM VMs: M4.
+			// Slots[slot] with slot = i32(a), script = i32(a+4): script < 0
+			// clears the slot's anm.FlagVisible and nothing else (it keeps
+			// running); otherwise startVM(&Slots[slot], uint16(script)).
+			// Nothing before Enable. Stages 4-7 use it.
+			if v.env != nil {
+				slot, script := v.i32(a), v.i32(a+4)
+				if script < 0 {
+					v.Slots[slot].Flags &^= anm.FlagVisible
+				} else {
+					v.startVM(&v.Slots[slot], uint16(script))
+				}
+			}
 		}
 		v.pc += int(int16(binary.LittleEndian.Uint16(s[pc+6:])))
 	}

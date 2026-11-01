@@ -45,7 +45,6 @@ type GameState struct {
 	Life          int // 剩余残机
 	Power         int // 火力 0-500（显示为 0.00~5.00）
 	MaxPower      int
-	Graze         int
 	Point         int   // 得点
 	Faith         int64 // 信仰值（影响得分倍率）
 	MaxFaith      int64 // 信仰值上限
@@ -65,6 +64,14 @@ type GameState struct {
 	// Rank is the dynamic rank (DAT_00474c98, -1024..1024). It carries over
 	// between stages; a replay chapter restores it from its header (+0x20).
 	Rank int
+	// The faith gauge block (DAT_00474c40 +0x10..+0x1c). FaithRate is the
+	// stored faith lost on each decaying frame (DAT_00474c50, +0x10).
+	// FaithHold is the hold timer (DAT_00474c58, +0x18): frames the faith
+	// keeps its value before it decays. faithAcc is the timer's float
+	// accumulator (DAT_00474c5c, +0x1c), whose truncation is the timer.
+	FaithRate int
+	FaithHold int
+	faithAcc  float32
 }
 
 func NewState(character, shotType, difficulty int) *GameState {
@@ -151,13 +158,68 @@ func (s *GameState) AddFaith(v int64) {
 	}
 }
 
-// DecayFaith 信仰值自然衰减（每帧调用）
-func (s *GameState) DecayFaith() {
-	decay := int64(1) // 每帧衰减1
-	s.Faith -= decay
-	if s.Faith < 0 {
-		s.Faith = 0
+// Faith gauge constants. faithHoldCap is FUN_00412ff0's cap on the hold timer
+// (0x82 = 130). faithDecayFloor is the stored floor of the decay (FUN_00418a00,
+// 0x1388 = 5000). faithRateMin is the rate's floor once a decay step has run
+// (FUN_00418a00, 0x12). faithRateStage is what FUN_00417870 sets at stage start.
+const (
+	faithHoldCap    = 130
+	faithDecayFloor = 5000
+	faithRateMin    = 18
+	faithRateStage  = 9
+)
+
+// BeginStageFaith is the faith part of FUN_00417870 (stage start): DAT_00474c50
+// becomes 9 before the stage loop starts.
+func (s *GameState) BeginStageFaith() {
+	s.FaithRate = faithRateStage
+}
+
+// AddFaithHold is FUN_00412ff0(n): n frames onto the hold timer, unless it is
+// already at the cap (FUN_00412ff0 tests timer < 0x82 first); past the cap the
+// timer is held at 130. FUN_0044bf40 adds n to the accumulator on its fast
+// path (the game speed DAT_00476f78 is always 1.0, so it is 0.99 < speed <
+// 1.01), and FUN_00463b2c truncates the accumulator to the timer.
+func (s *GameState) AddFaithHold(n int) {
+	if s.FaithHold >= faithHoldCap {
+		return
 	}
+	s.faithAcc += float32(n)
+	s.FaithHold = int(s.faithAcc)
+	if s.FaithHold > faithHoldCap {
+		s.FaithHold = faithHoldCap
+		s.faithAcc = faithHoldCap
+	}
+}
+
+// RestoreFaithHold sets the hold timer from a replay chapter: FUN_0042a6a0
+// takes the chapter's +0x18 as DAT_00474c58 and its float as the accumulator.
+func (s *GameState) RestoreFaithHold(n int) {
+	s.FaithHold = n
+	s.faithAcc = float32(n)
+}
+
+// TickFaith is FUN_00418a00, run once a frame when the stage's gate is open
+// (scene/stage faithGate). While the hold timer is positive it counts down a
+// frame (FUN_0044bf40 with -1.0). Otherwise, if the stored faith is above
+// 5000, it loses FaithRate, the rate rises to at least 18, and the stored
+// faith is held at no less than 5000.
+func (s *GameState) TickFaith() {
+	if s.FaithHold > 0 {
+		s.faithAcc += -1
+		s.FaithHold = int(s.faithAcc)
+		return
+	}
+	stored := s.Faith / 10
+	if stored <= faithDecayFloor {
+		return
+	}
+	rate := s.FaithRate
+	stored -= int64(rate)
+	if rate < faithRateMin {
+		s.FaithRate = faithRateMin
+	}
+	s.Faith = max(stored, faithDecayFloor) * 10
 }
 
 // FaithMultiplier 信仰倍率（用于得分计算）

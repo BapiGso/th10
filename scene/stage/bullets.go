@@ -173,17 +173,12 @@ func (c *Context) laserKill() bool {
 	return true
 }
 
-// laserGraze counts a laser graze, as for a bullet: the laser already played
-// the sound and spawned the spark.
+// laserGraze is the laser's graze hook; see bulletGraze.
 func (c *Context) laserGraze() { c.bulletGraze(nil) }
 
-// bulletGraze counts a graze. The bullet already played the graze sound and
-// spawned its spark; where the binary keeps the count is not traced yet.
-func (c *Context) bulletGraze(*bullet.Bullet) {
-	if s := c.Player.State; s != player.StateNormal && s != player.StateRespawn {
-		return
-	}
-	c.State.Graze++
-	c.State.AddFaith(3)
-	c.State.AddScore(100)
-}
+// bulletGraze is the graze hook. The original's graze branch (FUN_00406240 when
+// FUN_004266b0 returns 2, bullet flag 4; FUN_0041d3d0 for lasers) only sets the
+// flag, spawns the graze spark and plays the sound, and the bullet and laser
+// packages do all three before calling this. It changes no score, faith or
+// graze count, and TH10 keeps no graze count, so there is nothing to do here.
+func (c *Context) bulletGraze(*bullet.Bullet) {}

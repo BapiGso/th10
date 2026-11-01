@@ -21,10 +21,10 @@ import (
 	resultscene "th10/scene/result"
 	"th10/sprite"
 	"th10/std"
+	"th10/supervisor"
 	"th10/zun"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	ebitext "github.com/hajimehoshi/ebiten/v2/text/v2"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/yohamta/ganim8/v2"
@@ -163,6 +163,9 @@ type Stage struct {
 	bossNumFace  ebitext.Face                                         // 符卡时限数字字体（HUD 字体，懒加载）
 	NextScene    func(g *game.Game, state *game.GameState) game.Scene // 通关后下一场景
 	OnGameOver   func(g *game.Game, state *game.GameState) game.Scene
+
+	// drawn is set by the first Draw, which sets the clear colour.
+	drawn bool
 }
 
 const (
@@ -193,13 +196,16 @@ func newStage(state *game.GameState, script Script) *Stage {
 	}
 	s.ctx = NewContext(state)
 	s.ctx.stage = s
-	s.ctx.STD = loadSTD(state.Stage)
+	state.BeginStageFaith() // FUN_00417870 sets the decay rate at stage start
+	s.ctx.STD = loadSTD(state.Stage, s.ctx.Anm)
 	s.hud = newHud(state)
 	return s
 }
 
-// loadSTD starts stage n's embedded .std (n 7 = Extra), nil if missing.
-func loadSTD(n int) *std.VM {
+// loadSTD starts stage n's embedded .std (n 7 = Extra), nil if missing. Its
+// objects run on the stage's .anm with env (FUN_00404450); without that .anm
+// they stay idle.
+func loadSTD(n int, env *anm.Env) *std.VM {
 	data, err := gamedata.ReadFile(datfs.EmbedPath(fmt.Sprintf("stage%02d.std", n)))
 	if err != nil {
 		return nil
@@ -208,7 +214,11 @@ func loadSTD(n int) *std.VM {
 	if err != nil {
 		return nil
 	}
-	return std.New(f)
+	v := std.New(f)
+	if a, err := gamedata.ANM(f.ANM); err == nil {
+		v.Enable(a, env)
+	}
+	return v
 }
 
 func loadFrontFrame() *ebiten.Image {
@@ -285,9 +295,6 @@ func (s *Stage) update(in *input.State) error {
 		ctx.STD.Update(ctx.Anm.GameSpeed)
 	}
 
-	// 信仰值自然衰减
-	ctx.State.DecayFaith()
-
 	// 1. 玩家（对话期间不能射击和放灵击，FUN_004281d0 与灵击检查都要求没有 MSG）
 	ctx.Player.NoAttack = ctx.msg != nil
 	s.updatePlayer(in)
@@ -322,10 +329,33 @@ func (s *Stage) update(in *input.State) error {
 	// 8. 对话（calc chain 末尾的 GUI/MSG）
 	ctx.UpdateMSG(in.JustPressed(input.KeyOk), in.IsPressed(input.KeySkip))
 
+	// 8b. 信仰保持计时与衰减：FUN_00418190 在 calc chain 之后、帧计数之前调用
+	// FUN_00418a00（见 faithGate）
+	if s.faithGate() {
+		ctx.State.TickFaith()
+	}
+
 	// 9. 清理
 	s.cleanEnemies()
 
 	return nil
+}
+
+// faithGate is the test FUN_00418190 makes before FUN_00418a00 (0x418751..
+// 0x418764): no boss in slot 0 (DAT_00477704+0x10 == 0), no dialogue open
+// (DAT_0047770c+0x9eb8 == 0), and the stage clock at least 90 (+0x14 >= 0x5a).
+// Frame already counts this update, and the original reads +0x14 before its
+// own frame clock DAT_00474c88 increments at the end of the frame; the
+// zero-based frame index is the value that test sees (inferred, see
+// docs/research/faith.md), so the gate is Frame-1 >= 90, that is Frame > 90.
+func (s *Stage) faithGate() bool {
+	if s.ctx.DialogActive() || s.ctx.State.Frame <= 90 {
+		return false
+	}
+	if b, ok := s.script.(interface{ BossSlot0Busy() bool }); ok && b.BossSlot0Busy() {
+		return false
+	}
+	return true
 }
 
 // updatePlayer runs the player (FUN_00425730); the death drops come through
@@ -354,72 +384,42 @@ func (s *Stage) cleanEnemies() {
 
 // ---------- 绘制 ----------
 
+// Draw runs one frame of the draw chain (drawFrame) and copies the frame to
+// screen. Node 1 clears the back buffer, so there is no fill here.
 func (s *Stage) Draw(screen *ebiten.Image) {
-	ctx := s.ctx
-	screen.Fill(color.Black)
-	s.field.Clear()
-
-	// 1. 背景
-	s.script.BgDraw(s.field)
-
-	// 2. 实体（用几何占位图形）
-	s.drawItems(s.field)
-	s.drawPlayerBullets(s.field)
-	s.drawEnemies(s.field)
-	s.drawBullets(s.field)
-	s.drawPlayerOptions(s.field)
-	s.drawPlayer(s.field)
-	s.drawEffects(s.field)
-	s.drawWorld(s.field)
-
-	// Boss 血条/符卡 HUD（顶部横条），叠在 field 顶部
-	s.drawBossHUD(s.field)
-
-	// 3. Field → Screen（ECL ins_337 屏幕震动：脚本可选实现 ShakeOffset）
-	op := &ebiten.DrawImageOptions{}
+	sv := supervisor.Get()
+	if !s.drawn {
+		// FUN_00417c80 sets the clear colour (DAT_004923a8) at stage start;
+		// done at the first Draw so headless stages never make the device.
+		sv.ClearColor = 0xff000000
+		s.drawn = true
+	}
+	// Stand-in for FUN_0043c5ca, which writes Field.Shift during calc.
 	sx, sy := 0.0, 0.0
 	if sh, ok := s.script.(interface{ ShakeOffset() (float64, float64) }); ok {
 		sx, sy = sh.ShakeOffset()
 	}
-	op.GeoM.Translate(game.FieldLeft+sx, game.FieldTop+sy)
-	screen.DrawImage(s.field, op)
-
-	// 3b. 对话（立绘与对话框都在 Field 范围内）
-	if ctx.msg != nil {
-		dialog.Draw(screen, &ctx.msg.View)
-	}
-
-	// 4. 游戏框体/HUD 底板
-	if s.frontFrame != nil {
-		screen.DrawImage(s.frontFrame, nil)
-	}
-
-	// 5. HUD 文本
-	s.hud.draw(screen)
-
-	// 6. 暂停遮罩
-	if ctx.State.Paused {
-		vector.FillRect(screen, 0, 0, game.ScreenWidth, game.ScreenHeight,
-			color.RGBA{0, 0, 0, 128}, false)
-		ebitenutil.DebugPrintAt(screen, "PAUSED  (Esc to resume)", game.ScreenWidth/2-80, game.ScreenHeight/2)
-	}
+	sv.Field.Shift = [2]float32{float32(sx), float32(sy)}
+	s.drawFrame(sv)
+	screen.DrawImage(sv.Frame, nil)
 }
 
-// 以下绘制全部用几何占位，后续替换为贴图
+// The entity helpers draw in back-buffer (screen) coordinates, which their
+// positions already are, plus (dx, dy): the offset an ANM quad would get
+// (legacy). Their dst is the camera's viewport, so drawing outside the field
+// is clipped as in the original.
 
 // drawItems draws the items by FUN_0041ba30.
-func (s *Stage) drawItems(field *ebiten.Image) {
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
+func (s *Stage) drawItems(dst *ebiten.Image, dx, dy float64) {
 	s.ctx.Items.Draw(func(vm *anm.VM) {
-		sprite.DrawVM(field, vm, -fl, -ft)
+		sprite.DrawVM(dst, vm, dx, dy)
 	})
 }
 
-func (s *Stage) drawPlayerBullets(field *ebiten.Image) {
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
+func (s *Stage) drawPlayerBullets(dst *ebiten.Image, dx, dy float64) {
 	s.ctx.Player.Bullets.Each(func(b *playerbullet.Bullet) {
-		x := float32(b.X - fl)
-		y := float32(b.Y - ft)
+		x := float32(b.X + dx)
+		y := float32(b.Y + dy)
 		if b.ScriptID >= 0 && sprite.Global != nil && sprite.Global.ReimuAnm != nil {
 			if img := sprite.Global.ReimuAnm.ScriptSprite(b.ScriptID, max(b.Age-1, 0)); img != nil {
 				op := &ebiten.DrawImageOptions{}
@@ -427,39 +427,38 @@ func (s *Stage) drawPlayerBullets(field *ebiten.Image) {
 				op.GeoM.Rotate(b.Angle)
 				op.GeoM.Translate(float64(x), float64(y))
 				op.ColorScale.ScaleAlpha(128.0 / 255) // pl00.anm scripts 5/7
-				field.DrawImage(img, op)
+				dst.DrawImage(img, op)
 				return
 			}
 		}
-		vector.FillRect(field, x-3, y-6, 6, 12, color.RGBA{255, 255, 255, 230}, false)
+		vector.FillRect(dst, x-3, y-6, 6, 12, color.RGBA{255, 255, 255, 230}, false)
 	})
 }
 
-func (s *Stage) drawPlayerOptions(field *ebiten.Image) {
+func (s *Stage) drawPlayerOptions(dst *ebiten.Image, dx, dy float64) {
 	for _, option := range s.ctx.Player.Options() {
-		x, y := option.X-game.FieldLeft, option.Y-game.FieldTop
+		x, y := option.X+dx, option.Y+dy
 		if sprite.Global != nil && sprite.Global.ReimuAnm != nil {
 			// Script 17's sprite; its spawn/interrupt transforms await the ANM VM.
 			if img := sprite.Global.ReimuAnm.ScriptSprite(17, 0); img != nil {
 				op := &ebiten.DrawImageOptions{}
 				op.GeoM.Translate(x-float64(img.Bounds().Dx())/2, y-float64(img.Bounds().Dy())/2)
-				field.DrawImage(img, op)
+				dst.DrawImage(img, op)
 				continue
 			}
 		}
-		vector.FillCircle(field, float32(x), float32(y), 5, color.RGBA{255, 128, 160, 255}, false)
+		vector.FillCircle(dst, float32(x), float32(y), 5, color.RGBA{255, 128, 160, 255}, false)
 	}
 }
 
-func (s *Stage) drawEnemies(field *ebiten.Image) {
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
+func (s *Stage) drawEnemies(dst *ebiten.Image, dx, dy float64) {
 	res := sprite.Global
 	for _, e := range s.ctx.Enemies {
 		if !e.Active || e.Hidden {
 			continue
 		}
-		x := e.X - fl
-		y := e.Y - ft
+		x := e.X + dx
+		y := e.Y + dy
 
 		// sprite 绘制
 		if res != nil && e.Type == enemy.TypeFairy {
@@ -478,7 +477,7 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 				op := &ebiten.DrawImageOptions{}
 				op.GeoM.Translate(-fw/2, -fh/2)
 				op.GeoM.Translate(x, y)
-				field.DrawImage(frame, op)
+				dst.DrawImage(frame, op)
 				continue
 			}
 		}
@@ -493,7 +492,7 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 					op := &ebiten.DrawImageOptions{}
 					op.GeoM.Translate(-fw/2, -fh/2)
 					op.GeoM.Translate(x, y)
-					field.DrawImage(frame, op)
+					dst.DrawImage(frame, op)
 					continue
 				}
 			}
@@ -502,7 +501,7 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 					op := &ebiten.DrawImageOptions{}
 					op.GeoM.Translate(-32, -32) // center 64x64 sprite
 					op.GeoM.Translate(x, y)
-					field.DrawImage(bossFrame, op)
+					dst.DrawImage(bossFrame, op)
 					continue
 				}
 			}
@@ -511,45 +510,36 @@ func (s *Stage) drawEnemies(field *ebiten.Image) {
 		// geometry fallback (red rect)
 		hw := float32(e.HitWidth / 2)
 		hh := float32(e.HitHeight / 2)
-		vector.FillRect(field, float32(x)-hw, float32(y)-hh, hw*2, hh*2, color.RGBA{255, 0, 0, 200}, false)
+		vector.FillRect(dst, float32(x)-hw, float32(y)-hh, hw*2, hh*2, color.RGBA{255, 0, 0, 200}, false)
 	}
 }
 
-// drawBullets draws the bullets layer by layer as the manager sorted them,
-// then the lasers, each beam under its emitter.
-func (s *Stage) drawBullets(field *ebiten.Image) {
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
+// drawBullets draws the bullets layer by layer as the manager sorted them.
+func (s *Stage) drawBullets(dst *ebiten.Image, dx, dy float64) {
 	for l := range bullet.Layers {
 		s.ctx.Bullets.EachLayer(l, func(b *bullet.Bullet) {
-			sprite.DrawVM(field, &b.VM, -fl, -ft)
+			sprite.DrawVM(dst, &b.VM, dx, dy)
 		})
 	}
+}
+
+// drawLasers draws the lasers, each beam under its emitter.
+func (s *Stage) drawLasers(dst *ebiten.Image, dx, dy float64) {
 	s.ctx.Lasers.Each(s.ctx.LaserEnv, func(beam, emitter *anm.VM) {
-		sprite.DrawVM(field, beam, -fl, -ft)
+		sprite.DrawVM(dst, beam, dx, dy)
 		if emitter != nil {
-			sprite.DrawVM(field, emitter, -fl, -ft)
+			sprite.DrawVM(dst, emitter, dx, dy)
 		}
 	})
 }
 
-// drawWorld draws the ANM effect objects by layer.
-func (s *Stage) drawWorld(field *ebiten.Image) {
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
-	for l := range anm.Layers {
-		s.ctx.World.Each(l, func(vm *anm.VM) {
-			sprite.DrawVM(field, vm, -fl, -ft)
-		})
-	}
-}
-
-func (s *Stage) drawPlayer(field *ebiten.Image) {
+func (s *Stage) drawPlayer(dst *ebiten.Image, dx, dy float64) {
 	p := s.ctx.Player
 	if p.State == player.StateDying {
 		return
 	}
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
-	px := p.X - fl
-	py := p.Y - ft
+	px := p.X + dx
+	py := p.Y + dy
 
 	// 无敌闪烁：原作是 ANM 标志 0x8000 配颜色 0xff0000ff，这里先用半透明代替。
 	alpha := float32(1.0)
@@ -582,15 +572,15 @@ func (s *Stage) drawPlayer(field *ebiten.Image) {
 			anim.Update()
 			opts := ganim8.DrawOpts(px, py, 0, 1, 1, 0.5, 0.5)
 			opts.ColorM.Scale(1, 1, 1, float64(alpha))
-			anim.Draw(field, opts)
-			vector.FillCircle(field, float32(px), float32(py), 3, color.RGBA{255, 255, 255, uint8(alpha * 255)}, false)
+			anim.Draw(dst, opts)
+			vector.FillCircle(dst, float32(px), float32(py), 3, color.RGBA{255, 255, 255, uint8(alpha * 255)}, false)
 			return
 		}
 	}
 
 	// fallback: 几何占位
-	vector.FillRect(field, float32(px)-8, float32(py)-12, 16, 24, color.RGBA{0, 220, 0, uint8(alpha * 255)}, false)
-	vector.FillCircle(field, float32(px), float32(py), 3, color.RGBA{255, 255, 255, 255}, false)
+	vector.FillRect(dst, float32(px)-8, float32(py)-12, 16, 24, color.RGBA{0, 220, 0, uint8(alpha * 255)}, false)
+	vector.FillCircle(dst, float32(px), float32(py), 3, color.RGBA{255, 255, 255, 255}, false)
 }
 
 // drawBossHUD 在 Field 顶部画 Boss 血条（横条）+ 符卡名 + 时限倒数。
@@ -643,14 +633,13 @@ func (s *Stage) drawBossHUD(field *ebiten.Image) {
 	}
 }
 
-func (s *Stage) drawEffects(field *ebiten.Image) {
-	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
+func (s *Stage) drawEffects(dst *ebiten.Image, dx, dy float64) {
 	s.ctx.Effects.Each(func(e *effect.Effect) {
-		x := float32(e.X - fl)
-		y := float32(e.Y - ft)
+		x := float32(e.X + dx)
+		y := float32(e.Y + dy)
 		r := float32(e.Scale * 8)
 		a := uint8(e.Alpha * 255)
-		vector.FillCircle(field, x, y, r, color.RGBA{255, 200, 100, a}, false)
+		vector.FillCircle(dst, x, y, r, color.RGBA{255, 200, 100, a}, false)
 	})
 }
 

@@ -49,6 +49,8 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
 # exit 0 = 全程在 epsilon 内；exit 1 = 有分歧（打印首个分歧帧）
 ```
 
+原作侧加 `-shot-frames 1200,1300-1302 -shot-dir .tmp/shot` 可在指定帧截取游戏窗口客区，写成 `f<前>-<后>.png`（前后为截图前后读到的帧计数）。原作须为窗口模式、32 位色、窗口未被遮挡、显示缩放 100%。
+
 ### 原作配置 th10.cfg
 
 `th10.cfg` 共 52 字节，由 `FUN_00438ad0` 读入 `DAT_00491d48` 并在退出时写回。与采集相关的字段：
@@ -97,7 +99,7 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
   章节块个数 = 全局头 +0x4c（大于 7 时按 6），FUN_0042a200 按此遍历:
     0x1c4 B 头 + N×6 B 输入记录 + ceil(N/30) 字节 slow-rate 采样
     章节头 +0x00 章节索引 / +0x02 RNG 种子 / +0x04 帧数（回放读取上限）
-           +0x08 本块正文字节数（下一块 = 记录起点 + 该值）/ +0x18 起始帧 / +0x20 动态 rank
+           +0x08 本块正文字节数（下一块 = 记录起点 + 该值）/ +0x14 信仰（存储值）/ +0x18 信仰保持计时（帧）/ +0x20 动态 rank
     记录 = {u16 keys, u16 aux1, u16 aux2}
   +0x04 可能大于实际存储的记录数（Royalflare ud0043 每章都是 2 倍），
   所以下一块的位置必须用 +0x08，记录数取两者较小值

@@ -92,7 +92,6 @@ func (r *Result) build() {
 	row("Difficulty", game.DifficultyName(r.state.Difficulty))
 	row("Player", fmt.Sprintf("%s / %s", game.CharacterName(r.state.Character), game.ShotName(r.state.Character, r.state.ShotType)))
 	row("Power", fmt.Sprintf("%d.%02d", r.state.Power/100, r.state.Power%100))
-	row("Graze", fmt.Sprintf("%d", r.state.Graze))
 	row("Point", fmt.Sprintf("%d", r.state.Point))
 	row("Faith", fmt.Sprintf("%d", r.state.Faith))
 

@@ -160,8 +160,8 @@ Extra 使用 Lunatic 难度位（`loader.go:92-103`）。
 
 ## 8. 更新顺序与删除
 
-项目 `Stage.Update`（`stage.go:225-278`）：对话冻结 → Frame++ → DecayFaith → updatePlayer →
-script.Update（ECL VM）→ 敌人 → 子弹 → 道具/特效 → checkCollisions → cleanEnemies。
+项目 `Stage.Update`（`stage.go:225-278`）：对话冻结 → Frame++ → updatePlayer →
+script.Update（ECL VM）→ 敌人 → 子弹 → 道具/特效 → checkCollisions → 对话 → 信仰衰减（TickFaith，门控见 docs/research/faith.md）→ cleanEnemies。
 
 VM 内部（`vm.go:248-325`）先积分**所有**角色的运动（`:291-297`），再执行**所有**脚本（`:305-314`）。
 原作按敌人逐个处理（`FUN_0040dc80`）：运动积分 → 取整 → 边界钳制 → 出屏判定 → 该敌人 ECL →

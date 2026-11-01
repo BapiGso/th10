@@ -9,6 +9,13 @@
 //
 //	th10probe -pid 1234 -frames 3600 -out orig.trace
 //	th10probe -exe "C:\path\to\th10.exe" ...   # find the pid by module path
+//	th10probe -pid 1234 -frames 1300 -shot-frames 1200,1300-1302 -shot-dir shots
+//
+// -shot-frames captures the game window's client area from the screen at those
+// frames, writing shots/f<before>-<after>.png (the frame counter read just before
+// and after the copy). The screen copy only reads pixels; nothing is sent to the
+// window. The original must run in windowed mode, 32-bit colour, unobscured, at
+// 100% display scaling.
 //
 // The address map below comes from Ghidra decompilations of th10.exe
 // (SHA-256 2f14760b6fbbf57549541583283badb9a19a4222b90f0a146d5aa17f01dc9040,
@@ -26,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 	"unsafe"
@@ -45,11 +53,8 @@ const (
 	addrPlayerPtr   = 0x00477834 // *Player
 	addrBulletMgr   = 0x004776f0 // *bullet manager (FUN_004065c0, FUN_004067d0)
 	addrEnemyMgr    = 0x00477704 // *enemy manager (FUN_0040d750)
-	addrScore       = 0x00474c40 // score
 	addrLife        = 0x00474c70 // lives
 	addrPower       = 0x00474c48 // power (raw, 0..100)
-	addrFaith       = 0x00474c90 // faith
-	addrGraze       = 0x00474c84 // graze counter (candidate)
 	addrPlayerX     = 0x3c0      // offset from player base (game space, FUN_004073e0)
 	addrPlayerY     = 0x3c4
 	addrPlayerState = 0x458 // FUN_00425730 switch: 0 respawn entry, 1 normal, 2 dying, 3 ?, 4 deathbomb window
@@ -58,6 +63,25 @@ const (
 // addrPlayerInvinc is the invincibility timer (int, player base offset).
 // FUN_00425730 decrements it while >= 1 and the player flashes while it is positive.
 const addrPlayerInvinc = 0x4310
+
+// The score block is one struct at 0x474c40, the `this` that FUN_00409d90 and
+// FUN_0041be80 are called with (&DAT_00474c40). Its fields are stored values:
+//   - +0x0 (0x474c40) is the hi-score, not the score: FUN_00417870 sets it to
+//     max(hi-score, score) at stage start. Reading it gave the constant 1000000.
+//   - +0x4 (0x474c44) is the score: FUN_00409d90 adds n/10 to [base+0x4] and caps
+//     it at 999999999 (drops/func_409d90.c). A replay start zeroes it (emgr/func_417870.c:59)
+//     and then restores it from the chapter header +0x0c (replay/func_428f60.c:190).
+//   - +0xc (0x474c4c) is the faith: FUN_0041be80 adds n/10 to [base+0xc] and caps
+//     it at 99999 (item/func_41be80.c); FUN_00412e70 subtracts n/10 with a floor of
+//     5000 (bomb/func_412e70.c), and the item collector reads it (asm/func_41afd0.c).
+//
+// The original shows these stored values x10. game.GameState keeps Score and
+// Faith x10 as well (AddPoints, GainFaith, LoseFaith), so sampleFrame multiplies
+// the stored values by 10 to write the same units the replica's trace uses.
+const (
+	addrScore = 0x00474c44 // score (base+0x4), stored; trace value = stored x10
+	addrFaith = 0x00474c4c // faith (base+0xc), stored; trace value = stored x10
+)
 
 // Frame-counter candidates. FUN_00418190 increments DAT_00474c88 and
 // DAT_00474c8c once per main-loop iteration and FUN_00417870 zeroes both at
@@ -131,8 +155,37 @@ func run() int {
 		noWait   = flag.Bool("no-wait-start", false, "sample from the current frame instead of waiting for a stage start")
 		skipHash = flag.Bool("skip-hash", false, "skip the exe SHA-256 check")
 		counters = flag.Bool("probe-counters", false, "print which frame-counter candidate ticks, then exit")
+		shotList = flag.String("shot-frames", "", "capture the game window at these frames (N or LO-HI, comma-separated); needs -shot-dir")
+		shotDir  = flag.String("shot-dir", "", "output directory for -shot-frames captures (created if missing)")
 	)
 	flag.Parse()
+
+	// Shots are keyed by the same frame clock as the trace (addrFrameCounter,
+	// the trace frame Index), so a shot at frame N lines up with trace frame N.
+	var shots *shotWriter
+	var shotPending []int32
+	if *shotList != "" {
+		list, err := parseFrameList(*shotList)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "th10probe: -shot-frames:", err)
+			return 2
+		}
+		if *shotDir == "" {
+			fmt.Fprintln(os.Stderr, "th10probe: -shot-frames needs -shot-dir")
+			return 2
+		}
+		if n := len(list); n > 0 && list[n-1] > int32(*frames) {
+			fmt.Fprintf(os.Stderr, "th10probe: -shot-frames names frame %d, past -frames %d\n", list[n-1], *frames)
+			return 2
+		}
+		if err := os.MkdirAll(*shotDir, 0o755); err != nil {
+			fmt.Fprintln(os.Stderr, "th10probe:", err)
+			return 2
+		}
+		shots = newShotWriter(*shotDir)
+		defer shots.Close() // flushes every queued PNG on any return path
+		shotPending = list
+	}
 
 	target, err := resolveTarget(uint32(*pid), *exePath)
 	if err != nil {
@@ -239,6 +292,19 @@ func run() int {
 			break
 		}
 		time.Sleep(settle)
+		// Targets at or before fc are due. One capture serves all of them when
+		// the loop skipped several, so no two captures collide on a file name.
+		// The file name carries the frame counter read around the copy, not the
+		// target number, so a skipped target shows up under the frame it reached.
+		if n := sort.Search(len(shotPending), func(i int) bool { return shotPending[i] > fc }); n > 0 {
+			shotPending = shotPending[n:]
+			img, before, after, err := captureClient(target.pid, func() (int32, error) { return rd.i32(addrFrameCounter) })
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "th10probe: shot:", err)
+			} else {
+				shots.Queue(shotJob{img: img, before: before, after: after})
+			}
+		}
 		f, reread, err := rd.sampleSettled(fc, stable)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "th10probe: sample:", err)
@@ -259,6 +325,9 @@ func run() int {
 			lastReport = fc / 600
 			fmt.Fprintf(os.Stderr, "th10probe: frame %d/%d\n", fc, *frames)
 		}
+	}
+	if len(shotPending) > 0 {
+		fmt.Fprintf(os.Stderr, "th10probe: shot frames never reached: %v\n", shotPending)
 	}
 	if unsettled > 0 {
 		fmt.Fprintf(os.Stderr, "th10probe: %d frames were still updating after -settle-us and were re-read\n", unsettled)
@@ -490,15 +559,15 @@ func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
 	f := &trace.Frame{Index: index}
 
 	score, _ := r.i32(addrScore)
-	f.PScore = int64(score)
+	f.PScore = int64(score) * 10 // stored score x10, as game.GameState keeps it
 	life, _ := r.i32(addrLife)
 	f.PLife = int(life)
 	power, _ := r.i32(addrPower)
 	f.PPower = int(power) * 5 // original raw 0.05 units -> project hundredths
 	faith, _ := r.i32(addrFaith)
-	f.PFaith = int64(faith)
-	graze, _ := r.i32(addrGraze)
-	f.PGraze = int(graze)
+	f.PFaith = int64(faith) * 10 // stored faith x10, as game.GameState keeps it
+	// TH10 keeps no graze count (FUN_00406240 / FUN_0041d3d0 only set bullet flag 4, spark, sound).
+	f.PGraze = 0
 
 	pp, err := r.u32(addrPlayerPtr)
 	if err == nil && pp != 0 {

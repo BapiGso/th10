@@ -110,13 +110,17 @@ func (r Record) Right() bool { d := r.Direction(); return d == 4 || d == 6 || d 
 // Chapter is one stage run inside a replay.
 //
 // Field offsets are from the 0x1c4-byte block header; the loader FUN_00428f60
-// restores the RNG seed from +2 and the frame clock from +0x18, and the
-// save/restore routine at 0x42a460 (mode 1) the player state from +0x24 on.
+// restores the RNG seed from +2, the score and faith from +0x0c and +0x14 and
+// the faith hold timer from +0x18 (DAT_00474c58, FUN_0042a6a0), and the
+// save/restore routine at 0x42a460 (mode 1)
+// the player state from +0x24 on.
 type Chapter struct {
 	Index uint16 // +0x00: chapter/stage index (1..7)
 	Seed  uint16 // +0x02: RNG seed captured at chapter start (DAT_004918b0)
+	Score int32  // +0x0c: score (DAT_00474c44) as stored; the game shows it times ten
 	Power int16  // +0x10: power (DAT_00474c48) in units of 0.05
-	Frame int32  // +0x18: starting frame clock (0 for a fresh chapter)
+	Faith int32  // +0x14: faith (DAT_00474c4c) as stored; the game keeps it times ten
+	Hold  int32  // +0x18: faith hold timer (DAT_00474c58) in frames; 0 for a fresh chapter
 	Lives int32  // +0x1c: lives in stock (DAT_00474c70)
 	Rank  int32  // +0x20: dynamic rank (DAT_00474c98) at chapter start
 	// PlayerX, PlayerY are the player's fixed-point position (player
@@ -258,8 +262,10 @@ func parseChapters(b []byte, n int) []Chapter {
 		ch := Chapter{
 			Index:   idx,
 			Seed:    seed,
+			Score:   int32(binary.LittleEndian.Uint32(b[pos+0x0c:])),
 			Power:   int16(binary.LittleEndian.Uint16(b[pos+0x10:])),
-			Frame:   int32(binary.LittleEndian.Uint32(b[pos+0x18:])),
+			Faith:   int32(binary.LittleEndian.Uint32(b[pos+0x14:])),
+			Hold:    int32(binary.LittleEndian.Uint32(b[pos+0x18:])),
 			Lives:   int32(binary.LittleEndian.Uint32(b[pos+0x1c:])),
 			Rank:    int32(binary.LittleEndian.Uint32(b[pos+0x20:])),
 			PlayerX: int32(binary.LittleEndian.Uint32(b[pos+0x24:])),

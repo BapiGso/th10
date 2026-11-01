@@ -348,8 +348,9 @@ func (m *Manager) Update(env *Env) {
 }
 
 // collect is the reward for collecting it, reporting whether it brought the
-// power to full. Not ported: the score popups (FUN_0042b9c0), the power
-// gauge (FUN_004054b0) and the faith gauge's hold timer (FUN_00412ff0).
+// power to full. Each kind also adds to the faith gauge's hold timer through
+// FUN_00412ff0 (AddFaithHold), as FUN_0041afd0 does at the same branch.
+// Not ported: the score popups (FUN_0042b9c0) and the power gauge (FUN_004054b0).
 func (m *Manager) collect(env *Env, it *Item) (full bool) {
 	st := env.State
 	faith := int32(st.Faith / 10) // DAT_00474c4c; GameState keeps it x10
@@ -360,16 +361,19 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 			full = st.Power/5 > 99
 			st.AddRank(0xc)
 		}
+		st.AddFaithHold(60) // FUN_00412ff0(0x3c), both branches (0x41b473, 0x41b4a0)
 	case KindBigPower, KindBossBigPower:
 		if st.GainPower(20) {
 			m.levelUp(env)
 			st.AddRank(0x18)
 			full = st.Power/5 > 99
 		}
+		st.AddFaithHold(20) // FUN_00412ff0(0x14) (0x41b6cc, 0x41b6f6)
 	case KindPoint:
 		if env.Player.Pos[1] < 144 {
 			st.AddRank(8)
 			st.AddPoints(int64(faith * 10))
+			st.AddFaithHold(100) // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
 			break
 		}
 		// Below the line it is half the value, less (y-144)/304 of
@@ -379,6 +383,7 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 		v -= v % 10
 		st.AddRank(1)
 		st.AddPoints(int64(v))
+		st.AddFaithHold(100) // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
 	case KindBigFaith:
 		n := int64(5000)
 		switch st.Difficulty {
@@ -388,9 +393,11 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 			n = 10000
 		}
 		st.GainFaith(n)
+		st.AddFaithHold(120) // FUN_00412ff0(0x78) (0x41b5cc)
 	case KindFullPoint:
 		st.AddRank(8)
 		st.AddPoints(int64(faith * 10))
+		st.AddFaithHold(100) // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
 	case KindLife: // FUN_004188a0
 		st.Life++
 		if st.Life < 10 {
@@ -402,8 +409,10 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 	case KindCancel:
 		st.GainFaith(10)
 		st.AddPoints(10)
+		st.AddFaithHold(3) // FUN_00412ff0(3) (0x41b5e9)
 	case KindFaith:
 		st.GainFaith(100)
+		st.AddFaithHold(60) // FUN_00412ff0(0x3c) (0x41b624)
 	}
 	return full
 }

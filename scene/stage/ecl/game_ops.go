@@ -894,8 +894,8 @@ const (
 
 // kill is the defeat in FUN_0040dc80: the score (FUN_00409d90 adds a tenth
 // of it to the stored score, which shows times 10), then FUN_0040e5f0: the
-// death sound, the death effect, the drops. Not ported: the faith gauge's
-// hold timer gaining 10 frames (FUN_00412ff0).
+// death sound, the death effect, the drops, then the faith gauge's hold timer
+// gains 10 frames (FUN_0040e5f0 0x40e681).
 func (vm *VM) kill(a *eclActor) {
 	ctx := vm.ctx
 	if ctx == nil {
@@ -912,6 +912,9 @@ func (vm *VM) kill(a *eclActor) {
 		ctx.World.Spawn(ctx.BulletEnv.File, int(a.deathFx), a.mv.final.pos, ctx.Anm)
 	}
 	vm.dropItems(ctx, a)
+	if ctx.State != nil {
+		ctx.State.AddFaithHold(10) // FUN_0040e5f0: FUN_00412ff0(10)
+	}
 }
 
 // dropItems is FUN_0040c9a0 (ins_329, and the tail of a defeat): the main

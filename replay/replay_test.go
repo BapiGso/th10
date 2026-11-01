@@ -171,6 +171,47 @@ func TestParseChaptersUsesBodySize(t *testing.T) {
 	}
 }
 
+// TestParseChaptersScoreAndFaith places the score and faith at +0x0c and +0x14
+// of the block header, using the values chapter 2 (stage 2) of th10_08 starts
+// with.
+func TestParseChaptersScoreAndFaith(t *testing.T) {
+	b := chapterBlock(2, 10, 10)
+	binary.LittleEndian.PutUint32(b[0x0c:], 1101099)
+	binary.LittleEndian.PutUint32(b[0x14:], 12041)
+	chs := parseChapters(b, 1)
+	if len(chs) != 1 {
+		t.Fatalf("got %d chapters, want 1", len(chs))
+	}
+	if chs[0].Score != 1101099 || chs[0].Faith != 12041 {
+		t.Errorf("score %d faith %d, want 1101099 and 12041", chs[0].Score, chs[0].Faith)
+	}
+}
+
+// TestDemoChapterStartsFresh checks the score and faith decoded from the
+// official demos, which start a new game. FUN_00417870 sets DAT_00474c44 to 0
+// and the faith to 50000, which the game keeps times ten, so the header holds
+// 0 and 5000.
+func TestDemoChapterStartsFresh(t *testing.T) {
+	for _, name := range demos {
+		t.Run(name, func(t *testing.T) {
+			raw, err := os.ReadFile(demoPath(name))
+			if err != nil {
+				t.Skipf("replay asset missing: %v", err)
+			}
+			r, err := Parse(raw)
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if len(r.Chapters) == 0 {
+				t.Fatal("no chapters decoded")
+			}
+			if ch := r.Chapters[0]; ch.Score != 0 || ch.Faith != 5000 {
+				t.Errorf("chapter 0: score %d faith %d, want 0 and 5000", ch.Score, ch.Faith)
+			}
+		})
+	}
+}
+
 func TestDirectionMatchesPlayer(t *testing.T) {
 	// FUN_004250b0's test order, including contradictory combinations.
 	cases := []struct {
