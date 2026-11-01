@@ -42,7 +42,18 @@ def main():
                     help="with --callers, also list the N instructions before each reference "
                          "(ZUN passes arguments in EAX/ESI/EDI, which the decompiler often drops)")
     ap.add_argument("--timeout", type=int, default=120, help="decompiler timeout per function (s)")
-    ap.add_argument("funcs", nargs="*", help="function addresses (hex)")
+    ap.add_argument("--remove", action="append", default=[], metavar="ADDR",
+                    help="delete the function starting at ADDR (a fragment an earlier run created)")
+    ap.add_argument("--writes", action="append", default=[], metavar="DISP,DISP,...",
+                    help="list the functions that store to [reg+DISP] for every listed DISP "
+                         "(finds the writer of a struct field whose base pointer is passed in a register)")
+    ap.add_argument("--ref-funcs", action="append", default=[], metavar="ADDR",
+                    help="also dump every function referencing ADDR (e.g. a manager's global pointer)")
+    ap.add_argument("--asm", action="store_true",
+                    help="also write func_ADDR.asm, the disassembly with operand references "
+                         "(register arguments the decompiler drops are visible there)")
+    ap.add_argument("funcs", nargs="*",
+                    help="function addresses (hex); an address inside a known function dumps that function")
     args = ap.parse_args()
 
     if not os.environ.get("GHIDRA_INSTALL_DIR"):
@@ -65,9 +76,24 @@ def main():
         ifc = DecompInterface()
         ifc.openProgram(program)
 
-        for s in args.funcs:
+        for s in args.remove:
             addr = api.toAddr(parse_addr(s))
-            func = fm.getFunctionAt(addr)
+            if fm.getFunctionAt(addr) is not None:
+                fm.removeFunction(addr)
+                print("removed function at", addr)
+
+        funcs = list(args.funcs)
+        for s in args.ref_funcs:
+            seen = set()
+            for ref in api.getReferencesTo(api.toAddr(parse_addr(s))):
+                fn = fm.getFunctionContaining(ref.getFromAddress())
+                if fn is not None and fn.getEntryPoint().getOffset() not in seen:
+                    seen.add(fn.getEntryPoint().getOffset())
+                    funcs.append("%x" % fn.getEntryPoint().getOffset())
+
+        for s in funcs:
+            addr = api.toAddr(parse_addr(s))
+            func = fm.getFunctionAt(addr) or fm.getFunctionContaining(addr)
             if func is None:
                 func = api.createFunction(addr, None)
             if func is None:
@@ -77,12 +103,18 @@ def main():
             if not res.decompileCompleted():
                 print("%s: %s" % (addr, res.getErrorMessage()), file=sys.stderr)
                 continue
-            path = os.path.join(args.out, "func_%x.c" % addr.getOffset())
+            path = os.path.join(args.out, "func_%x.c" % func.getEntryPoint().getOffset())
             with open(path, "w", encoding="utf-8", newline="\n") as f:
                 if args.tag:
                     f.write("// tag: %s\n" % args.tag)
                 f.write(res.getDecompiledFunction().getC())
             print("wrote", path)
+            if args.asm:
+                path = os.path.join(args.out, "func_%x.asm" % func.getEntryPoint().getOffset())
+                with open(path, "w", encoding="utf-8", newline="\n") as f:
+                    for ins in listing.getInstructions(func.getBody(), True):
+                        f.write("%s  %s\n" % (ins.getAddress(), ins))
+                print("wrote", path)
 
         if args.data:
             path = os.path.join(args.out, "_data_tables.txt")
@@ -120,6 +152,33 @@ def main():
                         for i in reversed(before):
                             f.write("      %s  %s\n" % (i.getAddress(), i))
                         f.write("   -> %s  %s\n" % (src, here))
+            print("wrote", path)
+
+        if args.writes:
+            path = os.path.join(args.out, "_writes.txt")
+            with open(path, "a", encoding="utf-8", newline="\n") as f:
+                for spec in args.writes:
+                    disps = [parse_addr(d) for d in spec.split(",")]
+                    f.write("== stores to %s ==\n" % ", ".join("+0x%x" % d for d in disps))
+                    hits = {}
+                    for ins in listing.getInstructions(True):
+                        if ins.getNumOperands() < 1:
+                            continue
+                        dst = ins.getDefaultOperandRepresentation(0)
+                        if "[" not in dst or ins.getMnemonicString() in ("CMP", "TEST", "PUSH"):
+                            continue
+                        for d in disps:
+                            if dst.endswith("+ 0x%x]" % d):
+                                fn = fm.getFunctionContaining(ins.getAddress())
+                                key = fn.getEntryPoint() if fn else None
+                                hits.setdefault(key, {}).setdefault(d, []).append(ins)
+                    for key, byd in sorted(hits.items(), key=lambda kv: str(kv[0])):
+                        if len(byd) != len(disps):
+                            continue
+                        f.write("  %s\n" % (fm.getFunctionAt(key).getName() if key else "?"))
+                        for d in disps:
+                            for ins in byd[d]:
+                                f.write("      %s  %s\n" % (ins.getAddress(), ins))
             print("wrote", path)
 
 

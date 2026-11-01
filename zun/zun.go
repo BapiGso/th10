@@ -49,6 +49,13 @@ func Polar(a, r float32) (float32, float32) {
 	return float32(c * float64(r)), float32(s * float64(r))
 }
 
+// Ellipse is FUN_00413270: (cos a * w, sin a * h), fsincos extended, the
+// products rounded.
+func Ellipse(a, w, h float32) (float32, float32) {
+	s, c := math.Sincos(float64(a))
+	return float32(c * float64(w)), float32(s * float64(h))
+}
+
 // Aim is the fpatan of (dy, dx) from (x, y) to (tx, ty), pi/2 when the points
 // coincide (FUN_00426660 and the emitter's aim in FUN_004073e0).
 func Aim(x, y, tx, ty float32) float32 {

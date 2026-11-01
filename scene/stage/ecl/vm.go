@@ -44,6 +44,9 @@ type VM struct {
 	actors map[*enemy.Enemy]*eclActor
 	// order is the enemy list (DAT_00477704+0x58) in creation order.
 	order []*eclActor
+	// created counts the enemies made (DAT_00477704+0x64), the main first;
+	// its parity picks a new enemy's death sound.
+	created int32
 	// main is the hidden enemy that runs the "main" sub; the stage ends with
 	// it. It starts on the first Update.
 	main    *eclActor
@@ -53,9 +56,10 @@ type VM struct {
 	// through stage.Context.RNG.
 	rng *zun.RNG
 
-	// Dynamic rank (DAT_00474c98, -1024..1024): +1 every 60 frames while
-	// enemies are on screen and no dialog is open (player update FUN_00425730).
-	// Consumed by the rank-tier ET opcodes 422-427.
+	// Dynamic rank (DAT_00474c98, -1024..1024): +1 every 60 frames of the
+	// player's state timer while enemies are on screen and no dialog is open
+	// (player update FUN_00425730). Consumed by the rank-tier ET opcodes
+	// 422-427.
 	rank int
 
 	// The game speed (DAT_00476f78, set by ins_367): every context clock,
@@ -178,6 +182,7 @@ func NewStageVM(eclPath string) *VM {
 		e.ECLFlags = 0x10
 		vm.main = newActor(e)
 		vm.main.main = &eclTask{sub: sub, owner: e, asyncID: -1, frame: newFrame(sub, nil)}
+		vm.created = 1
 	}
 	return vm
 }
@@ -280,15 +285,23 @@ func (vm *VM) Update(ctx *stage.Context) {
 	if ctx != nil {
 		ctx.ManagerOrder = vm.ManagerOrder
 		ctx.Boss0 = vm.boss0Pos
+		if ctx.Anm != nil {
+			vm.gameSpeed = ctx.Anm.GameSpeed // the player's respawn resets it
+		}
 	}
 
-	// Dynamic rank (FUN_00425730): +1 every 60 frames while enemies are on
-	// screen and no dialog is open, clamped to [-1024, 1024]. It lives in the
-	// game state so it carries over between stages.
-	if !vm.started && ctx != nil && ctx.State != nil {
+	// Dynamic rank (FUN_00425730): +1 when the player's state timer lands on
+	// a multiple of 60 while enemies are on screen and no dialog is open,
+	// clamped to [-1024, 1024]. It lives in the game state, where a death
+	// also takes from it, and carries over between stages.
+	if ctx != nil && ctx.State != nil {
 		vm.rank = ctx.State.Rank
 	}
-	if len(vm.actors) > 0 && (ctx == nil || !ctx.DialogActive()) && vm.frame%60 == 0 {
+	clock := int32(vm.frame)
+	if ctx != nil && ctx.Player != nil {
+		clock = ctx.Player.StateTimer.Cur
+	}
+	if len(vm.actors) > 0 && (ctx == nil || !ctx.DialogActive()) && clock%60 == 0 {
 		if vm.rank++; vm.rank > 1024 {
 			vm.rank = 1024
 		}
@@ -361,17 +374,22 @@ func (vm *VM) ManagerOrder() []*enemy.Enemy {
 	return out
 }
 
-// updateActor is FUN_0040dc80 up to the damage step (the rest runs in
-// LateUpdate, after the stage's collisions): once per frame (flag 0x400),
-// movement, then the ECL. It reports false when the enemy is to be deleted.
+// updateActor is FUN_0040dc80, once per frame (flag 0x400): movement, the
+// ECL, the damage the player deals (the hit may defeat the enemy or end its
+// phase), the unconditional interrupt check (a phase that fires here starts
+// next frame), then the invulnerability and phase timers. It reports false
+// when the enemy is to be deleted.
 func (vm *VM) updateActor(a *eclActor) bool {
 	e := a.e
 	if e.ECLFlags&0x400 != 0 {
 		return true
 	}
 	e.ECLFlags |= 0x400
-	a.ran = true
-	if !a.mv.step(&e.ECLFlags, vm.gameSpeed) {
+	var cam [3]float32
+	if vm.ctx != nil && vm.ctx.STD != nil {
+		cam = vm.ctx.STD.Cam.Delta
+	}
+	if !a.mv.step(&e.ECLFlags, vm.gameSpeed, cam) {
 		return false
 	}
 	a.syncPos()
@@ -379,6 +397,18 @@ func (vm *VM) updateActor(a *eclActor) bool {
 		return false
 	}
 	e.ECLFlags &^= 0x2000
+	if e.ECLFlags&0x11 == 0 && vm.ctx != nil && vm.ctx.Player != nil {
+		if dmg := vm.ctx.EnemyDamage(e); dmg != 0 && vm.hurt(a, dmg) != hurtAlive {
+			return false
+		}
+	}
+	if name, ok := vm.checkInterrupt(e, a); ok {
+		vm.interrupt(e, a, name)
+	}
+	if a.invuln.cur > 0 {
+		a.invuln.add(-1, vm.gameSpeed)
+	}
+	a.phase.tick(vm.gameSpeed)
 	return true
 }
 

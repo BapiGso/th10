@@ -109,9 +109,10 @@ const (
 
 // step is the movement part of FUN_0040dc80: tweens, the per-layer step,
 // rounding, the B+A sum, the ins_324 clamp and the offscreen test. flags is
-// the enemy's ECL flag word; it returns false when an enemy that had been
+// the enemy's ECL flag word and cam the STD camera's position delta this
+// frame (DAT_00491e6c..74); it returns false when an enemy that had been
 // inside the field (0x100) has left it and 0x4 does not keep it.
-func (m *motion) step(flags *int, speed float32) bool {
+func (m *motion) step(flags *int, speed float32, cam [3]float32) bool {
 	m.prev = m.final
 	for i := range m.layer {
 		l := &m.layer[i]
@@ -142,8 +143,12 @@ func (m *motion) step(flags *int, speed float32) bool {
 	}
 	a, b, f := &m.layer[0], &m.layer[1], &m.final
 	a.advance()
-	// Flag 0x40000 (enemies made by 270/271) also adds DAT_00491e6c..74 to B
-	// here: a stage 3D offset not traced yet, taken as 0.
+	// Enemies made by 270/271 (flag 0x40000) ride along with the camera.
+	if *flags&0x40000 != 0 {
+		for k := range b.pos {
+			b.pos[k] = cam[k] + b.pos[k]
+		}
+	}
 	b.advance()
 	for k := range f.delta {
 		f.delta[k] = (b.pos[k] + a.pos[k]) - f.pos[k]

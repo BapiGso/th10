@@ -56,7 +56,7 @@ func TestDeathDropsPowerButDeathbombDoesNot(t *testing.T) {
 		if bomb {
 			in.Restore(1 << input.KeyBomb)
 		}
-		for i := 0; i < 9; i++ {
+		for i := 0; i < 12; i++ { // 9 frames to the death, power at its 3rd
 			s.updatePlayer(&in)
 		}
 		small, big := 0, 0

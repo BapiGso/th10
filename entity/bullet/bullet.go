@@ -209,8 +209,10 @@ type Pool struct {
 	Slots  [Slots]Bullet
 	cursor int // +0x10, where the next slot search starts
 
-	// Rect is the rect clear's box (+0x44 centre, +0x50 size). Its writer is
-	// not found yet; it defaults to the playfield.
+	// Rect is the rect clear's box (+0x44 centre, +0x50 size). The
+	// constructor FUN_00406060 zeroes it and no code in th10.exe stores to
+	// it (every function referencing DAT_004776f0 checked), so it stays an
+	// empty box at (0, 0): the rect clear only takes bullets over that point.
 	Rect struct{ X, Y, W, H float32 }
 
 	layers [Layers][]*Bullet
@@ -220,9 +222,7 @@ type Pool struct {
 
 // NewPool returns an empty manager.
 func NewPool() *Pool {
-	p := &Pool{}
-	p.Rect.Y, p.Rect.W, p.Rect.H = 224, 384, 448
-	return p
+	return &Pool{}
 }
 
 // Live reports whether b's slot is in use.

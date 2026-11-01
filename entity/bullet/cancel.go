@@ -30,6 +30,17 @@ func (p *Pool) CancelAll(env *Env) {
 	}
 }
 
+// CancelVulnerable cancels every live bullet that is not cancel-immune,
+// without items: the player's respawn and the 30 frames after it
+// (FUN_00425730 states 0 and 1).
+func (p *Pool) CancelVulnerable(env *Env) {
+	for i := range p.Slots {
+		if p.Slots[i].Immune == 0 {
+			p.Slots[i].Cancel(env)
+		}
+	}
+}
+
 // CircleClear is FUN_00408100: cancel every bullet whose hit circle touches
 // the circle of radius r round (cx, cy), skipping cancel-immune bullets when
 // checkImmune is set. A cancelled bullet on the playfield leaves an item when

@@ -99,7 +99,7 @@ func TestMotionOffscreen(t *testing.T) {
 		var m motion
 		m.layer[0].pos = [3]float32{0, -100, 0}
 		m.final.pos = m.layer[0].pos
-		ok := m.step(&flags, 1)
+		ok := m.step(&flags, 1, [3]float32{})
 		return ok, flags
 	}
 	if ok, _ := leaving(0); !ok {
@@ -114,7 +114,7 @@ func TestMotionOffscreen(t *testing.T) {
 
 	var m motion
 	flags := 0
-	m.step(&flags, 1)
+	m.step(&flags, 1, [3]float32{})
 	if flags&0x100 == 0 {
 		t.Error("an enemy at (0, 0) did not get 0x100 (inside the field)")
 	}

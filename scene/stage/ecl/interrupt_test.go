@@ -52,8 +52,9 @@ func TestVMCreateRunsTimeZero(t *testing.T) {
 	if boss.Hidden {
 		t.Fatal("boss still hidden after its time-0 ins_259")
 	}
-	if got := vm.actors[boss].invuln.cur; got != 60 {
-		t.Fatalf("invuln = %d, want 60 (ins_335)", got)
+	// ins_335's 60, less the tick at the end of that first update.
+	if got := vm.actors[boss].invuln.cur; got != 59 {
+		t.Fatalf("invuln = %d, want 59 (ins_335(60), one update)", got)
 	}
 }
 
@@ -126,7 +127,9 @@ func TestVMInterruptOnHP(t *testing.T) {
 // 0x10000 flag set and faith cut by 3000 (x10 here).
 func TestVMInterruptOnTimeout(t *testing.T) {
 	vm, ctx, boss := reachBossCard1(t)
-	vm.LateUpdate(ctx) // end of the damage frame: phase timer 0 -> 1
+	// The hit came after the update; FUN_0040dc80 deals it before the
+	// timers, so finish the frame: phase timer 0 -> 1.
+	vm.actors[boss].phase.tick(1)
 	ctx.State.Faith = 90000
 	for k := 1; k < 2700; k++ {
 		stepFrame(vm, ctx)
@@ -158,7 +161,7 @@ func TestVMBossDeadSurvivesZeroHP(t *testing.T) {
 	for i := 0; i < 61; i++ {
 		stepFrame(vm, ctx)
 	}
-	if boss.TakeDamage(boss.HP + 100) {
+	if boss.TakeDamage(5 * (boss.HP + 100)) { // a fifth during the card
 		t.Fatal("killed despite BossDead's flag 0x40")
 	}
 	if !boss.Active || boss.HP != 0 || a.main.sub.Name != "BossDead" {
@@ -182,7 +185,7 @@ func TestVMMidBossDiesWithItsPhase(t *testing.T) {
 	for i := 0; i < 61; i++ { // MBossCard1's ins_335(60)
 		stepFrame(vm, ctx)
 	}
-	if !mb.TakeDamage(5000) {
+	if !mb.TakeDamage(5 * 5000) { // a fifth during the card
 		t.Fatal("the hit that triggers MBossDead did not destroy the midboss")
 	}
 	if mb.Active || vm.bossSlots[0] != nil {

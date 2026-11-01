@@ -128,51 +128,60 @@ func (vm *VM) interrupt(e *enemy.Enemy, a *eclActor, name string) {
 	}
 }
 
-// damaged is the damage step of FUN_0040dc80, installed as Enemy.Damaged.
-// It reports whether the hit destroyed e (score and drops follow). A phase
-// the damage triggers runs at once.
+// Results of hurt, as FUN_0040dc80 returns them.
+const (
+	hurtAlive   = 0
+	hurtKilled  = 1
+	hurtRemoved = -1 // the phase the damage started ended at once
+)
+
+// hurt is FUN_0040dc80's damage step for dmg != 0: a fifth (at least 1) for
+// a boss (0x8000) while a spell card is up (DAT_004776f4+0x378c bit 0), the
+// HP unless invulnerable (0x8, ins_335), a phase the damage triggers runs at
+// once, and at HP < 1 the defeat unless the enemy is immortal (0x40).
+func (vm *VM) hurt(a *eclActor, dmg int) int {
+	e := a.e
+	if vm.spell.active && e.ECLFlags&0x8000 != 0 {
+		dmg = max(dmg/5, 1)
+	}
+	if e.ECLFlags&0x8 == 0 && a.invuln.cur < 1 {
+		e.HP -= dmg
+		if vm.ctx != nil {
+			vm.ctx.EnemyHurt(dmg)
+		}
+	}
+	if name, ok := vm.checkInterrupt(e, a); ok {
+		vm.interrupt(e, a, name)
+		if !vm.runActor(a) {
+			return hurtRemoved
+		}
+	}
+	if e.HP < 1 && e.ECLFlags&0x40 == 0 {
+		vm.kill(a)
+		return hurtKilled
+	}
+	e.ECLFlags |= 0x2000
+	return hurtAlive
+}
+
+// damaged is installed as Enemy.Damaged for damage dealt outside the enemy's
+// update (the placeholder bomb). It reports whether the hit destroyed e.
 func (vm *VM) damaged(e *enemy.Enemy, dmg int) bool {
 	a := vm.actors[e]
 	if a == nil || e.ECLFlags&0x11 != 0 || dmg == 0 {
 		return false
 	}
-	if e.ECLFlags&0x8 == 0 && a.invuln.cur < 1 {
-		e.HP -= dmg
-	}
-	if name, ok := vm.checkInterrupt(e, a); ok {
-		vm.interrupt(e, a, name)
-		if !vm.runActor(a) {
-			e.Active = false // the new phase ended at once: removed without a kill
-			return false
-		}
-	}
-	if e.HP < 1 && e.ECLFlags&0x40 == 0 {
+	r := vm.hurt(a, dmg)
+	if r != hurtAlive {
 		e.Active = false
-		return true
 	}
-	e.ECLFlags |= 0x2000
-	return false
+	return r == hurtKilled
 }
 
-// LateUpdate runs the rest of FUN_0040dc80 for each enemy updated this frame,
-// after the stage has applied the frame's damage: the unconditional slot
-// check (a phase that fires here starts next frame), then the
-// invulnerability and phase timers.
+// LateUpdate runs after the stage's collisions: it forgets the enemies
+// deleted this frame.
 func (vm *VM) LateUpdate(ctx *stage.Context) {
 	vm.ctx = ctx
-	for _, a := range vm.order {
-		if !a.e.Active || !a.ran {
-			continue
-		}
-		a.ran = false
-		if name, ok := vm.checkInterrupt(a.e, a); ok {
-			vm.interrupt(a.e, a, name)
-		}
-		if a.invuln.cur > 0 {
-			a.invuln.add(-1, vm.gameSpeed)
-		}
-		a.phase.tick(vm.gameSpeed)
-	}
 	vm.prune()
 }
 

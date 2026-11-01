@@ -15,6 +15,7 @@ const (
 	LifeFragment                 // 生命碎片
 	BigPoint                     // 原作 type 5，大得点（不提供独立 Bomb 库存）
 	FullPower                    // 最大火力
+	FaithItem                    // 原作 type 9，绿色小信仰点（满火力时火力道具变成它）
 )
 
 const (
@@ -57,7 +58,9 @@ func (p *Pool) Spawn(x, y float64, t ItemType) {
 }
 
 // Update 更新所有道具
-func (p *Pool) Update(playerX, playerY float64, focused bool, fieldBottom float64) {
+// attract is false while the player is dying or in the deathbomb window
+// (states 2 and 4): FUN_0041afd0 starts no item homing then.
+func (p *Pool) Update(playerX, playerY float64, focused, attract bool, fieldBottom float64) {
 	for i := range p.items {
 		it := &p.items[i]
 		if !it.Active {
@@ -74,7 +77,7 @@ func (p *Pool) Update(playerX, playerY float64, focused bool, fieldBottom float6
 		dx := playerX - it.X
 		dy := playerY - it.Y
 		dist := math.Sqrt(dx*dx + dy*dy)
-		if (focused && dist < magnetRadius) || playerY < autoCollectY {
+		if attract && ((focused && dist < magnetRadius) || playerY < autoCollectY) {
 			if dist > 1 {
 				it.X += dx / dist * magnetSpeed
 				it.Y += dy / dist * magnetSpeed

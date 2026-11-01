@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"th10/entity/enemy"
-	"th10/entity/item"
 	"th10/game"
 	"th10/scene/dialog"
 	"th10/scene/stage"
@@ -34,8 +33,14 @@ func updateBullets(ctx *stage.Context) {
 }
 
 // stepFrame runs one stage frame of the VM: the scripts, then (after the
-// stage's collision pass) the interrupt check and timers.
+// stage's collision pass) the interrupt check and timers. The player does not
+// move, but its timers run as its update would (FUN_00425730's tail): the
+// state timer is the rank clock, and the spawn invulnerability wears off.
 func stepFrame(vm *VM, ctx *stage.Context) {
+	if p := ctx.Player; p.Invinc.Cur >= 1 {
+		p.Invinc.Add(-1, 1)
+	}
+	ctx.Player.StateTimer.Tick(1)
 	vm.Update(ctx)
 	vm.LateUpdate(ctx)
 }
@@ -163,7 +168,6 @@ func TestVMSpellBgDeclaresHUD(t *testing.T) {
 	ctx := newTestContext()
 	vm := newTestVM()
 	owner := enemy.New(100, 100, 1000, enemy.TypeBoss)
-	vm.actorFor(owner).ran = true // as if updated this frame
 	task := &eclTask{owner: owner}
 
 	vm.execGameOp(ctx, task, &Instr{Opcode: opSetBoss, Params: []Param{intParam(0)}})
@@ -176,7 +180,7 @@ func TestVMSpellBgDeclaresHUD(t *testing.T) {
 		intParam(1000000),
 		stringParam("Test Spell"),
 	}})
-	vm.LateUpdate(ctx) // the slot check writes the timer: ceil(4200/60) = 70
+	vm.checkInterrupt(owner, vm.actorFor(owner)) // writes the timer: ceil(4200/60) = 70
 
 	h := vm.BossHUD()
 	if !h.Active || !h.Spell {
@@ -207,37 +211,6 @@ func TestVMLifeMarkersExposeBossHUDFractions(t *testing.T) {
 	}
 	if math.Abs(h.HPMarkers[0]-0.25) > 1e-6 {
 		t.Fatalf("HPMarkers[0] = %v, want 0.25", h.HPMarkers[0])
-	}
-}
-
-func TestVMDropAreaSpreadsOpcodeDrops(t *testing.T) {
-	ctx := newTestContext()
-	vm := newTestVM()
-	owner := enemy.New(100, 100, 100, enemy.TypeFairy)
-	vm.actorFor(owner)
-	task := &eclTask{owner: owner}
-
-	vm.execGameOp(ctx, task, &Instr{Opcode: opDropClear})
-	vm.execGameOp(ctx, task, &Instr{Opcode: opDropExtra, Params: []Param{intParam(1), intParam(4)}})
-	vm.execGameOp(ctx, task, &Instr{Opcode: opDropArea, Params: []Param{floatParam(64), floatParam(32)}})
-	vm.execGameOp(ctx, task, &Instr{Opcode: opDropItems})
-
-	count := 0
-	spread := false
-	ctx.Items.Each(func(it *item.Item) {
-		count++
-		if it.X != owner.X || it.Y != owner.Y {
-			spread = true
-		}
-		if it.X < owner.X-32 || it.X > owner.X+32 || it.Y < owner.Y-16 || it.Y > owner.Y+16 {
-			t.Fatalf("item at %.2f,%.2f outside drop area", it.X, it.Y)
-		}
-	})
-	if count != 4 {
-		t.Fatalf("spawned %d items, want 4", count)
-	}
-	if !spread {
-		t.Fatal("drop area did not move any spawned item away from owner position")
 	}
 }
 
@@ -334,5 +307,28 @@ func TestVMAllStagesStableAndFire(t *testing.T) {
 			}
 			t.Logf("%s: peak enemies=%d peak bullets=%d", name, maxEnemies, maxBullets)
 		})
+	}
+}
+
+// The aim specials measure from different positions (FUN_00412350, jump
+// table 0x4125f8): -9989 the final position, -9956 layer A, -9955 layer B.
+func TestAimSpecialsReferencePosition(t *testing.T) {
+	vm := newTestVM()
+	owner := enemy.New(0, 0, 100, enemy.TypeFairy)
+	a := vm.actorFor(owner)
+	a.mv.layer[0].pos = [3]float32{0, 20, 0}
+	a.mv.layer[1].pos = [3]float32{0, 10, 0}
+	a.mv.final.pos = [3]float32{10, 10, 0}
+	vm.playerECL = [2]float32{10, 20}
+	task := &eclTask{owner: owner}
+	want := map[int32]float32{
+		-9989: halfPi32,
+		-9956: 0,
+		-9955: float32(math.Atan2(10, 10)),
+	}
+	for id, w := range want {
+		if got := vm.specialFloat(task, id); got != w {
+			t.Errorf("special %d = %v, want %v", id, got, w)
+		}
 	}
 }

@@ -77,7 +77,9 @@ func TestReimuAOptionFocusInterpolation(t *testing.T) {
 	p.SetPos(200, 200)
 	p.GS.Power = 400
 	var in input.State
-	p.UpdateInput(&in)
+	for i := 0; i < 4; i++ { // focus is held off for 4 frames
+		p.UpdateInput(&in)
+	}
 	if p.Options()[0] != (Option{168, 208}) {
 		t.Fatal(p.Options())
 	}
@@ -131,7 +133,7 @@ func TestExistingShotsAdvanceThroughDeathAndBomb(t *testing.T) {
 	p.GS.Power = 100
 	in.Restore(1<<input.KeyBomb | 1<<input.KeyShot)
 	p.UpdateInput(&in)
-	if p.State != StateBomb {
+	if p.State != StateNormal || p.BombTimer == 0 {
 		t.Fatal("expected deathbomb")
 	}
 	p.Bullets.Each(func(b *playerbullet.Bullet) {

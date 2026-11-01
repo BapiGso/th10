@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -23,6 +24,7 @@ import (
 	"th10/scene/stage"
 	"th10/scene/stage/ecl"
 	"th10/trace"
+	"th10/zun"
 )
 
 // Config selects what to simulate.
@@ -103,6 +105,32 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 		}
 		defer func() { ecl.Trace = nil }()
 	}
+	// TH10SIM_RNGLOG=first-last logs every draw from the game RNG in those
+	// frames to stderr, with the calling functions.
+	if rng0, rng1 := frameRange(os.Getenv("TH10SIM_RNGLOG")); rng0 >= 0 {
+		zun.RNGHook = func(g *zun.RNG, v uint32) {
+			if frame < rng0 || frame > rng1 || g != h.ctx.RNG {
+				return
+			}
+			pc := make([]uintptr, 32)
+			n := runtime.Callers(3, pc)
+			fr := runtime.CallersFrames(pc[:n])
+			fmt.Fprintf(os.Stderr, "%d #%d %08x", frame, g.Count/2, v)
+			for {
+				f, more := fr.Next()
+				name := f.Function
+				if k := strings.LastIndexByte(name, '/'); k >= 0 {
+					name = name[k+1:]
+				}
+				fmt.Fprintf(os.Stderr, " < %s", name)
+				if !more {
+					break
+				}
+			}
+			fmt.Fprintln(os.Stderr)
+		}
+		defer func() { zun.RNGHook = nil }()
+	}
 	for i := 0; i < limit; i++ {
 		frame = i + 1
 		rec := ch.Records[i]
@@ -180,7 +208,7 @@ func (h *headless) sample(index int) *trace.Frame {
 		PScore:     h.state.Score,
 		PGraze:     h.state.Graze,
 		PState:     int(h.ctx.Player.State),
-		PInvinc:    h.ctx.Player.InvincTimer,
+		PInvinc:    int(h.ctx.Player.Invinc.Cur),
 		PBombTimer: h.ctx.Player.BombTimer,
 		Enemies:    len(enemies),
 		Bullets:    h.ctx.Bullets.Live(),

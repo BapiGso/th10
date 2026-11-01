@@ -52,8 +52,12 @@ const (
 	addrGraze       = 0x00474c84 // graze counter (candidate)
 	addrPlayerX     = 0x3c0      // offset from player base (game space, FUN_004073e0)
 	addrPlayerY     = 0x3c4
-	addrPlayerState = 0x478 // player state index (candidate)
+	addrPlayerState = 0x458 // FUN_00425730 switch: 0 respawn entry, 1 normal, 2 dying, 3 ?, 4 deathbomb window
 )
+
+// addrPlayerInvinc is the invincibility timer (int, player base offset).
+// FUN_00425730 decrements it while >= 1 and the player flashes while it is positive.
+const addrPlayerInvinc = 0x4310
 
 // Frame-counter candidates. FUN_00418190 increments DAT_00474c88 and
 // DAT_00474c8c once per main-loop iteration and FUN_00417870 zeroes both at
@@ -506,6 +510,10 @@ func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
 		st, errSt := r.i32(pp + addrPlayerState)
 		if errSt == nil {
 			f.PState = int(st)
+		}
+		inv, errInv := r.i32(pp + addrPlayerInvinc)
+		if errInv == nil {
+			f.PInvinc = int(inv)
 		}
 	}
 

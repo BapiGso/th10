@@ -17,9 +17,9 @@ import (
 	"th10/anm"
 	"th10/entity/bullet"
 	"th10/entity/enemy"
-	"th10/entity/item"
 	"th10/gamedata"
 	"th10/scene/stage"
+	"th10/zun"
 )
 
 // eclActor is one enemy's ECL state (the EnemyData at enemy+0x103c).
@@ -31,16 +31,19 @@ type eclActor struct {
 	// vars are I0-I3 and F0-F3 (special vars -9985..-9978, +0x1138), copied
 	// from the creator.
 	vars [8]uint32
-	// ANM state: the file ins_258 selected (+0xe8), the slot-0 script (+0xf0)
-	// and ins_262's script, which ins_269 offsets (+0xf4).
-	anmFile, curScript, dirScript int
-	ran                           bool // updated this frame (flag 0x400 was set)
+	// ANM state: the file ins_258 selected (+0xe8), the file of the slot-0
+	// script (+0xec), the slot-0 script (+0xf0) and ins_262's script, which
+	// ins_269 offsets (+0xf4).
+	anmFile, bodyFile, curScript, dirScript int
 
-	dropArea eclRect
-	tpl      [16]bullet.Template // bullet emitter templates (+0x2c4, bullet_ops.go)
-	tplOff   [16][3]float32      // their fire offsets from the enemy (+0x1344)
-	fireR    float32             // ins_346's squared no-fire radius (+0x1454)
-	markers  []lifeMarker
+	drops   dropTable
+	score   int32               // the defeat score (enemy +0x23f8)
+	deathSE int32               // sound table entry (+0x2444)
+	deathFx int32               // bullet.anm script (+0x2448)
+	tpl     [16]bullet.Template // bullet emitter templates (+0x2c4, bullet_ops.go)
+	tplOff  [16][3]float32      // their fire offsets from the enemy (+0x1344)
+	fireR   float32             // ins_346's squared no-fire radius (+0x1454)
+	markers []lifeMarker
 
 	slots   [8]interruptSlot // boss phase interrupts (interrupt.go)
 	phase   eclTimer         // phase timer, reset by ins_333 and each interrupt
@@ -48,7 +51,13 @@ type eclActor struct {
 	bossIdx int              // the boss slot ins_332 put this enemy in
 }
 
-type eclRect struct{ x, y, w, h float64 }
+// dropTable is the defeat drops (+0x13cc): items[0] is the main item's kind
+// (enemy +0x2408), items[k] the count of kind k for the scatter, and w, h
+// the scatter ellipse (ins_328).
+type dropTable struct {
+	items [13]int32
+	w, h  float32
+}
 
 type lifeMarker struct {
 	index int
@@ -251,33 +260,32 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		if t.owner != nil && len(in.Params) >= 1 {
 			vm.actorFor(t.owner).invuln.set(vm.resolveInt(t, in.Params[0]))
 		}
-	case opDropClear:
+	case opDropClear: // 326: the scatter counts, not the main item
 		if t.owner != nil {
-			t.owner.DropPower, t.owner.DropPoint, t.owner.DropLife = 0, 0, 0
-			t.owner.DropBigPower, t.owner.DropBigPoint = 0, 0
-			t.owner.DropAreaW, t.owner.DropAreaH = 0, 0
-			vm.actorFor(t.owner).dropArea = eclRect{}
+			clear(vm.actorFor(t.owner).drops.items[1:])
 		}
-	case opDropExtra: // SS: (type, count)
+	case opDropExtra: // 327 SS: (kind, count), assigned; kind 0 is the main item
 		if t.owner != nil && len(in.Params) >= 2 {
-			typ := int(vm.resolveInt(t, in.Params[0]))
-			n := int(vm.resolveInt(t, in.Params[1]))
-			vm.addDrop(t.owner, typ, n)
+			kind := bossItem(t.owner, vm.resolveInt(t, in.Params[0]))
+			n := vm.resolveInt(t, in.Params[1])
+			if kind >= 0 && int(kind) < len(dropTable{}.items) {
+				vm.actorFor(t.owner).drops.items[kind] = n
+			}
 		}
-	case opDropArea: // ff: (w, h), h read first
+	case opDropArea: // 328 ff: (w, h), h read first
 		if t.owner != nil && len(in.Params) >= 2 {
-			a := vm.actorFor(t.owner)
-			h := vm.resolveFloat(t, in.Params[1])
-			w := vm.resolveFloat(t, in.Params[0])
-			a.dropArea.w, a.dropArea.h = math.Abs(float64(w)), math.Abs(float64(h))
-			t.owner.DropAreaW, t.owner.DropAreaH = a.dropArea.w, a.dropArea.h
+			d := &vm.actorFor(t.owner).drops
+			d.h = vm.resolveFloat(t, in.Params[1])
+			d.w = vm.resolveFloat(t, in.Params[0])
 		}
-	case opDropMain:
+	case opDropMain: // 330 S: the main item's kind
 		if t.owner != nil && len(in.Params) >= 1 {
-			t.owner.DropPower = maxInt(0, int(vm.resolveInt(t, in.Params[0])))
+			vm.actorFor(t.owner).drops.items[0] = bossItem(t.owner, vm.resolveInt(t, in.Params[0]))
 		}
-	case opDropItems:
-		vm.spawnDrops(ctx, t.owner)
+	case opDropItems: // 329: FUN_0040c9a0
+		if t.owner != nil {
+			vm.dropItems(ctx, vm.actorFor(t.owner))
+		}
 	case opSetInterrupt: // 334 SSSm: (slot, hp, time, sub), FUN_00412720
 		if t.owner != nil && len(in.Params) >= 4 {
 			a := vm.actorFor(t.owner)
@@ -631,14 +639,24 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	pos[0] = vm.resolveFloat(t, in.Params[1])
 	pos[1] = vm.resolveFloat(t, in.Params[2])
 	if op == opEnmCreate3D {
-		// The stage's 3D offset (DAT_00491d7c) is taken as 0.
+		// 270 adds the STD camera's x and y (DAT_00491d7c/80), not its z.
+		if ctx != nil && ctx.STD != nil {
+			pos[0] += ctx.STD.Cam.Pos[0]
+			pos[1] += ctx.STD.Cam.Pos[1]
+		}
 		pos[2] = vm.resolveFloat(t, in.Params[3])
+	} else if op == opEnmCreate && parent != nil && parent.e.ECLFlags&0x40000 != 0 && ctx != nil && ctx.STD != nil {
+		// A 3D creator's child starts where the creator shows on screen.
+		p := parent.mv.final.pos
+		p[0] += pos[0]
+		p[1] += pos[1]
+		pos[0], pos[1] = ctx.STD.Cam.Project(p)
 	} else if (op == opEnmCreate || op == opEnmCreateM) && parent != nil {
 		pos[0] += parent.mv.final.pos[0]
 		pos[1] += parent.mv.final.pos[1]
 	}
 	hp := vm.resolveInt(t, in.Params[n-3])
-	vm.resolveInt(t, in.Params[n-2]) // score (+0x23f8)
+	score := vm.resolveInt(t, in.Params[n-2])
 	drop := vm.resolveInt(t, in.Params[n-1])
 
 	typ := enemy.TypeFairy
@@ -650,8 +668,6 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	}
 	wx, wy := eclToWorld(float64(pos[0]), float64(pos[1]))
 	e := enemy.New(wx, wy, int(hp), typ)
-	e.DropPower = int(drop)
-	e.DropPoint = 1
 	if typ != enemy.TypeFairy {
 		e.SpriteID = 1
 	}
@@ -667,6 +683,8 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 
 	a := newActor(e)
 	a.mv.layer[0].pos = pos
+	a.score = score
+	a.drops.items[0] = drop
 	if parent != nil {
 		a.vars = parent.vars
 	}
@@ -676,7 +694,11 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		a.main.frame = newFrame(a.main.sub, nil)
 	}
 	vm.actors[e] = a
-	vm.updateActor(a)
+	vm.updateActor(a) // FUN_0040cfb0 ignores its result
+	a.drops.items[0] = bossItem(e, a.drops.items[0])
+	a.deathSE = 2 + vm.created&1
+	a.deathFx = deathEffect(a)
+	vm.created++
 	vm.order = append(vm.order, a)
 	if ctx != nil {
 		ctx.AddEnemy(e)
@@ -697,6 +719,7 @@ func (vm *VM) anmSetSlot(t *eclTask, in *Instr) {
 		return
 	}
 	if slot == 0 {
+		a.bodyFile = a.anmFile
 		a.curScript = script
 		a.mv.size = vm.scriptSize(a.anmFile, script)
 		if in.Opcode == opAnmSetMain {
@@ -817,52 +840,98 @@ func (vm *VM) applySpawnVisual(e *enemy.Enemy, name string) {
 	}
 }
 
-func (vm *VM) addDrop(e *enemy.Enemy, dropType, count int) {
-	if e == nil || count <= 0 {
-		return
-	}
-	switch dropType {
-	case 1:
-		e.DropPower += count
-	case 2:
-		e.DropPoint += count
-	case 4:
-		e.DropBigPower += count
-	case 5:
-		e.DropBigPoint += count
-	case 7:
-		e.DropLife += count
-	default:
-		e.DropPoint += count
-	}
-}
-
-func (vm *VM) spawnDrops(ctx *stage.Context, e *enemy.Enemy) {
-	if ctx == nil || ctx.Items == nil || e == nil {
-		return
-	}
-	a := vm.actors[e]
-	w, h := 0.0, 0.0
-	if a != nil {
-		w, h = a.dropArea.w, a.dropArea.h
-	}
-	spawn := func(n int, it item.ItemType) {
-		for i := 0; i < n; i++ {
-			x, y := e.X, e.Y
-			if w > 0 || h > 0 {
-				x += (float64(vm.randFloat()) - 0.5) * w
-				y += (float64(vm.randFloat()) - 0.5) * h
-			}
-			ctx.Items.Spawn(x, y, it)
+// bossItem is the boss remap of a power item kind (flag 0x8000, ins_327,
+// ins_330 and FUN_0040cfb0): small and big power become kinds 10 and 11.
+func bossItem(e *enemy.Enemy, kind int32) int32 {
+	if e.ECLFlags&0x8000 != 0 {
+		switch kind {
+		case 1:
+			return 10
+		case 4:
+			return 11
 		}
 	}
-	spawn(e.DropPower, item.PowerItem)
-	spawn(e.DropPoint, item.PointItem)
-	spawn(e.DropLife, item.LifeFragment)
-	spawn(e.DropBigPower, item.BigPower)
-	spawn(e.DropBigPoint, item.BigPoint)
-	e.DropPower, e.DropPoint, e.DropLife = 0, 0, 0
-	e.DropBigPower, e.DropBigPoint = 0, 0
+	return kind
+}
+
+// deathEffect is the bullet.anm script FUN_0040cfb0 picks for the defeat
+// effect after the first update: by the slot-0 script when it comes from
+// the stage's first ANM file, else 0x167.
+func deathEffect(a *eclActor) int32 {
+	if a.bodyFile == 1 {
+		switch a.curScript {
+		case 5, 0x19, 0x32:
+			return 0x164
+		case 10, 0x1e, 0x33:
+			return 0x16a
+		case 0xf, 0x23, 0x34:
+			return 0x16d
+		}
+	}
+	return 0x167
+}
+
+// The launch of every dropped item (FUN_0040c9a0, FUN_0040c9d0): straight
+// up at 2.2.
+const (
+	dropAngle float32 = -zun.HalfPi
+	dropSpeed float32 = 2.2
+)
+
+// kill is the defeat in FUN_0040dc80: the score (FUN_00409d90 adds a tenth
+// of it to the stored score, which shows times 10), then FUN_0040e5f0: the
+// death sound, the death effect, the drops. Not ported: the faith gauge's
+// hold timer gaining 10 frames (FUN_00412ff0).
+func (vm *VM) kill(a *eclActor) {
+	ctx := vm.ctx
+	if ctx == nil {
+		vm.dropItems(nil, a)
+		return
+	}
+	if ctx.State != nil {
+		ctx.State.AddScoreRaw(int64(a.score/10) * 10)
+	}
+	if a.deathSE >= 0 {
+		ctx.PlaySEID(int(a.deathSE))
+	}
+	if a.deathFx >= 0 && ctx.World != nil && ctx.BulletEnv != nil {
+		ctx.World.Spawn(ctx.BulletEnv.File, int(a.deathFx), a.mv.final.pos, ctx.Anm)
+	}
+	vm.dropItems(ctx, a)
+}
+
+// dropItems is FUN_0040c9a0 (ins_329, and the tail of a defeat): the main
+// item at the enemy, then the scatter; the main item is used up.
+func (vm *VM) dropItems(ctx *stage.Context, a *eclActor) {
+	pos := a.mv.final.pos
+	d := &a.drops
+	if d.items[0] > 0 && ctx != nil {
+		ctx.SpawnItem(pos[0], pos[1], d.items[0], dropAngle, dropSpeed)
+	}
+	vm.scatterDrops(ctx, d, pos)
+	d.items[0] = 0
+}
+
+// scatterDrops is FUN_0040c9d0: kinds 1-11 drop round the drop ellipse from
+// a random start, each at 0.5-1 of the radius, the next a quarter turn on
+// give or take an eighth; then every count is cleared. It draws at least
+// once. The two-step draws inside repeat their second step (zun.RNG.Dup).
+func (vm *VM) scatterDrops(ctx *stage.Context, d *dropTable, pos [3]float32) {
+	angle := float32(vm.randSigned() * zun.Pi)
+	for kind := int32(1); kind <= 11; kind++ {
+		for range d.items[kind] {
+			px, py := zun.Ellipse(angle, d.w, d.h)
+			f := float32(float32(vm.rng.Dup())*0x1p-33) + 0.5
+			x := float32(px*f) + pos[0]
+			y := float32(py*f) + pos[1]
+			if ctx != nil {
+				ctx.SpawnItem(x, y, kind, dropAngle, dropSpeed)
+			}
+			r := float32(float32(vm.rng.Dup())*0x1p-31) - 1
+			angle = zun.NormAngle(float32(float32(r*(zun.Pi/4))+angle) + zun.HalfPi)
+		}
+	}
+	clear(d.items[1:])
 }
 
 // playStageSound plays entry id of the sound table (0x4749c8).

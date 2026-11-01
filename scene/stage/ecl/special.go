@@ -14,11 +14,11 @@ func (vm *VM) actorOf(t *eclTask) *eclActor {
 	return vm.actors[t.owner]
 }
 
-// aim is the heading from the enemy's final position to the player
-// (FUN_004073e0): exactly pi/2 (down) when the two coincide.
-func (vm *VM) aim(a *eclActor) float32 {
-	dx := vm.playerECL[0] - a.mv.final.pos[0]
-	dy := vm.playerECL[1] - a.mv.final.pos[1]
+// aim is the heading from pos to the player (FUN_00426660): exactly pi/2
+// (down) when the two coincide.
+func (vm *VM) aim(pos [3]float32) float32 {
+	dx := vm.playerECL[0] - pos[0]
+	dy := vm.playerECL[1] - pos[1]
 	if dx == 0 && dy == 0 {
 		return halfPi32
 	}
@@ -79,8 +79,14 @@ func (vm *VM) specialFloat(t *eclTask, id int32) float32 {
 		return m.layer[1].pos[0]
 	case -9992, -9972:
 		return m.layer[1].pos[1]
-	case -9989, -9956, -9955:
-		return vm.aim(a)
+	// FUN_00412350 passes a different position to the aim for each id
+	// (jump table 0x4125f8): final, layer A, layer B.
+	case -9989:
+		return vm.aim(m.final.pos)
+	case -9956:
+		return vm.aim(m.layer[0].pos)
+	case -9955:
+		return vm.aim(m.layer[1].pos)
 	case -9988:
 		return a.phase.f
 	case -9986:

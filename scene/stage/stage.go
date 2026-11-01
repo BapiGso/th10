@@ -3,9 +3,9 @@ package stage
 import (
 	"fmt"
 	"image/color"
-	"math"
 	"th10/anm"
 	"th10/audio"
+	"th10/datfs"
 	"th10/entity/bullet"
 	"th10/entity/effect"
 	"th10/entity/enemy"
@@ -14,11 +14,13 @@ import (
 	"th10/entity/player"
 	"th10/entity/playerbullet"
 	"th10/game"
+	"th10/gamedata"
 	"th10/input"
 	"th10/render"
 	"th10/scene/dialog"
 	resultscene "th10/scene/result"
 	"th10/sprite"
+	"th10/std"
 	"th10/zun"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -53,7 +55,10 @@ type Context struct {
 	BulletEnv *bullet.Env
 	LaserEnv  *laser.Env
 	// RNG 是原作的游戏随机数（DAT_004918b0），ECL 与子弹自身的 ANM 脚本共用。
-	RNG   *zun.RNG
+	RNG *zun.RNG
+	// STD 是本关 .std 的相机脚本（FUN_00403c80）；ECL 270/271 的敌人读它的
+	// 相机位置与每帧位移（DAT_00491d7c）。找不到 .std 时为 nil（相机视为 0）。
+	STD   *std.VM
 	stage *Stage // 反向引用（用于触发对话等）
 
 	// ManagerOrder 由 ECL VM 设置：按原作敌人管理器链表顺序列出存活敌人，
@@ -149,7 +154,6 @@ type Stage struct {
 	field        *ebiten.Image // 游戏区域离屏缓冲
 	frontFrame   *ebiten.Image
 	hud          *hud                                                 // 状态栏（ebitenui 排版）
-	wasBombing   bool                                                 // 上一帧是否处于 Bomb 态（检测起爆沿）
 	bossNameFace ebitext.Face                                         // 符卡名字体（系统黑体，懒加载）
 	bossNumFace  ebitext.Face                                         // 符卡时限数字字体（HUD 字体，懒加载）
 	NextScene    func(g *game.Game, state *game.GameState) game.Scene // 通关后下一场景
@@ -184,8 +188,22 @@ func newStage(state *game.GameState, script Script) *Stage {
 	}
 	s.ctx = NewContext(state)
 	s.ctx.stage = s
+	s.ctx.STD = loadSTD(state.Stage)
 	s.hud = newHud(state)
 	return s
+}
+
+// loadSTD starts stage n's embedded .std (n 7 = Extra), nil if missing.
+func loadSTD(n int) *std.VM {
+	data, err := gamedata.ReadFile(datfs.EmbedPath(fmt.Sprintf("stage%02d.std", n)))
+	if err != nil {
+		return nil
+	}
+	f, err := std.Load(data)
+	if err != nil {
+		return nil
+	}
+	return std.New(f)
 }
 
 func loadFrontFrame() *ebiten.Image {
@@ -257,6 +275,11 @@ func (s *Stage) update(in *input.State) error {
 
 	ctx.State.Frame++
 
+	// 0. STD 相机脚本（FUN_00402720），先于敌人管理器
+	if ctx.STD != nil {
+		ctx.STD.Update(ctx.Anm.GameSpeed)
+	}
+
 	// 信仰值自然衰减
 	ctx.State.DecayFaith()
 
@@ -265,14 +288,12 @@ func (s *Stage) update(in *input.State) error {
 	s.updatePlayer(in)
 	ctx.SyncPlayer() // the script aims at this frame's position
 
-	// 1b. Bomb 起爆沿：进入 Bomb 态的第一帧播放符卡音效、信仰惩罚、屏幕全屏闪光
-	bombing := ctx.Player.State == player.StateBomb
-	if bombing && !s.wasBombing {
+	// 1b. Bomb 起爆沿：灵击开始的那一帧播放符卡音效、信仰惩罚、屏幕全屏闪光
+	if ctx.Player.BombTimer == player.BombDuration() {
 		ctx.PlaySE(audio.SEBomb)
 		ctx.State.AddFaith(-15000) // 使用符卡折损信仰倍率
 		ctx.Effects.Spawn(ctx.Player.X, ctx.Player.Y, effect.TypeExplosion, 40)
 	}
-	s.wasBombing = bombing
 
 	// 2. 脚本驱动（敌人/弹幕生成）
 	s.script.Update(ctx)
@@ -287,7 +308,8 @@ func (s *Stage) update(in *input.State) error {
 
 	// 5. 道具
 	focused := in.IsPressed(input.KeyFocus)
-	ctx.Items.Update(ctx.Player.X, ctx.Player.Y, focused, game.FieldBottom)
+	attract := ctx.Player.State != player.StateDying && ctx.Player.State != player.StateDeathbomb
+	ctx.Items.Update(ctx.Player.X, ctx.Player.Y, focused, attract, game.FieldBottom)
 
 	// 6. 特效
 	ctx.Effects.Update()
@@ -310,23 +332,12 @@ func (s *Stage) update(in *input.State) error {
 	return nil
 }
 
-// updatePlayer keeps confirmed deaths separate from the deathbomb window.
+// updatePlayer runs the player (FUN_00425730); the death drops come through
+// Player.SpawnItem.
 func (s *Stage) updatePlayer(in *input.State) {
 	p := s.ctx.Player
-	x, y, life := p.X, p.Y, p.GS.Life
 	p.SetHomingCandidates(s.ctx.Enemies)
 	p.UpdateInput(in)
-	if p.GS.Life < life {
-		// FUN_00425730 emits 4 small P + 3 large P. The original delayed
-		// radial ejection and respawn animation are not yet reproduced.
-		for i := 0; i < 7; i++ {
-			kind := item.PowerItem
-			if i%2 == 1 {
-				kind = item.BigPower
-			}
-			s.ctx.Items.Spawn(x, y, kind)
-		}
-	}
 }
 
 // ---------- 碰撞检测 ----------
@@ -337,110 +348,44 @@ func (s *Stage) checkCollisions() {
 	st := ctx.State
 	px, py := p.X, p.Y
 
-	// 自机子弹 vs 敌人
-	for _, e := range ctx.Enemies {
-		if !e.Shootable() {
-			continue
-		}
-		ex, ey, ew, eh := e.HitRect()
-		dmg := p.Bullets.HitEnemy(ex, ey, ew, eh)
-		if dmg > 0 {
-			prevHP := e.HP
-			killed := e.TakeDamage(dmg)
-			if e.HP < prevHP {
-				st.AddFaith(int64(dmg))
-				st.AddScore(int64(dmg) * 12)
+	// 自机子弹与伤害圈对敌人的伤害在敌人自己的更新里（FUN_0040dc80，
+	// scene/stage/ecl 的 updateActor）。
+
+	// 道具拾取：自机死亡中（状态 2）不拾取（FUN_0041afd0）
+	if p.State != player.StateDying {
+		ctx.Items.CollectCallback(px, py, func(t item.ItemType) {
+			ctx.PlaySE(audio.SEItem)
+			switch t {
+			case item.PowerItem:
+				p.AddPower(game.SmallPowerValue)
+				st.AddFaith(8)
+			case item.BigPower:
+				p.AddPower(game.BigPowerValue)
+				st.AddFaith(20)
+			case item.PointItem:
+				st.Point++
+				st.AddFaith(15)
+				st.AddScore(500)
+			case item.LifeFragment:
+				st.Life++
+				st.AddFaith(100)
+			case item.BigPoint:
+				st.Point++
+				st.AddScoreRaw(st.Faith)
+			case item.FullPower:
+				st.Power = st.MaxPower
+				st.AddFaith(50)
+			case item.FaithItem:
+				st.AddFaith(1000) // FUN_0041be80(100)，本项目信仰值 x10
 			}
-			if killed {
-				s.defeatEnemy(e)
-			}
-		}
+		})
 	}
 
-	// 道具拾取
-	ctx.Items.CollectCallback(px, py, func(t item.ItemType) {
-		ctx.PlaySE(audio.SEItem)
-		switch t {
-		case item.PowerItem:
-			p.AddPower(game.SmallPowerValue)
-			st.AddFaith(8)
-		case item.BigPower:
-			p.AddPower(game.BigPowerValue)
-			st.AddFaith(20)
-		case item.PointItem:
-			st.Point++
-			st.AddFaith(15)
-			st.AddScore(500)
-		case item.LifeFragment:
-			st.Life++
-			st.AddFaith(100)
-		case item.BigPoint:
-			st.Point++
-			st.AddScoreRaw(st.Faith)
-		case item.FullPower:
-			st.Power = st.MaxPower
-			st.AddFaith(50)
-		}
-	})
-
 	// Bomb 清屏（灵击移植前的占位，M7）
-	if p.State == player.StateBomb {
+	if p.BombTimer > 0 {
 		ctx.ClearBullets()
 		s.applyBombDamage()
 	}
-}
-
-func (s *Stage) defeatEnemy(e *enemy.Enemy) {
-	ctx := s.ctx
-	st := ctx.State
-	totalDrops := e.DropPower + e.DropPoint + e.DropLife + e.DropBigPower + e.DropBigPoint
-	dropIndex := 0
-	spawnDrop := func(t item.ItemType) {
-		x, y := defeatDropPosition(e, dropIndex, totalDrops)
-		ctx.Items.Spawn(x, y, t)
-		dropIndex++
-	}
-	for i := 0; i < e.DropPower; i++ {
-		drop := item.PowerItem
-		if st.Power >= st.MaxPower {
-			drop = item.PointItem
-		}
-		spawnDrop(drop)
-	}
-	for i := 0; i < e.DropPoint; i++ {
-		spawnDrop(item.PointItem)
-	}
-	for i := 0; i < e.DropLife; i++ {
-		spawnDrop(item.LifeFragment)
-	}
-	for i := 0; i < e.DropBigPower; i++ {
-		spawnDrop(item.BigPower)
-	}
-	for i := 0; i < e.DropBigPoint; i++ {
-		spawnDrop(item.BigPoint)
-	}
-	if e.Type != enemy.TypeFairy {
-		ctx.Items.Spawn(e.X, e.Y, item.BigPower)
-	}
-	ctx.Effects.Spawn(e.X, e.Y, effect.TypeExplosion, 20)
-	st.AddFaith(int64(50 + e.DropPower*12 + e.DropPoint*8))
-	if e.Type != enemy.TypeFairy {
-		st.AddFaith(200)
-	}
-	st.AddScore(1000 + int64(e.DropPower+e.DropPoint)*100)
-}
-
-func defeatDropPosition(e *enemy.Enemy, index, total int) (float64, float64) {
-	if e == nil {
-		return 0, 0
-	}
-	if total <= 1 || (e.DropAreaW == 0 && e.DropAreaH == 0) {
-		return e.X, e.Y
-	}
-	const goldenAngle = 2.399963229728653
-	r := math.Sqrt((float64(index) + 0.5) / float64(total))
-	a := float64(index) * goldenAngle
-	return e.X + math.Cos(a)*e.DropAreaW*0.5*r, e.Y + math.Sin(a)*e.DropAreaH*0.5*r
 }
 
 func (s *Stage) applyBombDamage() {
@@ -456,13 +401,10 @@ func (s *Stage) applyBombDamage() {
 			continue
 		}
 		prevHP := e.HP
-		killed := e.TakeDamage(damage)
+		e.TakeDamage(damage) // 击破的得分与掉落由 ECL VM 结算（FUN_0040e5f0）
 		if e.HP < prevHP {
 			st.AddScore(int64(damage) * 8)
 			ctx.Effects.Spawn(e.X, e.Y, effect.TypeBulletCancel, 10)
-		}
-		if killed {
-			s.defeatEnemy(e)
 		}
 	}
 }
@@ -552,6 +494,8 @@ func (s *Stage) drawItems(field *ebiten.Image) {
 			c = color.RGBA{255, 64, 64, 255}
 		case item.PointItem:
 			c = color.RGBA{64, 128, 255, 255}
+		case item.FaithItem:
+			c = color.RGBA{64, 255, 96, 255}
 		default:
 			c = color.RGBA{255, 255, 64, 255}
 		}
@@ -688,15 +632,16 @@ func (s *Stage) drawWorld(field *ebiten.Image) {
 
 func (s *Stage) drawPlayer(field *ebiten.Image) {
 	p := s.ctx.Player
-	if p.State == player.StateDead {
+	if p.State == player.StateDying {
 		return
 	}
 	fl, ft := float64(game.FieldLeft), float64(game.FieldTop)
 	px := p.X - fl
 	py := p.Y - ft
 
+	// 无敌闪烁：原作是 ANM 标志 0x8000 配颜色 0xff0000ff，这里先用半透明代替。
 	alpha := float32(1.0)
-	if p.State == player.StateRespawn && p.InvincTimer%6 < 3 {
+	if p.Flash {
 		alpha = 0.3
 	}
 
@@ -789,7 +734,7 @@ func (s *Stage) drawBossHUD(field *ebiten.Image) {
 // drawBombFlash 在使用符卡期间绘制全屏白色闪光：起爆瞬间最亮，随符卡剩余时间衰减。
 func (s *Stage) drawBombFlash(field *ebiten.Image) {
 	p := s.ctx.Player
-	if p.State != player.StateBomb || p.BombTimer <= 0 {
+	if p.BombTimer <= 0 {
 		return
 	}
 	// BombTimer 从 bombDuration 递减到 0：起爆头一道强闪，之后保留淡幕。

@@ -24,8 +24,28 @@ func (r *RNG) Raw() uint32 {
 	hi := r.step()
 	lo := r.step()
 	r.Count += 2
-	return uint32(hi)<<16 | uint32(lo)
+	v := uint32(hi)<<16 | uint32(lo)
+	if RNGHook != nil {
+		RNGHook(r, v)
+	}
+	return v
 }
+
+// Dup is the two-step draw FUN_0040c9d0 inlines: both steps advance the
+// state and the count, but the value repeats the second, s2<<16 | s2.
+func (r *RNG) Dup() uint32 {
+	r.step()
+	s := r.step()
+	r.Count += 2
+	v := uint32(s)<<16 | uint32(s)
+	if RNGHook != nil {
+		RNGHook(r, v)
+	}
+	return v
+}
+
+// RNGHook, when set, sees every draw (debug tracing in tools/th10sim).
+var RNGHook func(r *RNG, v uint32)
 
 // Float is FUN_0044bb20: [0, 1), raw * 2^-32.
 func (r *RNG) Float() float32 {

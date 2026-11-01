@@ -8,6 +8,7 @@ import (
 	"th10/gamedata"
 	"th10/input"
 	"th10/sht"
+	"th10/zun"
 )
 
 // AnimState 行走图动画状态
@@ -19,14 +20,16 @@ const (
 	AnimSide                    // 侧身
 )
 
-// State 自机状态
-type State int
+// State is the player's state (+0x458), numbered as FUN_00425730 switches on
+// it.
+type State int32
 
 const (
-	StateNormal  State = iota
-	StateDead          // 被弹后的死亡状态
-	StateRespawn       // 复活无敌状态
-	StateBomb          // 使用符卡中
+	StateRespawn   State = iota // 0: flying back in from below the playfield
+	StateNormal                 // 1
+	StateDying                  // 2: from the end of the deathbomb window to the respawn
+	State3                      // 3: set by register writes (0x406c2d, 0x41c137); not ported
+	StateDeathbomb              // 4: hit, with 8 frames left to bomb
 )
 
 // Player 玩家实体
@@ -47,14 +50,41 @@ type Player struct {
 	// 直接引用游戏状态，消除双源同步
 	GS *game.GameState
 
-	State       State
-	InvincTimer int // 无敌剩余帧数
-	DeathTimer  int // 决死判定计时
-	BombTimer   int // 符卡持续计时
-	ShootTimer  int // 射击间隔计时
+	State State
+	// StateTimer is +0x474, restarted on each change of state.
+	StateTimer zun.Timer
+	// Invinc is +0x430c: the frames of invulnerability left.
+	Invinc zun.Timer
+	// initTimer is +0x488, restarted only at init (FUN_00424d90): focus is
+	// forced off while it is under 4.
+	initTimer zun.Timer
+	// Flash is the invulnerability blink, ANM flag 0x8000 with colour
+	// 0xff0000ff.
+	Flash bool
+	// DeathPos is +0x440, where the player died, in game coordinates. The
+	// respawn's clears are centred on it.
+	DeathPos [2]float32
+	// BombTimer stands in for the bomb object (DAT_004776ec): a bomb is
+	// active, +0x28 set, while it is positive. M7 ports the real lifecycle.
+	BombTimer  int
+	ShootTimer int // 射击间隔计时（尚未移植的机体）
 	// NoAttack 由关卡在对话期间置位：射击（FUN_004281d0）和灵击都要求没有
 	// MSG，决死灵击不受限。
 	NoAttack bool
+	// focus is +0x4474, latched by the movement (FUN_004250b0).
+	focus bool
+	areas [32]damageArea // +0x350c
+
+	// Hooks into the rest of the stage.
+	SetGameSpeed func(float32) // writes DAT_00476f78
+	// ClearRound is the respawn's clear round (x, y): FUN_00408100 at r with
+	// the immune check, again at r/4 without it, then FUN_0041c800 at r.
+	ClearRound func(x, y, r float32)
+	// CancelAll cancels every bullet that is not cancel-immune and clears
+	// every laser, without items (states 0 and 1).
+	CancelAll func()
+	// SpawnItem is FUN_0041bb00: an item of kind thrown at angle and speed.
+	SpawnItem func(x, y float32, kind int32, angle, speed float32)
 
 	// 行走图动画
 	AnimState AnimState
@@ -71,13 +101,10 @@ type Player struct {
 }
 
 const (
-	shootInterval   = 3   // Legacy shot approximation; SHT firing records not yet executed.
-	invincTime      = 300 // Legacy respawn timing; original entry animation is not yet modeled.
-	deathBombWindow = 8   // FUN_00425730 state 4: timer 0..7 permits deathbomb
-	bombInvincTime  = 60  // Legacy post-bomb approximation.
-	bombDuration    = 300 // Placeholder until the original ANM-controlled lifecycle is wired.
-	frontFrameTime  = 8   // 正面/侧身动画帧间隔
-	transFrameTime  = 6   // 转身过渡动画帧间隔
+	shootInterval  = 3   // Legacy shot approximation; SHT firing records not yet executed.
+	bombDuration   = 300 // Placeholder until the original ANM-controlled lifecycle is wired.
+	frontFrameTime = 8   // 正面/侧身动画帧间隔
+	transFrameTime = 6   // 转身过渡动画帧间隔
 )
 
 func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
@@ -95,11 +122,14 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 			int32(movement.FastDiagonal), int32(movement.SlowDiagonal)},
 		HitboxRadius: 2, GrazeRadius: 16,
 		GS:        gs,
-		State:     StateNormal,
+		State:     StateNormal, // FUN_00424d90
 		FieldLeft: fieldL, FieldTop: fieldT,
 		FieldRight: fieldR, FieldBottom: fieldB,
 		Bullets: playerbullet.NewPool(256),
 	}
+	p.StateTimer.Reset()
+	p.initTimer.Reset()
+	p.Invinc.Set(120)    // FUN_004247f0
 	p.SetFixed(0, 40000) // FUN_004247f0: (0, 400.0)
 	if gs.Character == game.CharReimu && gs.ShotType == game.ShotA {
 		shots, err := sht.Parse(data)
@@ -119,78 +149,194 @@ func (p *Player) Update() {
 	p.UpdateInput(&input.Global)
 }
 
-// UpdateInput advances one tick from an input snapshot, without polling the OS.
+// gameSpeed is DAT_00476f78, 1 when unset.
+func (p *Player) gameSpeed() float32 {
+	if p.GameSpeed != nil {
+		if v := p.GameSpeed(); v != 0 {
+			return v
+		}
+	}
+	return 1
+}
+
+// UpdateInput advances one tick from an input snapshot, without polling the
+// OS: FUN_00425730.
 func (p *Player) UpdateInput(in *input.State) {
-	if p.reimuA != nil {
-		defer p.updateReimuAShot(in)
+	if p.BombTimer > 0 {
+		p.BombTimer--
 	}
 	switch p.State {
-	case StateDead:
-		p.DeathTimer++
-		if p.DeathTimer <= deathBombWindow && in.IsPressed(input.KeyBomb) && p.tryBomb() {
-			return
-		}
-		if p.DeathTimer > deathBombWindow {
-			p.GS.Life--
-			// Original power is in 0.05 units: 0x40 lost = 3.20 displayed.
-			p.GS.Power = max(p.GS.Power-game.DeathPowerLoss, 0)
-			p.State = StateRespawn
-			p.InvincTimer = invincTime
-			p.X = (p.FieldLeft + p.FieldRight) / 2
-			p.Y = p.FieldBottom - 48
-		}
-		return
-
 	case StateRespawn:
-		if !p.NoAttack && in.IsPressed(input.KeyBomb) && p.tryBomb() {
-			return
+		if !p.respawn() {
+			break
 		}
-		p.InvincTimer--
-		if p.InvincTimer <= 0 {
-			p.State = StateNormal
-		}
-		p.move(in)
-		p.shoot(in)
-
-	case StateBomb:
-		p.BombTimer--
-		p.InvincTimer--
-		if p.BombTimer <= 0 {
-			if p.InvincTimer <= 0 {
-				p.State = StateNormal
-			} else {
-				p.State = StateRespawn
-			}
-		}
-		p.move(in)
-
+		fallthrough
 	case StateNormal:
-		if p.InvincTimer > 0 {
-			p.InvincTimer--
+		if !p.NoAttack && p.canBomb(in) {
+			p.Invinc.Set(270)
+			p.bomb()
 		}
-		if !p.NoAttack && in.IsPressed(input.KeyBomb) && p.tryBomb() {
-			return
+		if p.StateTimer.Cur < 30 {
+			p.cancelAll()
 		}
 		p.move(in)
-		p.shoot(in)
+	case StateDeathbomb:
+		if p.StateTimer.Cur < 8 {
+			if p.canBomb(in) {
+				p.StateTimer.Set(60)
+				p.Invinc.Set(200)
+				p.bomb()
+				p.State = StateNormal
+			}
+			break
+		}
+		p.die()
+		fallthrough
+	case StateDying:
+		p.dying()
 	}
+	p.tail(in)
+}
 
-	p.updateAnim(in)
-	if p.reimuA == nil {
-		p.Bullets.Update()
+// respawn is state 0: the player rises from y 480 to 400 over 60 frames
+// while the bullets round where it died are cleared, by a growing circle for
+// 30 frames and then all of them. It reports whether the player is back to
+// normal, which runs state 1 in the same frame.
+func (p *Player) respawn() bool {
+	t := p.StateTimer.Cur
+	p.IY = 48000 - t*8000/60
+	p.syncPos()
+	if p.reimuA != nil {
+		p.reimuA.snap = true
+	}
+	if t < 30 {
+		r := float32(float32(t)*17.066668) + 64
+		if p.ClearRound != nil {
+			p.ClearRound(p.DeathPos[0], p.DeathPos[1], r)
+		}
+	} else {
+		p.cancelAll()
+	}
+	if t <= 59 {
+		return false
+	}
+	p.State = StateNormal
+	p.StateTimer.Reset()
+	return true
+}
+
+func (p *Player) cancelAll() {
+	if p.CancelAll != nil {
+		p.CancelAll()
 	}
 }
 
-func (p *Player) tryBomb() bool {
-	if p.State == StateBomb || p.GS.Power < game.BombPowerCost {
-		return false
-	}
-	p.GS.Power -= game.BombPowerCost
-	p.State = StateBomb
-	p.DeathTimer = 0
+// canBomb is the bomb test shared by states 1 and 4: no bomb running, at
+// least 1.00 power, and the bomb key held (DAT_00474e5c bit 1).
+func (p *Player) canBomb(in *input.State) bool {
+	return p.BombTimer == 0 && p.GS.Power >= game.BombPowerCost && in.IsPressed(input.KeyBomb)
+}
+
+// bomb starts a bomb (FUN_00405860, a placeholder until M7) for 1.00 power
+// and refreshes the options (FUN_00426f70).
+func (p *Player) bomb() {
 	p.BombTimer = bombDuration
-	p.InvincTimer = bombDuration + bombInvincTime
-	return true
+	p.GS.Power -= game.BombPowerCost
+	p.refreshOptions()
+}
+
+// die is FUN_004269d0, the end of the deathbomb window: a life, a third of
+// the faith above 5000, the options and 1024 rank are lost, and the player
+// is invulnerable for 180 frames.
+func (p *Player) die() {
+	c := int32(p.GS.Faith / 10) // DAT_00474c4c; GameState keeps it x10
+	x := c - 5000
+	v := int32(int64(x)*0x55555555>>32) - x
+	c += ((v>>1 - v>>31) * 10) / 10
+	p.GS.Life--
+	p.GS.Faith = int64(max(c, 5000)) * 10
+	p.State = StateDying
+	p.StateTimer.Reset()
+	p.Invinc.Set(180)
+	if p.reimuA != nil {
+		p.reimuA.optionCount = 0
+	}
+	p.GS.Rank = min(max(p.GS.Rank-0x400, -0x400), 0x400)
+}
+
+// dying is state 2. On frame 3 the player loses 3.20 power, scattered as 7
+// items fanned upward; from frame 30 it respawns below the playfield, game
+// speed back to 1, leaving a damage circle where it died.
+func (p *Player) dying() {
+	t := p.StateTimer.Cur
+	if t == 3 {
+		p.GS.Power = max(p.GS.Power-game.DeathPowerLoss, 0)
+		x, y := p.gamePos()
+		base := zun.Aim(x, y, 0, y-224) // FUN_00426610
+		for i := int32(0); i < 7; i++ {
+			a := float32(float32(float32(i)*0.11219974)+base) - 0.39269909
+			kind := int32(1)
+			if i == 1 || i == 3 || i == 5 {
+				kind = 4
+			}
+			if p.SpawnItem != nil {
+				p.SpawnItem(x, y, kind, a, 3)
+			}
+		}
+		p.refreshOptions()
+	}
+	if t < 30 || p.GS.Life < 0 { // the stage handles the game over
+		return
+	}
+	p.State = StateRespawn
+	if p.SetGameSpeed != nil {
+		p.SetGameSpeed(1)
+	}
+	x, y := p.gamePos()
+	p.addArea(x, y, 32, 16, 30, 150)
+	p.DeathPos = [2]float32{x, y}
+	p.IX, p.IY = 0, 48000
+	p.X, p.Y = p.originX(), p.FieldTop+480
+	p.Invinc.Set(280)
+	p.StateTimer.Set(0)
+}
+
+// tail is the part of FUN_00425730 every state runs: the damage areas, the
+// invulnerability countdown and blink, the timers, then shooting and the
+// shots.
+func (p *Player) tail(in *input.State) {
+	gs := p.gameSpeed()
+	p.updateAreas(gs)
+	p.Flash = false
+	if p.Invinc.Cur >= 1 {
+		p.Invinc.Add(-1, gs)
+		p.Flash = p.StateTimer.Cur != p.StateTimer.Prev && p.StateTimer.Cur%3 == 0
+	}
+	p.updateAnim(in)
+	p.StateTimer.Tick(gs)
+	p.initTimer.Tick(gs)
+	if p.reimuA != nil {
+		p.updateReimuAShot(in)
+		return
+	}
+	if p.State == StateNormal {
+		p.shoot(in)
+	}
+	p.Bullets.Update()
+}
+
+// Hittable reports whether a bullet or laser touching the hitbox counts
+// (FUN_004266b0, FUN_004267f0): not while dying (states 2-4).
+func (p *Player) Hittable() bool {
+	return p.State != StateDying && p.State != State3 && p.State != StateDeathbomb
+}
+
+// Hit is FUN_00426cf0: the deathbomb window opens. The caller has checked
+// Hittable and the invulnerability.
+func (p *Player) Hit() {
+	p.State = StateDeathbomb
+	p.StateTimer.Reset()
+	p.Invinc.Set(6)
 }
 
 // Bounds of the fixed-point position (FUN_004250b0): X ±184, Y 32..432.
@@ -216,6 +362,12 @@ func (p *Player) SetPos(x, y float64) {
 
 func (p *Player) originX() float64 { return (p.FieldLeft + p.FieldRight) / 2 }
 
+// gamePos is the float position +0x3c0/+0x3c4, relative to the playfield's
+// top-centre.
+func (p *Player) gamePos() (float32, float32) {
+	return float32(p.X - p.originX()), float32(p.Y - p.FieldTop)
+}
+
 // syncPos derives the float position: (float)int * 0.01f (DAT_00470b00),
 // rounded to float32 as the x87 does at 24-bit precision.
 func (p *Player) syncPos() {
@@ -225,13 +377,15 @@ func (p *Player) syncPos() {
 
 // move ports the stepping in FUN_004250b0: an 8-way direction picks the
 // cardinal or diagonal step, the focus key the slow pair, and each axis moves
-// by ftol(step * game speed), truncated, before the fixed-point clamp.
+// by ftol(step * game speed), truncated, before the fixed-point clamp. The
+// options follow.
 func (p *Player) move(in *input.State) {
-	focused := in.IsPressed(input.KeyFocus)
+	// Focus is latched here and held off for the first 4 frames after init.
+	p.focus = in.IsPressed(input.KeyFocus) && p.initTimer.Cur >= 4
 	up, down := in.IsPressed(input.KeyUp), in.IsPressed(input.KeyDown)
 	left, right := in.IsPressed(input.KeyLeft), in.IsPressed(input.KeyRight)
 	straight, diag := p.steps[0], p.steps[2]
-	if focused {
+	if p.focus {
 		straight, diag = p.steps[1], p.steps[3]
 	}
 	var vx, vy int32
@@ -253,15 +407,13 @@ func (p *Player) move(in *input.State) {
 	case right: // 4
 		vx = straight
 	}
-	gs := float32(1)
-	if p.GameSpeed != nil {
-		if v := p.GameSpeed(); v != 0 {
-			gs = v
-		}
-	}
+	gs := p.gameSpeed()
 	p.IX = min(max(p.IX+int32(float32(vx)*gs), -fixedMaxX), fixedMaxX)
 	p.IY = min(max(p.IY+int32(float32(vy)*gs), fixedMinY), fixedMaxY)
 	p.syncPos()
+	if p.reimuA != nil {
+		p.reimuA.updateOptions(p.X, p.Y, p.GS.Power, p.focus)
+	}
 }
 
 func (p *Player) shoot(in *input.State) {
@@ -454,20 +606,6 @@ func (p *Player) updateAnim(in *input.State) {
 			p.AnimFrame = 0
 		}
 	}
-}
-
-// Hit 自机被弹
-func (p *Player) Hit() {
-	if p.InvincTimer > 0 || p.State != StateNormal {
-		return
-	}
-	p.State = StateDead
-	p.DeathTimer = 0
-}
-
-// IsInvincible 是否处于无敌状态
-func (p *Player) IsInvincible() bool {
-	return p.InvincTimer > 0 || p.State == StateDead || p.State == StateBomb
 }
 
 // AddPower 增加火力

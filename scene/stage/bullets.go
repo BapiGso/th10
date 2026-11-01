@@ -58,6 +58,13 @@ func NewContext(state *game.GameState) *Context {
 	// The alternate RNG's seed is not traced yet.
 	c.Anm = &anm.Env{GameSpeed: 1, RNG: rng, Alt: &zun.RNG{}, Spawn: c.World.Add}
 	c.Player.GameSpeed = func() float32 { return c.Anm.GameSpeed }
+	c.Player.SetGameSpeed = func(v float32) { c.Anm.GameSpeed = v }
+	c.Player.ClearRound = c.respawnClear
+	c.Player.CancelAll = func() {
+		c.Bullets.CancelVulnerable(c.BulletEnv)
+		c.Lasers.ClearAll(false, c.LaserEnv)
+	}
+	c.Player.SpawnItem = c.SpawnItem // the death drops
 	c.BulletEnv = &bullet.Env{
 		Anm:     c.Anm,
 		File:    bulletFile(),
@@ -125,22 +132,35 @@ func (c *Context) ClearBullets() {
 	c.Lasers.CircleClear([3]float32{p[0], p[1], 0}, 1000, true, c.LaserEnv)
 }
 
+// respawnClear is the respawn's clear round (x, y), radius r (FUN_00425730
+// state 0): FUN_00408100 at r sparing the cancel-immune bullets, again at r/4
+// sparing none, then FUN_0041c800 at r, all without items.
+func (c *Context) respawnClear(x, y, r float32) {
+	c.Bullets.CircleClear(x, y, r, false, true, c.BulletEnv)
+	c.Bullets.CircleClear(x, y, float32(r*0.25), false, false, c.BulletEnv)
+	c.Lasers.CircleClear([3]float32{x, y, 0}, r, false, c.LaserEnv)
+}
+
 // bulletHit is the player side of FUN_004266b0's hit: none while a dialog is
 // up or the player is dying (states 2-4), a cancel without a kill while
 // invulnerable.
 func (c *Context) bulletHit() bool {
 	p := c.Player
-	switch {
-	case c.msg != nil || p.State == player.StateDead:
+	if c.msg != nil || !p.Hittable() {
 		return false
-	case p.InvincTimer > 0 || p.State != player.StateNormal:
-		return true
 	}
+	if p.Invinc.Cur < 1 {
+		c.hitPlayer()
+	}
+	return true
+}
+
+// hitPlayer opens the deathbomb window (FUN_00426cf0).
+func (c *Context) hitPlayer() {
+	p := c.Player
 	p.Hit()
-	c.State.AddFaith(-8000)
 	c.Effects.Spawn(p.X, p.Y, effect.TypePlayerDead, 30)
 	c.PlaySE(audio.SEDead)
-	return true
 }
 
 // laserKill is the player side of a laser hit (FUN_004267f0, FUN_00426cf0):
@@ -148,10 +168,11 @@ func (c *Context) bulletHit() bool {
 // round it.
 func (c *Context) laserKill() bool {
 	p := c.Player
-	if c.msg != nil || p.State != player.StateNormal || p.InvincTimer > 0 {
+	if c.msg != nil || !p.Hittable() || p.Invinc.Cur >= 1 {
 		return false
 	}
-	return c.bulletHit()
+	c.hitPlayer()
+	return true
 }
 
 // laserGraze counts a laser graze, as for a bullet: the laser already played

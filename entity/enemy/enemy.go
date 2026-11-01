@@ -25,13 +25,6 @@ type Enemy struct {
 	Active       bool
 	Type         Type
 	Age          int
-	DropPower    int // 击破掉落P点数
-	DropPoint    int // 击破掉落得点数
-	DropLife     int // 生命碎片
-	DropBigPower int // 大火力
-	DropBigPoint int // 大得点
-	DropAreaW    float64
-	DropAreaH    float64
 	SpriteID     int  // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）
 	FairyKind    int  // 杂兵 sprite 种类（enemy.anm 行索引，回退用）
 	MainScript   int  // ECL anmSetMain layer-0 的 enemy.anm 脚本 id（-1=未设置）
@@ -84,7 +77,6 @@ func New(x, y float64, hp int, t Type) *Enemy {
 		HitWidth: 24, HitHeight: 24,
 		BodyWidth: 24, BodyHeight: 24,
 		Active: true, Type: t,
-		DropPower: 3, DropPoint: 1,
 		MainScript: -1,
 	}
 }
@@ -100,7 +92,6 @@ func NewBoss(x, y float64, phases []SpellCard) *Enemy {
 		HitWidth: 48, HitHeight: 48,
 		BodyWidth: 32, BodyHeight: 32,
 		Active: true, Type: TypeBoss,
-		DropPower: 30, DropPoint: 20,
 		MainScript: -1,
 		Boss: &BossData{
 			Phases:       phases,
