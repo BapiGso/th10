@@ -76,6 +76,7 @@ type TransformState uint16
 const (
 	View       TransformState = 2
 	Projection TransformState = 3
+	Texture0   TransformState = 16 // stage 0's texture transform, see Draw3D
 	World      TransformState = 256
 )
 
@@ -251,6 +252,7 @@ type Device struct {
 	depth, snap *ebiten.Image
 
 	world, view, proj Mat4
+	tex0              Mat4 // D3DTS_TEXTURE0
 	cull              Cull
 	cur               state
 
@@ -278,18 +280,20 @@ func NewDevice() *Device {
 }
 
 // Reset restores Direct3D's defaults for a device with an automatic depth
-// buffer: identity transforms, the full viewport, CCW culling, alpha
+// buffer: identity transforms (TEXTURE0 included), the full viewport, CCW
+// culling, alpha
 // blending, no texture, FOGENABLE off (the fog parameters zero), ZENABLE and
 // ZWRITEENABLE on with ZFUNC LESSEQUAL, the alpha test off. It does not touch
 // Frame or the depth buffer. th10's own initial state (FUN_00439d20,
 // docs/research/m4_render_re.md §2.4) is the draw chain's to apply.
 func (d *Device) Reset() {
-	d.world, d.view, d.proj = Identity, Identity, Identity
+	d.world, d.view, d.proj, d.tex0 = Identity, Identity, Identity, Identity
 	d.cull = CullCCW
 	d.cur = state{vp: FullViewport, zOn: true, zWrite: true, zFunc: CmpLessEqual}
 }
 
-// SetTransform replaces a matrix.
+// SetTransform replaces a matrix. Texture0 does not flush: like world, view
+// and projection it only affects later Draw3D calls.
 func (d *Device) SetTransform(t TransformState, m Mat4) {
 	switch t {
 	case World:
@@ -298,6 +302,8 @@ func (d *Device) SetTransform(t TransformState, m Mat4) {
 		d.view = m
 	case Projection:
 		d.proj = m
+	case Texture0:
+		d.tex0 = m
 	}
 }
 
@@ -408,15 +414,21 @@ func (d *Device) clashes(t screenTri) bool {
 	return false
 }
 
-// Draw3D draws untransformed primitives through world·view·proj: toClip
-// with the product taken once per call, then per triangle clipPoly, project,
-// a fan over the clipped polygon, cull, and into the batch. vs is not
-// retained.
+// Draw3D draws untransformed primitives through world·view·proj: texCoord
+// on each vertex's U, V with the TEXTURE0 matrix, toClip with the product
+// taken once per call, then per triangle clipPoly, project, a fan over the
+// clipped polygon, cull, and into the batch. vs is not retained.
+//
+// The texture transform is Direct3D's D3DTTFF_COUNT2, which th10 sets on
+// stage 0 once (FUN_00439d20, 0x439f1d) and never changes. Direct3D does not
+// apply it to pre-transformed vertices, so DrawTL's are left alone; that is
+// why th10's 2D draws are unaffected by the matrices its 3D sprites set.
 func (d *Device) Draw3D(p Primitive, vs []Vertex3D) {
 	wv := mul4(d.world, d.view)
 	wvp := mul4(wv, d.proj)
 	d.clips = d.clips[:0]
 	for _, v := range vs {
+		v.U, v.V = texCoord(&d.tex0, v.U, v.V)
 		d.clips = append(d.clips, toClip(v, wvp, wv, d.cur.fog))
 	}
 	vp := d.cur.vp

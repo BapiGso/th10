@@ -453,7 +453,7 @@ func (m *Manager) Draw(draw func(vm *anm.VM)) {
 		vm.Pos = [3]float32{it.Pos[0] + 224, it.Pos[1] + 16, it.Pos[2]}
 		if !(vm.Pos[1] < 8) {
 			if vm.Sprite != int(it.Display)+0x158 {
-				vm.Sprite = int(it.Display) + 0x157
+				vm.SetSprite(int(it.Display) + 0x157)
 				vm.Alpha = 0xff
 			}
 		} else {
@@ -465,7 +465,7 @@ func (m *Manager) Draw(draw func(vm *anm.VM)) {
 				vm.Alpha = 0xff
 			}
 			if vm.Sprite != int(it.Display)+0x161 {
-				vm.Sprite = int(it.Display) + 0x160
+				vm.SetSprite(int(it.Display) + 0x160)
 			}
 		}
 		draw(vm)

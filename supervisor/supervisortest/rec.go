@@ -17,7 +17,8 @@ import (
 //	filter <f>                  SetFilter
 //	blend <b>                   SetBlend
 //	draw <prim> <n>             DrawTL with n vertices
-//	transform <t>               SetTransform; the matrix goes to View, Proj or World
+//	draw3d <prim> <n>           Draw3D with n vertices
+//	transform <t>               SetTransform; the matrix goes to View, Proj, World or Tex0
 //	viewport <x> <y> <w> <h> <minz> <maxz>
 //	cull <c>
 //	fog <mode> <color hex> <start> <end> <range>
@@ -33,7 +34,7 @@ type Rec struct {
 	Calls []string
 	Names map[*gfx.Texture]string
 
-	View, Proj, World gfx.Mat4
+	View, Proj, World, Tex0 gfx.Mat4
 }
 
 func (d *Rec) add(format string, a ...any) { d.Calls = append(d.Calls, fmt.Sprintf(format, a...)) }
@@ -61,6 +62,9 @@ func (d *Rec) SetBlend(b gfx.BlendMode)  { d.add("blend %d", b) }
 func (d *Rec) DrawTL(p gfx.Primitive, vs []gfx.TLVertex) {
 	d.add("draw %d %d", p, len(vs))
 }
+func (d *Rec) Draw3D(p gfx.Primitive, vs []gfx.Vertex3D) {
+	d.add("draw3d %d %d", p, len(vs))
+}
 
 func (d *Rec) SetTransform(t gfx.TransformState, m gfx.Mat4) {
 	switch t {
@@ -70,6 +74,8 @@ func (d *Rec) SetTransform(t gfx.TransformState, m gfx.Mat4) {
 		d.Proj = m
 	case gfx.World:
 		d.World = m
+	case gfx.Texture0:
+		d.Tex0 = m
 	}
 	d.add("transform %d", t)
 }

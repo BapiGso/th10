@@ -3,6 +3,7 @@ package stage
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"th10/anm"
 	"th10/audio"
 	"th10/datfs"
@@ -21,6 +22,7 @@ import (
 	resultscene "th10/scene/result"
 	"th10/sprite"
 	"th10/std"
+	"th10/std/stddraw"
 	"th10/supervisor"
 	"th10/zun"
 
@@ -166,7 +168,18 @@ type Stage struct {
 
 	// drawn is set by the first Draw, which sets the clear colour.
 	drawn bool
+
+	// bg is the STD drawer that replaces the legacy background (nodes 0x07
+	// and 0x0a, see nodeBackground and nodeSTDFront). Nil keeps the legacy
+	// path: a stage outside stdConvertible, no embedded STD, or
+	// TH10_LEGACY_BG=1.
+	bg *stddraw.Drawer
 }
+
+// stdConvertible is the stages whose STD background uses only render modes
+// anmdraw draws: every stage. Stages 2, 3, 4, 6 and 7 use modes 0, 1, 2, 3
+// and 8; stages 1 and 5 add mode 6. See docs/research/m4_s3.md.
+var stdConvertible = map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true}
 
 const (
 	fieldW = game.FieldRight - game.FieldLeft
@@ -198,6 +211,13 @@ func newStage(state *game.GameState, script Script) *Stage {
 	s.ctx.stage = s
 	state.BeginStageFaith() // FUN_00417870 sets the decay rate at stage start
 	s.ctx.STD = loadSTD(state.Stage, s.ctx.Anm)
+	// TH10_LEGACY_BG=1 keeps the legacy background (BgDraw) on every stage,
+	// to compare the two by eye. Otherwise a convertible stage whose STD
+	// has run its Enable (Active set) draws its background with stddraw.
+	if stdConvertible[state.Stage] && s.ctx.STD != nil && s.ctx.STD.Active != nil &&
+		os.Getenv("TH10_LEGACY_BG") != "1" {
+		s.bg = &stddraw.Drawer{STD: s.ctx.STD}
+	}
 	s.hud = newHud(state)
 	return s
 }
@@ -409,13 +429,6 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 // (legacy). Their dst is the camera's viewport, so drawing outside the field
 // is clipped as in the original.
 
-// drawItems draws the items by FUN_0041ba30.
-func (s *Stage) drawItems(dst *ebiten.Image, dx, dy float64) {
-	s.ctx.Items.Draw(func(vm *anm.VM) {
-		sprite.DrawVM(dst, vm, dx, dy)
-	})
-}
-
 func (s *Stage) drawPlayerBullets(dst *ebiten.Image, dx, dy float64) {
 	s.ctx.Player.Bullets.Each(func(b *playerbullet.Bullet) {
 		x := float32(b.X + dx)
@@ -449,88 +462,6 @@ func (s *Stage) drawPlayerOptions(dst *ebiten.Image, dx, dy float64) {
 		}
 		vector.FillCircle(dst, float32(x), float32(y), 5, color.RGBA{255, 128, 160, 255}, false)
 	}
-}
-
-func (s *Stage) drawEnemies(dst *ebiten.Image, dx, dy float64) {
-	res := sprite.Global
-	for _, e := range s.ctx.Enemies {
-		if !e.Active || e.Hidden {
-			continue
-		}
-		x := e.X + dx
-		y := e.Y + dy
-
-		// sprite 绘制
-		if res != nil && e.Type == enemy.TypeFairy {
-			// 优先用真实 enemy.anm 脚本（ECL anmSetMain 设定）解析当前帧，
-			// 失败再回退到旧的 FairyKind 网格。
-			var frame *ebiten.Image
-			if e.MainScript >= 0 && res.EnemyAnm != nil {
-				frame = res.EnemyAnm.ScriptSprite(e.MainScript, e.Age)
-			}
-			if frame == nil {
-				frame = res.Enemies.FairyFrame(e.FairyKind, (e.Age/8)%4)
-			}
-			if frame != nil {
-				fw := float64(frame.Bounds().Dx())
-				fh := float64(frame.Bounds().Dy())
-				op := &ebiten.DrawImageOptions{}
-				op.GeoM.Translate(-fw/2, -fh/2)
-				op.GeoM.Translate(x, y)
-				dst.DrawImage(frame, op)
-				continue
-			}
-		}
-
-		// 中/大 boss：优先用真实 stgenm01.anm 脚本（ECL anmSetMain 设定），
-		// 失败再回退到旧的 Bosses 贴图表。
-		if res != nil && (e.Type == enemy.TypeBoss || e.Type == enemy.TypeMidBoss) {
-			if e.MainScript >= 0 && res.StageEnmAnm != nil {
-				if frame := res.StageEnmAnm.ScriptSprite(e.MainScript, e.Age); frame != nil {
-					fw := float64(frame.Bounds().Dx())
-					fh := float64(frame.Bounds().Dy())
-					op := &ebiten.DrawImageOptions{}
-					op.GeoM.Translate(-fw/2, -fh/2)
-					op.GeoM.Translate(x, y)
-					dst.DrawImage(frame, op)
-					continue
-				}
-			}
-			if e.SpriteID > 0 {
-				if bossFrame, ok := res.Bosses[e.SpriteID]; ok && bossFrame != nil {
-					op := &ebiten.DrawImageOptions{}
-					op.GeoM.Translate(-32, -32) // center 64x64 sprite
-					op.GeoM.Translate(x, y)
-					dst.DrawImage(bossFrame, op)
-					continue
-				}
-			}
-		}
-
-		// geometry fallback (red rect)
-		hw := float32(e.HitWidth / 2)
-		hh := float32(e.HitHeight / 2)
-		vector.FillRect(dst, float32(x)-hw, float32(y)-hh, hw*2, hh*2, color.RGBA{255, 0, 0, 200}, false)
-	}
-}
-
-// drawBullets draws the bullets layer by layer as the manager sorted them.
-func (s *Stage) drawBullets(dst *ebiten.Image, dx, dy float64) {
-	for l := range bullet.Layers {
-		s.ctx.Bullets.EachLayer(l, func(b *bullet.Bullet) {
-			sprite.DrawVM(dst, &b.VM, dx, dy)
-		})
-	}
-}
-
-// drawLasers draws the lasers, each beam under its emitter.
-func (s *Stage) drawLasers(dst *ebiten.Image, dx, dy float64) {
-	s.ctx.Lasers.Each(s.ctx.LaserEnv, func(beam, emitter *anm.VM) {
-		sprite.DrawVM(dst, beam, dx, dy)
-		if emitter != nil {
-			sprite.DrawVM(dst, emitter, dx, dy)
-		}
-	})
 }
 
 func (s *Stage) drawPlayer(dst *ebiten.Image, dx, dy float64) {

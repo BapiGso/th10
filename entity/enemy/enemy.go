@@ -25,13 +25,8 @@ type Enemy struct {
 	Active       bool
 	Type         Type
 	Age          int
-	SpriteID     int  // Boss 贴图 ID（1-7 对应关卡号，0=无贴图）
-	FairyKind    int  // 杂兵 sprite 种类（enemy.anm 行索引，回退用）
-	MainScript   int  // ECL anmSetMain layer-0 的 enemy.anm 脚本 id（-1=未设置）
-	AnmSlot      int  // ECL anmSelect 选择的 ANM 文件槽位
-	ECLFlags     int  // 原作 ECL flagSet/flagClear 的保守记录
-	InvulnFrames int  // 旧 Boss 脚本的无敌帧（ECL 敌机的无敌计时在 ECL VM 内）
-	Hidden       bool // ECL 敌机尚未设定任何 ANM：原作什么也不画（如 Ecl_EtBreak 消弹敌机）
+	ECLFlags     int // 原作 ECL flagSet/flagClear 的保守记录
+	InvulnFrames int // 旧 Boss 脚本的无敌帧（ECL 敌机的无敌计时在 ECL VM 内）
 
 	// Damaged 不为 nil 时接管 TakeDamage：ECL VM 借此按原作（FUN_0040dc80）
 	// 扣血、检查阶段中断槽并决定是否击破。返回值同 TakeDamage。
@@ -77,7 +72,6 @@ func New(x, y float64, hp int, t Type) *Enemy {
 		HitWidth: 24, HitHeight: 24,
 		BodyWidth: 24, BodyHeight: 24,
 		Active: true, Type: t,
-		MainScript: -1,
 	}
 }
 
@@ -92,7 +86,6 @@ func NewBoss(x, y float64, phases []SpellCard) *Enemy {
 		HitWidth: 48, HitHeight: 48,
 		BodyWidth: 32, BodyHeight: 32,
 		Active: true, Type: TypeBoss,
-		MainScript: -1,
 		Boss: &BossData{
 			Phases:       phases,
 			DialogBefore: -1,

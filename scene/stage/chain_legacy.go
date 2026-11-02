@@ -8,10 +8,8 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
-	"th10/anm"
 	"th10/game"
 	"th10/scene/dialog"
-	"th10/sprite"
 	"th10/supervisor"
 )
 
@@ -25,25 +23,17 @@ func legacy(sv *supervisor.Supervisor) (dst *ebiten.Image, dx, dy float64) {
 	return dst, float64(sv.ANM.Shift[0]), float64(sv.ANM.Shift[1])
 }
 
-// layers returns a node that draws World layers ls in order, each object
-// through sprite.DrawVM onto legacy's target.
-func layers(ls ...int) func(*Stage, *supervisor.Supervisor) {
-	return func(s *Stage, sv *supervisor.Supervisor) {
-		dst, dx, dy := legacy(sv)
-		for _, l := range ls {
-			s.ctx.World.Each(l, func(vm *anm.VM) {
-				sprite.DrawVM(dst, vm, dx, dy)
-			})
-		}
-	}
-}
-
-// nodeBackground is node 0x07, STD's background. BgDraw draws the field's
-// offscreen image, which is copied to the field's place on screen shifted by
-// Field.Shift: STD copies that shift into its camera, so the background
-// shakes. The copy is clipped to the field rectangle, not to the camera
-// viewport.
+// nodeBackground is node 0x07, STD's background. With s.bg (a stage in
+// stdConvertible) it is stddraw's Node7 (FUN_00402850). Otherwise BgDraw
+// draws the field's offscreen image, which is copied to the field's place on
+// screen shifted by Field.Shift: STD copies that shift into its camera, so
+// the background shakes. The copy is clipped to the field rectangle, not to
+// the camera viewport.
 func (s *Stage) nodeBackground(sv *supervisor.Supervisor) {
+	if s.bg != nil {
+		s.bg.Node7(sv)
+		return
+	}
 	frame := sv.Legacy()
 	s.field.Clear()
 	s.script.BgDraw(s.field)
@@ -53,35 +43,17 @@ func (s *Stage) nodeBackground(sv *supervisor.Supervisor) {
 	dst.DrawImage(s.field, op)
 }
 
-// nodeEnemies is node 0x14.
-func (s *Stage) nodeEnemies(sv *supervisor.Supervisor) {
-	s.drawEnemies(legacy(sv))
-}
-
-// nodePlayer is node 0x16: the player's bullets, options, the player and the
-// effects, in that order. The order is a guess until R6-F traces the call
-// sites.
+// nodePlayer is node 0x16. The original (FUN_00426360, m4_r8.md R8-B) draws
+// only the player's own VM and then two rectangles. The options look like
+// World VMs drawn in the layer nodes (R8-B.3, not confirmed); where the
+// shots and effects are drawn is not traced yet. Until all of them are
+// ported they are drawn here, in this order.
 func (s *Stage) nodePlayer(sv *supervisor.Supervisor) {
 	dst, dx, dy := legacy(sv)
 	s.drawPlayerBullets(dst, dx, dy)
 	s.drawPlayerOptions(dst, dx, dy)
 	s.drawPlayer(dst, dx, dy)
 	s.drawEffects(dst, dx, dy)
-}
-
-// nodeItems is node 0x19.
-func (s *Stage) nodeItems(sv *supervisor.Supervisor) {
-	s.drawItems(legacy(sv))
-}
-
-// nodeLasers is node 0x1b.
-func (s *Stage) nodeLasers(sv *supervisor.Supervisor) {
-	s.drawLasers(legacy(sv))
-}
-
-// nodeBullets is node 0x1d.
-func (s *Stage) nodeBullets(sv *supervisor.Supervisor) {
-	s.drawBullets(legacy(sv))
 }
 
 // nodeGUI is node 0x2b. Cur is Screen here, so dst is the whole back buffer

@@ -51,12 +51,51 @@ type Runner struct {
 	cfg     Config
 	factory ScriptFactory
 	sim     *headless
+	// OnFrame, if set, is called after each simulated frame (after the step,
+	// before the frame's trace is written) with the headless stage.
+	OnFrame func(st *stage.Stage)
 }
 
 // New builds a runner. factory must return the same script type the real game
 // uses for cfg.Stage.
 func New(cfg Config, factory ScriptFactory) *Runner {
 	return &Runner{cfg: cfg, factory: factory}
+}
+
+// ConfigFor builds the Config that replays chapter chapter (0-based) of rp,
+// with the character, shot, difficulty and start state the original ran with.
+func ConfigFor(rp *replay.Replay, chapter int) (Config, error) {
+	if chapter < 0 || chapter >= len(rp.Chapters) {
+		return Config{}, fmt.Errorf("chapter %d out of range (replay has %d)", chapter, len(rp.Chapters))
+	}
+	ch := rp.Chapters[chapter]
+	// The global header's stage is where the run ended (8 = all clear); each
+	// chapter records its own stage.
+	stageNum := int(ch.Index)
+	if stageNum < 1 || stageNum > 7 {
+		stageNum = int(rp.Global.Stage)
+	}
+	if stageNum < 1 || stageNum > 7 {
+		return Config{}, fmt.Errorf("stage %d not simulatable (1..7)", stageNum)
+	}
+	cfg := Config{
+		Stage:      stageNum,
+		Character:  int(rp.Global.Character),
+		ShotType:   int(rp.Global.ShotType),
+		Difficulty: int(rp.Global.Difficulty),
+		Power:      int(ch.Power) * 5, // 0.05 units to hundredths
+		Lives:      int(ch.Lives),
+		Seed:       ch.Seed,
+		Rank:       int(ch.Rank),
+		PlayerX:    ch.PlayerX,
+		PlayerY:    ch.PlayerY,
+	}
+	// Extra (stage 7) runs at game.DiffExtra, which is above Luna but valid.
+	// Any other difficulty above Luna is out of range and runs as Normal.
+	if cfg.Difficulty > game.DiffLuna && !(stageNum == 7 && cfg.Difficulty == game.DiffExtra) {
+		cfg.Difficulty = game.DiffNormal
+	}
+	return cfg, nil
 }
 
 // Run plays the replay chapter's input records frame by frame and writes a
@@ -143,6 +182,9 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 		frame = i + 1
 		rec := ch.Records[i]
 		h.step(rec)
+		if r.OnFrame != nil {
+			r.OnFrame(h.st)
+		}
 		tw.WriteFrame(h.sample(i + 1))
 		if i+1 >= dump0 && i+1 <= dump1 {
 			h.dumpBullets(os.Stderr, i+1)

@@ -28,7 +28,6 @@ import (
 // drive.
 type Device interface {
 	anmdraw.Device
-	SetTransform(t gfx.TransformState, m gfx.Mat4)
 	SetViewport(v gfx.Viewport)
 	SetCull(c gfx.Cull)
 	SetFog(f gfx.Fog)
@@ -69,6 +68,15 @@ type Camera struct {
 	// screen shake: FUN_0043c5ca writes DAT_00491e64/68, draw nodes 0x24
 	// (Unshake) and 0x32 (Finish) zero it. Nothing writes Screen's.
 	Shift [2]float32
+
+	// Delta and the fog fields, as std.Camera holds them; Field receives
+	// STD's at every STD draw (stddraw), Screen's stay zero. Render mode 6
+	// fades by Field's FogNear, FogFar and FogBytes (anmdraw.Cams).
+	Delta    [3]float32 // +0xf0
+	FogNear  float32    // +0xfc
+	FogFar   float32    // +0x100
+	FogBytes [4]float32 // +0x104..+0x110, FogColor's B, G, R, A as floats
+	FogColor uint32     // +0x114, ARGB
 }
 
 // Supervisor is the drawing half of 0x491c28.
@@ -149,6 +157,7 @@ func New(dev Device, frame *ebiten.Image) *Supervisor {
 		sheets:   map[*anm.File]*anmdraw.Sheet{},
 	}
 	s.ANM = anmdraw.NewRenderer(dev, s.sheet)
+	s.ANM.Cams = s
 	s.Init()
 	return s
 }
@@ -202,6 +211,22 @@ func (s *Supervisor) Select(c *Camera) {
 	s.Cur = c
 	v := c.Viewport
 	s.ANM.View = [4]uint32{uint32(v.X), uint32(v.Y), uint32(v.W), uint32(v.H)}
+}
+
+var _ anmdraw.Cams = (*Supervisor)(nil)
+
+// Selected is anmdraw.Cams.Selected: Cur's Right, View, Proj and
+// Viewport.
+func (s *Supervisor) Selected() (right [3]float32, view, proj gfx.Mat4, vp gfx.Viewport) {
+	c := s.Cur
+	return c.Right, c.View, c.Proj, c.Viewport
+}
+
+// FieldFog is anmdraw.Cams.FieldFog: Field's Pos, FogNear, FogFar and
+// FogBytes[0:3].
+func (s *Supervisor) FieldFog() (eye [3]float32, near, far float32, bgr [3]float32) {
+	c := &s.Field
+	return c.Pos, c.FogNear, c.FogFar, [3]float32(c.FogBytes[:3])
 }
 
 // Flat is FUN_00421480 on c: ANM.Flush(); c.View, c.Proj =

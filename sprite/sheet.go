@@ -41,14 +41,3 @@ func (s *Sheet) Grid(cellW, cellH, col, row int) *ebiten.Image {
 	y := row * cellH
 	return s.img.SubImage(image.Rect(x, y, x+cellW, y+cellH)).(*ebiten.Image)
 }
-
-// GridFrames 批量切出网格帧序列（从左到右、从上到下）
-func (s *Sheet) GridFrames(cellW, cellH, cols, startRow, count int) []*ebiten.Image {
-	frames := make([]*ebiten.Image, count)
-	for i := 0; i < count; i++ {
-		col := i % cols
-		row := startRow + i/cols
-		frames[i] = s.Grid(cellW, cellH, col, row)
-	}
-	return frames
-}

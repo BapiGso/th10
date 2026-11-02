@@ -178,7 +178,6 @@ func NewStageVM(eclPath string) *VM {
 	}
 	if sub := vm.prog.SubByName["main"]; sub != nil {
 		e := enemy.New(0, 0, 0, enemy.TypeFairy)
-		e.Hidden = true
 		e.ECLFlags = 0x10
 		vm.main = newActor(e)
 		vm.main.main = &eclTask{sub: sub, owner: e, asyncID: -1, frame: newFrame(sub, nil)}
@@ -255,12 +254,18 @@ func (vm *VM) BossHUD() stage.BossHUDInfo {
 }
 
 // sweepEnemies is FUN_0040e6a0 (ECL 338, 345): every enemy but the stage's
-// main and the 0x40/0xc000 ones (0x80 ones always) is flagged 0x20000, and
-// the manager deletes it when its walk reaches it. Its death animation is
-// cosmetic.
+// main and the 0x40/0xc000 ones (0x80 ones always) gets its death effect
+// (deathFx, when >= 0: World.Spawn of that bullet.anm script at its final
+// position, as kill spawns it) and is flagged 0x20000; the manager deletes
+// it when its walk reaches it. An enemy already deleted this frame is no
+// longer in the binary's list and is skipped.
 func (vm *VM) sweepEnemies() {
 	for _, a := range vm.order {
+		if !a.e.Active {
+			continue
+		}
 		if f := a.e.ECLFlags; f&0x50 == 0 && f&0xc000 == 0 || f&0x80 != 0 {
+			vm.spawnDeathFx(vm.ctx, a)
 			a.e.ECLFlags |= 0x20000
 		}
 	}
@@ -363,6 +368,7 @@ func (vm *VM) Update(ctx *stage.Context) {
 				a.e.ECLFlags &^= 0x400
 			} else {
 				a.e.Active = false
+				vm.releaseSlots(a)
 			}
 		}
 		if last {
@@ -386,8 +392,8 @@ func (vm *VM) ManagerOrder() []*enemy.Enemy {
 // updateActor is FUN_0040dc80, once per frame (flag 0x400): movement, the
 // ECL, the damage the player deals (the hit may defeat the enemy or end its
 // phase), the unconditional interrupt check (a phase that fires here starts
-// next frame), then the invulnerability and phase timers. It reports false
-// when the enemy is to be deleted.
+// next frame), the sprites (updateVisual), then the invulnerability and phase
+// timers. It reports false when the enemy is to be deleted.
 func (vm *VM) updateActor(a *eclActor) bool {
 	e := a.e
 	if e.ECLFlags&0x400 != 0 {
@@ -423,6 +429,7 @@ func (vm *VM) updateActor(a *eclActor) bool {
 	if name, ok := vm.checkInterrupt(e, a); ok {
 		vm.interrupt(e, a, name)
 	}
+	vm.updateVisual(a)
 	if a.invuln.cur > 0 {
 		a.invuln.add(-1, vm.gameSpeed)
 	}
@@ -447,6 +454,12 @@ func (vm *VM) bombSwap(a *eclActor) {
 	case !bomb && swapped:
 		a.dirScript = a.savedScript
 		e.ECLFlags &^= 0x200001
+	default:
+		return
+	}
+	// Slot 0 restarts on the new script (FUN_004496d0; 0x40e076-0x40e0e4).
+	if ctx := vm.ctx; ctx != nil && ctx.World != nil {
+		ctx.World.Restart(a.vms[0], a.dirScript, ctx.Anm)
 	}
 }
 

@@ -27,6 +27,13 @@ func (v *VM) Enable(a *anm.File, env *anm.Env) {
 	}
 }
 
+// File is the .std v runs.
+func (v *VM) File() *File { return v.f }
+
+// Quad is the VM of entry e's quad j, the one FUN_00403a30 finds through
+// the quad's +6 index into +0x17c: &Quads[first[e]+j]. Valid after Enable.
+func (v *VM) Quad(e, j int) *anm.VM { return &v.Quads[v.first[e]+j] }
+
 // startVM is FUN_00404f30 on vm: reset it (FUN_00401de0), zero Pos,
 // Offset and Pos2 (anm.VM.Reset keeps Offset, so zero it here), then start
 // script of v's .anm (FUN_0043e710, anm.VM.Start with v.env), which runs

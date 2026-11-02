@@ -40,6 +40,21 @@ type rasterVertex struct {
 	Fog     float32 // vertex fog factor, 1 = no fog
 }
 
+// texCoord is Direct3D's COUNT2 texture transform of the 2D texture
+// coordinate (u, v) by m: the coordinate is taken as (u, v, 1, 0), so the
+// translation is row 2 and row 3 has no effect, and the output is the first
+// two components:
+//
+//	u' = (u·m[0][0] + v·m[1][0]) + m[2][0]
+//	v' = (u·m[0][1] + v·m[1][1]) + m[2][1]
+//
+// in float32, each product and sum rounded.
+func texCoord(m *Mat4, u, v float32) (float32, float32) {
+	x := float32(float32(u*m[0][0])+float32(v*m[1][0])) + m[2][0]
+	y := float32(float32(u*m[0][1])+float32(v*m[1][1])) + m[2][1]
+	return x, y
+}
+
 // mul4 is D3DXMatrixMultiply (a then b): m[i][j] is
 // ((a[i][0]·b[0][j] + a[i][1]·b[1][j]) + a[i][2]·b[2][j]) + a[i][3]·b[3][j].
 func mul4(a, b Mat4) (m Mat4) {

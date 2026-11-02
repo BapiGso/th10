@@ -119,3 +119,20 @@ func TestScriptsContinuePastOp0(t *testing.T) {
 		}
 	}
 }
+
+// World.SpawnFront (FUN_00448e30) flags its object for the alternate RNG
+// before the first frame: bullet.anm 16 draws its three values from it. The
+// layer goes in before that frame too, so the script's own op 68 (layer 7)
+// overrides the 5 asked for, as in the binary (0x448e59, then FUN_00449870).
+func TestSpawnFrontUsesAltRNG(t *testing.T) {
+	f := loadBulletAnm(t)
+	env := &anm.Env{RNG: &zun.RNG{State: 1}, Alt: &zun.RNG{State: 2}}
+	w := &anm.World{}
+	vm := w.SpawnFront(f, 16, 5, env)
+	if env.RNG.Count != 0 || env.Alt.Count != 6 {
+		t.Fatalf("draws: game %d alt %d, want 0 and 6", env.RNG.Count, env.Alt.Count)
+	}
+	if !w.Contains(vm) || vm.Layer != 7 {
+		t.Errorf("contained %v layer %d, want true 7", w.Contains(vm), vm.Layer)
+	}
+}

@@ -70,13 +70,16 @@ func (a *eclActor) timed() bool {
 // fallen to its threshold (the HP is raised to exactly that); otherwise the
 // first armed slot with a time limit updates the boss timer and fires once
 // the phase timer reaches it, taking the HP to its threshold, flagging the
-// timeout (0x10000) and costing faith.
+// timeout (0x10000), costing faith, and losing the capture unless the card is
+// a survival card. Every call also sets phaseHP from the first armed slot: the
+// HP left above its threshold (B+0x2404).
 func (vm *VM) checkInterrupt(e *enemy.Enemy, a *eclActor) (string, bool) {
 	for i := range a.slots {
 		s := &a.slots[i]
 		if s.hp < 0 {
 			continue
 		}
+		a.phaseHP = int32(e.HP) - s.hp
 		if e.HP > int(s.hp) {
 			break
 		}
@@ -102,6 +105,13 @@ func (vm *VM) checkInterrupt(e *enemy.Enemy, a *eclActor) (string, bool) {
 		// DAT_00474c4c -= 3000, floored at 5000 (this project keeps faith x10).
 		if vm.ctx != nil && vm.ctx.State != nil {
 			vm.ctx.State.Faith = max(vm.ctx.State.Faith-30000, 50000)
+		}
+		// A timeout (FUN_004127a0) loses the capture unless the card is a
+		// survival card (+0x378c bit 3). The binary also clears bit 1 of the
+		// seven spell block VMs (+0xad4 … +0x2488); not ported (M6).
+		if !vm.card.Survival && vm.card.Timer.Cur > 59 {
+			vm.card.Bonus = 0
+			vm.card.Capture = false
 		}
 		return s.timeoutSub, true
 	}
@@ -171,6 +181,7 @@ func (vm *VM) damaged(e *enemy.Enemy, dmg int) bool {
 	r := vm.hurt(a, dmg)
 	if r != hurtAlive {
 		e.Active = false
+		vm.releaseSlots(a)
 	}
 	return r == hurtKilled
 }

@@ -19,7 +19,8 @@ import (
 // VM flag bits (+0x35c).
 const (
 	FlagVisible    uint32 = 1
-	flagRotDirty   uint32 = 4
+	FlagDraw       uint32 = 2 // the owner lets it draw (World.Hide/Show)
+	FlagRotDirty   uint32 = 4 // Rot changed: rebuild the rotation
 	flagScaleDirty uint32 = 8
 	flagBlendMask  uint32 = 0x30
 	flagPos2       uint32 = 0x100 // position ops target Pos2
@@ -161,8 +162,18 @@ type VM struct {
 	F      [4]float32 // 10004-10007
 	I8, I9 int32      // 10008, 10009
 
-	Sprite     int   // -1 = none
+	Sprite     int   // -1 = none; set it with SetSprite
 	SpriteTime int32 // timer value when the sprite was set (+0x380)
+
+	// Mat is the matrix cache the 3D render modes keep (+0x27c): the
+	// sprite's base matrix times scale and rotation, rebuilt only when
+	// FlagRotDirty or flagScaleDirty is set and otherwise carried from frame
+	// to frame. The sprite op resets it to the new sprite's base matrix
+	// (FUN_0043e5a0 copies +0x23c over it), which needs the runtime sprite
+	// the VM does not have; SetSprite sets MatStale instead and the renderer
+	// does the reset before it next reads Mat (anmdraw.Renderer.draw8).
+	Mat      [4][4]float32
+	MatStale bool
 
 	Pos, Offset, Pos2 [3]float32
 
@@ -180,8 +191,12 @@ type VM struct {
 	savedT  zun.Timer // op 81 restores these (saved at each interrupt)
 	savedPC int
 
-	// RingN is op 84's segment count (the ring buffer itself is not drawn yet).
+	// RingN is op 84's argument: its buffer (VM+0x358) holds 2·RingN ring
+	// vertices.
 	RingN int32
+	// Ring is the ring mode 9 draws, which fillRing rewrites at the end of
+	// every frame in mode 9 (see ring.go).
+	Ring []RingVertex
 
 	// scratch absorbs writes to a non-variable destination, which the binary
 	// stores into the script bytes themselves (no shipped script does this).
@@ -193,6 +208,10 @@ type VM struct {
 	// parent); root is the object whose chain holds a child, nil on a root.
 	chain []*VM
 	root  *VM
+
+	// world is the World whose list holds this object, nil once it has
+	// left (see World.Contains).
+	world *World
 
 	env *Env
 	gs  float32
@@ -206,10 +225,11 @@ func New() *VM {
 }
 
 // Reset is FUN_00401de0. It keeps Offset and Layer, which the binary's spawn
-// helpers set before starting the script.
+// helpers set before starting the script, and the world field: being in a
+// world is the list's business, not the object's state.
 func (vm *VM) Reset() {
-	off, layer := vm.Offset, vm.Layer
-	*vm = VM{Offset: off, Layer: layer}
+	off, layer, w := vm.Offset, vm.Layer, vm.world
+	*vm = VM{Offset: off, Layer: layer, world: w}
 	vm.pc = -1
 	vm.Sprite = -1
 	vm.Scale = [2]float32{1, 1}
@@ -219,12 +239,19 @@ func (vm *VM) Reset() {
 	vm.T = zun.Timer{Prev: -999999}
 }
 
+// SetSprite is FUN_0043e5a0, the sprite op's body: show sprite n of the
+// object's file from now on, and reset Mat to its base matrix (see Mat).
+func (vm *VM) SetSprite(n int) {
+	vm.Sprite = n
+	vm.MatStale = true
+}
+
 // Start is FUN_0043e710: reset, load script id of f and run its first frame.
 // A missing script leaves the VM zeroed and ended. It reports whether the
 // script was found.
 func (vm *VM) Start(f *File, id int, env *Env) bool {
 	if f == nil || f.Scripts[id] == nil {
-		*vm = VM{pc: -1, Sprite: -1}
+		*vm = VM{pc: -1, Sprite: -1, world: vm.world}
 		return false
 	}
 	vm.Reset()
@@ -249,6 +276,46 @@ func (vm *VM) startKeep(f *File, id int, env *Env) {
 	vm.T.Reset()
 	vm.Flags &^= FlagVisible
 	vm.Run(env)
+}
+
+// Restart is FUN_0043e8b0: switch to script id of the object's own file and
+// run its first frame, keeping most of the object. A nil File or missing
+// script (or a file whose +0x124 is set, which no loaded file has) leaves
+// the VM untouched. Otherwise, in order:
+//
+//   - if FlagFlipX is set, Scale[0] is negated (the flag itself goes with
+//     the next step);
+//   - the low 16 flag bits become exactly 7 (visible, FlagDraw,
+//     FlagRotDirty), so the blend, Pos2, flip, waiting, scroll and colour2
+//     select bits clear; the high bits (render mode, frozen, FlagDelete,
+//     FlagAltRNG...) are kept;
+//   - Color becomes white and Alpha 255;
+//   - every interpolation stops: posI, rotI, scaleI, colorI, alphaI,
+//     color2I and alpha2I get duration 0;
+//   - the script, pc and savedPC go to the script's start, and T resets;
+//   - FlagVisible clears and the first frame runs (FUN_0043ee30).
+//
+// Kept: variables, Pos, Rot, Scale (bar the flip), velocities, Sprite, Mat,
+// Color2, Alpha2, Offset, Layer, a pending interrupt, chain and root.
+func (vm *VM) Restart(id int, env *Env) {
+	if vm.File == nil || vm.File.Scripts[id] == nil {
+		return
+	}
+	if vm.Flags&FlagFlipX != 0 {
+		vm.Scale[0] = -vm.Scale[0]
+	}
+	vm.Flags = vm.Flags&0xffff0000 | 7
+	vm.Color = [3]uint8{255, 255, 255}
+	vm.Alpha = 255
+	vm.posI.Dur = 0
+	vm.rotI.Dur = 0
+	vm.scaleI.Dur = 0
+	vm.colorI.dur = 0
+	vm.alphaI.dur = 0
+	vm.color2I.dur = 0
+	vm.alpha2I.dur = 0
+	vm.savedPC = 0
+	vm.startKeep(vm.File, id, env)
 }
 
 // Ended reports whether the script has finished (pc == 0 in the binary).
@@ -475,7 +542,7 @@ func (vm *VM) exec(in Instr) execResult {
 		return execEnd
 	case 3:
 		vm.Flags |= FlagVisible
-		vm.Sprite = int(vm.readI(in, 0))
+		vm.SetSprite(int(vm.readI(in, 0)))
 		vm.SpriteTime = vm.T.Cur
 	case 4:
 		vm.jump(in.Arg(0), in.Arg(1))
@@ -561,7 +628,7 @@ func (vm *VM) exec(in Instr) execResult {
 		for i := range 3 {
 			vm.Rot[i] = vm.readF(in, i)
 		}
-		vm.Flags |= flagRotDirty
+		vm.Flags |= FlagRotDirty
 	case 50:
 		vm.Scale[0] = vm.readF(in, 0)
 		vm.Scale[1] = vm.readF(in, 1)
@@ -576,7 +643,7 @@ func (vm *VM) exec(in Instr) execResult {
 		for i := range 3 {
 			vm.AngVel[i] = vm.readF(in, i)
 		}
-		vm.Flags |= flagRotDirty
+		vm.Flags |= FlagRotDirty
 	case 54:
 		vm.ScaleVel[0] = vm.readF(in, 0)
 		vm.ScaleVel[1] = vm.readF(in, 1)
@@ -620,7 +687,7 @@ func (vm *VM) exec(in Instr) execResult {
 		vm.rotI.Begin(vm.readI(in, 0), in.Arg(1))
 		vm.rotI.Start = vm.Rot
 		vm.rotI.End = [3]float32{x, y, z}
-		vm.Flags |= flagRotDirty
+		vm.Flags |= FlagRotDirty
 	case 60:
 		y := vm.readF(in, 3)
 		x := vm.readF(in, 2)
@@ -663,6 +730,13 @@ func (vm *VM) exec(in Instr) execResult {
 		vm.Flags = vm.Flags&^flagBlendMask | uint32(in.Arg(0))<<4&flagBlendMask
 	case 67:
 		vm.Flags = vm.Flags&^0x3c00000 | uint32(in.Arg(0))<<22&0x3c00000
+		// Mode 10 also starts the particles (0x43fde8-0x43fdfb,
+		// FUN_004452f0): their buffer, a step hook and the pre-draw hook
+		// that draws them (docs/research/m4_r6.md R6-G). Not ported; no
+		// embedded .anm uses mode 10 (docs/research/m4_modes.md).
+		if vm.Flags&0x3c00000 == 0x2800000 {
+			panic("anm: render mode 10 (particles, FUN_004452f0) is not ported")
+		}
 	case 68:
 		vm.Layer = int32(uint8(in.Arg(0)))
 	case 70:
@@ -740,20 +814,6 @@ func (vm *VM) spawnChild(id int) {
 	root.chain = append(root.chain, c)
 }
 
-// SetOffset is FUN_004492f0: the object's Offset, and on a root that of every
-// child in its chain.
-func (vm *VM) SetOffset(pos [3]float32) {
-	vm.Offset = pos
-	if vm.root != nil {
-		return
-	}
-	for _, c := range vm.chain {
-		if !c.Ended() {
-			c.Offset = pos
-		}
-	}
-}
-
 func intOp(k int, a, b int32) int32 {
 	switch k {
 	case 0:
@@ -816,7 +876,7 @@ func (vm *VM) endRun() {
 	for i := range 3 {
 		if vm.AngVel[i] != 0 {
 			vm.Rot[i] = zun.AddAngle(vm.Rot[i], float32(gs*vm.AngVel[i]))
-			vm.Flags |= flagRotDirty
+			vm.Flags |= FlagRotDirty
 		}
 	}
 	if vm.ScaleVel[1] != 0 {
@@ -824,7 +884,7 @@ func (vm *VM) endRun() {
 		vm.Scale[1] = float32(gs*vm.ScaleVel[1]) + vm.Scale[1]
 	}
 	if vm.ScaleVel[0] != 0 {
-		vm.Flags |= flagRotDirty | flagScaleDirty
+		vm.Flags |= FlagRotDirty | flagScaleDirty
 		vm.Scale[0] = float32(gs*vm.ScaleVel[0]) + vm.Scale[0]
 	}
 	for i := range 2 {
@@ -857,7 +917,7 @@ func (vm *VM) endRun() {
 	}
 	if vm.rotI.Dur != 0 {
 		vm.Rot = vm.rotI.Step(gs, 3)
-		vm.Flags |= flagRotDirty
+		vm.Flags |= FlagRotDirty
 	}
 	if vm.color2I.dur != 0 {
 		c := vm.color2I.step3(gs)
@@ -867,6 +927,9 @@ func (vm *VM) endRun() {
 	}
 	if vm.alpha2I.dur != 0 {
 		vm.Alpha2 = uint8(vm.alpha2I.step1(gs))
+	}
+	if vm.Flags&0x3c00000 == 0x2400000 {
+		vm.fillRing()
 	}
 	vm.T.Tick(gs)
 }

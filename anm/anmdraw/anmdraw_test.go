@@ -12,12 +12,15 @@ import (
 
 // call is one Device call the recorder saw.
 type call struct {
-	op  string // "tex", "filter", "blend" or "draw"
+	op  string // "tex", "filter", "blend", "xform", "draw" or "draw3d"
 	tex *gfx.Texture
 	f   gfx.Filter
 	b   gfx.BlendMode
+	ts  gfx.TransformState
+	m   gfx.Mat4
 	p   gfx.Primitive
 	vs  []gfx.TLVertex
+	v3  []gfx.Vertex3D
 }
 
 func (c call) String() string {
@@ -28,6 +31,10 @@ func (c call) String() string {
 		return fmt.Sprintf("filter %d", c.f)
 	case "blend":
 		return fmt.Sprintf("blend %d", c.b)
+	case "xform":
+		return fmt.Sprintf("xform %d", c.ts)
+	case "draw3d":
+		return fmt.Sprintf("draw3d prim %d, %d vertices", c.p, len(c.v3))
 	}
 	return fmt.Sprintf("draw prim %d, %d vertices", c.p, len(c.vs))
 }
@@ -38,8 +45,14 @@ type rec struct{ calls []call }
 func (d *rec) SetTexture(t *gfx.Texture) { d.calls = append(d.calls, call{op: "tex", tex: t}) }
 func (d *rec) SetFilter(f gfx.Filter)    { d.calls = append(d.calls, call{op: "filter", f: f}) }
 func (d *rec) SetBlend(b gfx.BlendMode)  { d.calls = append(d.calls, call{op: "blend", b: b}) }
+func (d *rec) SetTransform(ts gfx.TransformState, m gfx.Mat4) {
+	d.calls = append(d.calls, call{op: "xform", ts: ts, m: m})
+}
 func (d *rec) DrawTL(p gfx.Primitive, vs []gfx.TLVertex) {
 	d.calls = append(d.calls, call{op: "draw", p: p, vs: slices.Clone(vs)})
+}
+func (d *rec) Draw3D(p gfx.Primitive, vs []gfx.Vertex3D) {
+	d.calls = append(d.calls, call{op: "draw3d", p: p, v3: slices.Clone(vs)})
 }
 
 // take returns the calls since the last take.
@@ -91,7 +104,7 @@ func fixture(t *testing.T) (*Renderer, *rec, *anm.File) {
 func obj(f *anm.File, sprite int, mode, ax, ay uint32) *anm.VM {
 	vm := anm.New()
 	vm.File = f
-	vm.Sprite = sprite
+	vm.SetSprite(sprite)
 	vm.Flags = 3 | mode<<22 | ax<<18 | ay<<20
 	return vm
 }
@@ -401,10 +414,12 @@ func TestSkip(t *testing.T) {
 		})
 	}
 
-	vm := obj(f, 0, 4, 1, 1)
-	vm.Pos = [3]float32{100, 100, 0}
-	mustPanic(t, "mode 4", func() { r.Draw(vm) })
-	vm = obj(f, -1, 0, 1, 1)
+	for _, mode := range []uint32{5, 7} {
+		vm := obj(f, 0, mode, 1, 1)
+		vm.Pos = [3]float32{100, 100, 0}
+		mustPanic(t, fmt.Sprintf("mode %d", mode), func() { r.Draw(vm) })
+	}
+	vm := obj(f, -1, 0, 1, 1)
 	vm.Pos = [3]float32{100, 100, 0}
 	mustPanic(t, "no sprite", func() { r.Draw(vm) })
 }

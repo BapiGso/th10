@@ -22,6 +22,10 @@ type Camera struct {
 	FogColor uint32  // +0x114, ARGB
 	FogNear  float32 // +0xfc
 	FogFar   float32 // +0x100
+	// FogBytes (+0x104..+0x110) are FogColor's bytes 0..3 (B, G, R, A) as
+	// floats: op 8 sets them from the colour, and op 9 tweens them, the
+	// colour following (fog.go).
+	FogBytes [4]float32
 }
 
 // VM is the stage object's script state: the timer at +0x38, the
@@ -33,6 +37,7 @@ type VM struct {
 	Cam    Camera
 	facing zun.Interp // +0x50, live while Dur (+0x94) != 0
 	pos    zun.Interp // +0x9c, live while Dur (+0xe0) != 0
+	fog    fogTween   // +0xe8, live while Dur (+0x16c) != 0
 	// Op 12's mode byte (+0x20) and timer (+0x24); op 13's value
 	// (DAT_004923a8). No TH10 .std uses either; what mode 1 does to the
 	// camera (FUN_00404ed0) is not ported.
@@ -138,11 +143,23 @@ func (v *VM) run(gs float32) {
 		case 7:
 			v.Cam.FOV = v.f32(a)
 		case 8:
+			// Fog colour and range (0x403e7f-0x403ee4): the colour's
+			// bytes 0..3 (B, G, R, A) also become floats in FogBytes.
 			v.Cam.FogColor = v.u32(a)
+			for k := range v.Cam.FogBytes {
+				v.Cam.FogBytes[k] = float32(byte(v.Cam.FogColor >> (8 * k)))
+			}
 			v.Cam.FogNear, v.Cam.FogFar = v.f32(a+4), v.f32(a+8)
 		case 9:
-			// The fog tween (FUN_00405040 / FUN_004049a0) only feeds
-			// rendering: M4.
+			// Fog tween from the current fog to the script's (FUN_00405040,
+			// 0x403eef-0x403fbb); stepped by tweens.
+			v.fog.Start = v.Cam.fogRec()
+			v.fog.End = fogRec{
+				F: [6]float32{v.f32(a + 12), v.f32(a + 16), float32(s[a+8]), float32(s[a+9]), float32(s[a+10]), float32(s[a+11])},
+				C: v.u32(a + 8),
+			}
+			v.fog.Dur, v.fog.Mode = v.i32(a), v.i32(a+4)
+			v.fog.T.Reset()
 		case 10:
 			// Hermite path (mode 8); the word after the duration is unused.
 			v.pos.Dur, v.pos.Mode = v.i32(a), 8
@@ -186,5 +203,10 @@ func (v *VM) tweens(gs float32) {
 	}
 	if v.pos.Dur != 0 {
 		v.Cam.Pos = v.pos.Step(gs, 3)
+	}
+	// The fog tween after the position tween (0x40430f-0x404339); a
+	// negative Dur counts as live, as in Interp.
+	if v.fog.Dur != 0 {
+		v.Cam.setFogRec(v.fog.step(gs))
 	}
 }

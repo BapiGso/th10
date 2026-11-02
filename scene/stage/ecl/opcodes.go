@@ -110,10 +110,12 @@ const (
 	opEnmCreateM  = 260 // relative, mirrored (flag 0x800)
 	opEnmCreateAM = 261 // absolute, mirrored
 	opAnmSetMain  = 262 // SS: (slot, script), also the direction base for 269
-	opAnmPlay     = 263
-	opAnmPlayAbs  = 264
+	opAnmPlay     = 263 // SS: (file, script) a free object at the enemy
+	opAnmPlayAbs  = 264 // SS: a free object, placed nowhere
 	opAnmSetDir5  = 269 // S: slot plays the 262 script + 5
 	opEnmCreate3D = 270 // mfffSSS: absolute with z (flag 0x40000)
+	opAnmPlayTail = 272 // SS: as 263, appended to the world list
+	opAnmPlayRot  = 273 // SSf: as 263, turned by the angle
 
 	opSetPos        = 280 // ff
 	opMovePos       = 281 // SSff: (time, mode, x, y)

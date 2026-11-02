@@ -4,10 +4,13 @@
 // submitted whenever the texture or a render state has to change.
 //
 // This file covers render modes 0-3, the 2D quads (A1a in
-// docs/research/m4_render.md §4). Modes 4-9 are A1b.
+// docs/research/m4_render.md §4); mode8.go covers mode 8, the 3D sprite,
+// mode46.go modes 4 and 6, the projected billboards, and mode9.go mode 9,
+// op 84's ring. Modes 5 and 7 are not ported: no embedded .anm uses them
+// (docs/research/m4_modes.md).
 //
 // The manager caches the device state it last set (texture, blend, filter,
-// vertex type) and only touches the device when an object needs a different
+// vertex type, texture factor, texture matrix) and only touches the device when an object needs a different
 // value; every change first submits the pending batch. Renderer keeps the same
 // caches and makes the same calls in the same order, so a gfx.Device fed by
 // it sees exactly the original's state sequence. Code that draws through the
@@ -129,13 +132,17 @@ type Device interface {
 	SetTexture(t *gfx.Texture)
 	SetFilter(f gfx.Filter)
 	SetBlend(b gfx.BlendMode)
+	SetTransform(t gfx.TransformState, m gfx.Mat4)
 	DrawTL(p gfx.Primitive, vs []gfx.TLVertex)
+	Draw3D(p gfx.Primitive, vs []gfx.Vertex3D)
 }
 
 // Vertex type cache values (manager +0x3ada6a).
 const (
 	vtypeNone uint8 = 0    // FUN_00445900: nothing set yet
 	vtype2D   uint8 = 1    // the TL batch of FUN_00442670
+	vtype3D   uint8 = 2    // mode 8's vertex buffer (FUN_00444760)
+	vtypeRing uint8 = 3    // mode 9's ring (FUN_00444ce0)
 	vtypeAny  uint8 = 0xff // Invalidate: unknown
 )
 
@@ -156,6 +163,9 @@ type Renderer struct {
 	// (DAT_00491fac+0xcc, +0xd0, +0xd4, +0xd8: X, Y, W, H, unsigned).
 	View [4]uint32
 
+	// Cams gives modes 4 and 6 the supervisor's camera blocks (see Cams).
+	Cams Cams
+
 	// Shift is added to every corner of every quad before snapping
 	// (manager +0x5c, +0x60). R6-B finds who sets it.
 	Shift [2]float32
@@ -175,6 +185,20 @@ type Renderer struct {
 	// 0xff always differs.
 	point uint8
 
+	// tfactor is the TEXTUREFACTOR cache (+0x3ada60), which FUN_00445900
+	// sets to 1 and nothing but states3D changes: neither Reset nor
+	// Invalidate touches it. tfDev is the device's TEXTUREFACTOR,
+	// Direct3D's default 0xffffffff until states3D first sets it; the two
+	// differ until then, so a first object whose colour is 1 (alpha 0,
+	// which only op 80 or the tint can give a drawn object) draws with
+	// 0xffffffff. gfx has no TEXTUREFACTOR, see draw8.
+	tfactor gfx.Color
+	tfDev   gfx.Color
+
+	// sprite is the texture matrix cache (+0x3ada70): the sprite draw8 last
+	// set TEXTURE0 for. Reset and Invalidate clear it.
+	sprite *Sprite
+
 	// quad is the staging quad DAT_004978c0: corners P0 (top left), P1
 	// (top right), P2 (bottom left), P3 (bottom right) in that order. It
 	// persists between draws: anchor 3 leaves corners as the previous quad
@@ -185,12 +209,16 @@ type Renderer struct {
 
 	// batch is the pending triangle list (+0x72dad0 up to +0x72dacc).
 	batch []gfx.TLVertex
+
+	// strip is draw9's scratch: the ring as TL vertices, rebuilt for every
+	// mode 9 object. Like batch, Dev.DrawTL must not keep it.
+	strip []gfx.TLVertex
 }
 
 // NewRenderer returns a renderer in the state FUN_00445900 leaves the
 // manager in (see the cache fields and quad).
 func NewRenderer(dev Device, sheet func(*anm.File) *Sheet) *Renderer {
-	r := &Renderer{Dev: dev, Sheet: sheet, vtype: vtypeNone}
+	r := &Renderer{Dev: dev, Sheet: sheet, vtype: vtypeNone, tfactor: 1, tfDev: 0xffffffff}
 	uv := [4][2]float32{{0, 0}, {1, 0}, {0, 1}, {1, 1}}
 	for i := range r.quad {
 		r.quad[i] = gfx.TLVertex{RHW: 1, Specular: noSpecular, U: uv[i][0], V: uv[i][1]}
@@ -198,14 +226,19 @@ func NewRenderer(dev Device, sheet func(*anm.File) *Sheet) *Renderer {
 	return r
 }
 
-// Draw is FUN_004451c0 for render modes 0-3. Nothing is drawn unless Flags
-// bits 0 and 1 are both set and vm.Alpha (+0x2ff, the alpha of Color, even
-// when op 80 selects Color2) is nonzero. Then, by mode = Flags>>22 & 0xf:
+// Draw is FUN_004451c0. Nothing is drawn unless Flags bits 0 and 1 are
+// both set and vm.Alpha (+0x2ff, the alpha of Color, even when op 80
+// selects Color2) is nonzero. Then, by mode = Flags>>22 & 0xf:
 //
 //   - 0: quad0.
 //   - 1 and 3 (one code path): quad2 if Rot[2] == 0, otherwise rotated.
 //   - 2: quad2.
-//   - 4-9: panic (A1b).
+//   - 4: draw4.
+//   - 6: draw6.
+//   - 8: draw8.
+//   - 9: draw9.
+//   - 5 and 7: panic (not ported; no embedded .anm uses them,
+//     docs/research/m4_modes.md).
 //   - 10-15: nothing.
 //
 // The object's sprite is r.Sheet(vm.File).Sprites[vm.Sprite]. An object
@@ -219,11 +252,19 @@ func (r *Renderer) Draw(vm *anm.VM) {
 	switch {
 	case mode >= 10:
 		return
-	case mode >= 4:
-		panic(fmt.Sprintf("anmdraw: render mode %d is A1b", mode))
+	case mode == 5 || mode == 7:
+		panic(fmt.Sprintf("anmdraw: render mode %d is not ported", mode))
 	}
 	spr := &r.Sheet(vm.File).Sprites[vm.Sprite]
 	switch mode {
+	case 4:
+		r.draw4(vm, spr)
+	case 6:
+		r.draw6(vm, spr)
+	case 8:
+		r.draw8(vm, spr)
+	case 9:
+		r.draw9(vm, spr)
 	case 0:
 		r.quad0(vm, spr)
 	case 2:
@@ -239,8 +280,10 @@ func (r *Renderer) Draw(vm *anm.VM) {
 
 // DrawLayer is FUN_00448980: Draw for each object in w's layer l, in list
 // order, skipping those with anm.FlagDelete. The original first calls the
-// object's pre-draw hook (VM+0x39c) when it has one; no hook is ported yet
-// (R6-G).
+// object's pre-draw hook (VM+0x39c) when it has one. Only mode 10's
+// particles set one (R6-G; the other writer, FUN_0040b110, has no callers
+// and its table's one entry has no hook), and the VM panics on mode 10, so
+// no object here has a hook.
 func (r *Renderer) DrawLayer(w *anm.World, l int) {
 	w.Each(l, func(vm *anm.VM) {
 		if vm.Flags&anm.FlagDelete == 0 {
@@ -262,16 +305,18 @@ func (r *Renderer) Flush() {
 }
 
 // Invalidate forgets the cached device state after someone else has drawn,
-// as FUN_0043bda0 and FUN_00439d20 do: texture nil, blend 3, vertex type
-// vtypeAny. It does not flush, and the filter cache is kept (neither site
-// resets +0x3ada6e). The caches modes 4-9 add are A1b's.
+// as FUN_0043bda0 and FUN_0043bfa0 do: texture nil, blend 3, vertex type
+// vtypeAny, texture matrix sprite nil. It does not flush, and the filter
+// and TEXTUREFACTOR caches are kept (neither site resets +0x3ada6e or
+// +0x3ada60).
 //
 // Blend 3 matches no mode that sets the blend, so the next object with
-// blend 0 or 1 sets it again; one with blend 3 does not.
+// blend 0, 1 (or 2 in 3D) sets it again; one with blend 3 does not.
 func (r *Renderer) Invalidate() {
 	r.tex = nil
 	r.blend = 3
 	r.vtype = vtypeAny
+	r.sprite = nil
 }
 
 // Reset is the cache reset draw node 1 (FUN_00420000) makes at the start
@@ -280,8 +325,7 @@ func (r *Renderer) Invalidate() {
 // whichever it wants: the cache becomes three-valued, 0 linear, 1 point,
 // 0xff unknown), TintOn false (+0x73245c = 0), Tint 0x80808080
 // (+0x732458) and Shift zero (+0x5c, +0x60). It does not flush. The other
-// fields it resets (+0x3ada69, +0x3ada6b, +0x3ada6c and the sprite pointer
-// +0x3ada70) have no reader here.
+// fields it resets (+0x3ada69, +0x3ada6b, +0x3ada6c) have no reader here.
 func (r *Renderer) Reset() {
 	r.Invalidate()
 	r.point = 0xff
@@ -313,7 +357,7 @@ func (r *Renderer) Reset() {
 //	ay 2: y0 = Ay − h                  y1 = Ay
 //	Z = (Pos2.z + Offset.z) + Pos.z
 //
-// Then emit with snap.
+// Then emit with emitSnap.
 func (r *Renderer) quad0(vm *anm.VM, spr *Sprite) {
 	w := float32(spr.W * vm.Scale[0])
 	h := float32(spr.H * vm.Scale[1])
@@ -361,7 +405,7 @@ func (r *Renderer) quad0(vm *anm.VM, spr *Sprite) {
 	for i := range r.quad {
 		r.quad[i].Z = z
 	}
-	r.emit(vm, spr, true)
+	r.emit(vm, spr, emitSnap)
 }
 
 // quad2 is FUN_00443290, modes 2 and unrotated 1 and 3.
@@ -375,7 +419,7 @@ func (r *Renderer) quad0(vm *anm.VM, spr *Sprite) {
 //	Z = (Pos2.y + Offset.z) + Pos.z
 //
 // Z really reads Pos2.y, not Pos2.z (+0x350 at 0x0044343b): a ZUN bug, keep
-// it. Then emit without snap.
+// it. Then emit with 0.
 func (r *Renderer) quad2(vm *anm.VM, spr *Sprite) {
 	w := float32(spr.W * vm.Scale[0])
 	h := float32(spr.H * vm.Scale[1])
@@ -425,7 +469,7 @@ func (r *Renderer) quad2(vm *anm.VM, spr *Sprite) {
 	for i := range r.quad {
 		r.quad[i].Z = z
 	}
-	r.emit(vm, spr, false)
+	r.emit(vm, spr, 0)
 }
 
 // rotated is the mode 1 and 3 path of FUN_004451c0 when Rot[2] != 0. With
@@ -445,7 +489,7 @@ func (r *Renderer) quad2(vm *anm.VM, spr *Sprite) {
 //
 // and Z = (Pos2.z + Offset.z) + Pos.z for all four. An anchor of 3 reads
 // uninitialised stack slots in the original, so rotated panics on it. Then
-// emit without snap.
+// emit with 0.
 func (r *Renderer) rotated(vm *anm.VM, spr *Sprite) {
 	if vm.Flags>>18&3 == 3 || vm.Flags>>20&3 == 3 {
 		panic("anmdraw: rotated quad with anchor 3 reads uninitialised stack")
@@ -497,14 +541,21 @@ func (r *Renderer) rotated(vm *anm.VM, spr *Sprite) {
 	for i := range r.quad {
 		r.quad[i].Z = z
 	}
-	r.emit(vm, spr, false)
+	r.emit(vm, spr, 0)
 }
 
-// emit is FUN_00442670 for modes 0-3 (they always set the colour; the
-// keep-colour bit 2 of its argument is A1b's):
+// emit's argument bits, FUN_00442670's stack argument: mode 0 passes
+// emitSnap, modes 1-5 pass 0, and modes 6 and 7 pass emitKeep
+// (docs/research/m4_r6.md R6-E).
+const (
+	emitSnap uint8 = 1 // bit 0: snap the corners to the pixel grid
+	emitKeep uint8 = 2 // bit 1: keep the colour the caller staged
+)
+
+// emit is FUN_00442670 with argument arg:
 //
 //  1. Add Shift to every corner's X and Y.
-//  2. If snap: x0 = RoundToEven(P0.X) − 0.5, x1 = RoundToEven(P1.X) − 0.5,
+//  2. If arg&emitSnap: x0 = RoundToEven(P0.X) − 0.5, x1 = RoundToEven(P1.X) − 0.5,
 //     y0 = RoundToEven(P0.Y) − 0.5, y1 = RoundToEven(P2.Y) − 0.5 (FRNDINT
 //     in the default rounding mode), and the corners become the axis-aligned
 //     rectangle x0, x1, y0, y1.
@@ -516,16 +567,14 @@ func (r *Renderer) rotated(vm *anm.VM, spr *Sprite) {
 //  5. Texture: if spr.Tex != r.tex, Flush, r.tex = spr.Tex,
 //     SetTexture(spr.Tex).
 //  6. Vertex type: if r.vtype != vtype2D, Flush, r.vtype = vtype2D.
-//  7. Colour: Color2 and Alpha2 if Flags&0x8000 (op 80), else Color and
-//     Alpha, as a D3DCOLOR. While TintOn each of its four bytes c becomes
-//     min((c·t)>>7, 255) with t the same byte of Tint (FUN_004423c0). All
-//     four corners get it.
+//  7. Colour: r.colour(vm) on all four corners, unless arg&emitKeep
+//     (0x442a16), which keeps the Diffuse the caller staged in r.quad.
 //  8. blendFilter.
 //  9. push.
 //
 // The staged corners and UVs stay in r.quad whether or not the quad is
 // culled.
-func (r *Renderer) emit(vm *anm.VM, spr *Sprite, snap bool) {
+func (r *Renderer) emit(vm *anm.VM, spr *Sprite, arg uint8) {
 	// 1. Shift every corner (0x44267e-0x4426f4).
 	for i := range r.quad {
 		r.quad[i].X = r.quad[i].X + r.Shift[0]
@@ -533,7 +582,7 @@ func (r *Renderer) emit(vm *anm.VM, spr *Sprite, snap bool) {
 	}
 	// 2. Snap to the pixel grid, rounding half to even (FRNDINT,
 	// 0x4426fc-0x44275e).
-	if snap {
+	if arg&emitSnap != 0 {
 		x0 := float32(math.RoundToEven(float64(r.quad[0].X))) - 0.5
 		x1 := float32(math.RoundToEven(float64(r.quad[1].X))) - 0.5
 		y0 := float32(math.RoundToEven(float64(r.quad[0].Y))) - 0.5
@@ -567,16 +616,32 @@ func (r *Renderer) emit(vm *anm.VM, spr *Sprite, snap bool) {
 		r.Flush()
 		r.vtype = vtype2D
 	}
-	// 7. Colour as 0xAARRGGBB, from set 2 under op 80 (Flags bit 15),
-	// 0x442a1f-0x442a94.
+	// 7. Colour (0x442a1f-0x442a94), skipped by emitKeep (0x442a16).
+	if arg&emitKeep == 0 {
+		col := r.colour(vm)
+		for i := range r.quad {
+			r.quad[i].Diffuse = col
+		}
+	}
+	// 8. Blend and filter state.
+	r.blendFilter(vm)
+	// 9. Append the two triangles (FUN_00442fe0).
+	r.push()
+}
+
+// colour is the D3DCOLOR an object draws with: Color2 and Alpha2 if
+// Flags&0x8000 (op 80), else Color and Alpha, as 0xAARRGGBB. While TintOn
+// each of its four bytes c becomes min((c·t)>>7, 255) with t the same byte
+// of Tint (FUN_004423c0). emit's DIFFUSE (0x442a1f-0x442a94) and states3D's
+// TEXTUREFACTOR (0x44244e-0x442505) are both this.
+func (r *Renderer) colour(vm *anm.VM) gfx.Color {
 	a, cr, cg, cb := vm.Alpha, vm.Color[0], vm.Color[1], vm.Color[2]
 	if vm.Flags&0x8000 != 0 {
 		a, cr, cg, cb = vm.Alpha2, vm.Color2[0], vm.Color2[1], vm.Color2[2]
 	}
 	col := uint32(a)<<24 | uint32(cr)<<16 | uint32(cg)<<8 | uint32(cb)
 	if r.TintOn {
-		// FUN_004423c0: each byte is modulated by the same byte of Tint
-		// (0x442a45-0x442a8c).
+		// FUN_004423c0: each byte is modulated by the same byte of Tint.
 		var m uint32
 		for i := range 4 {
 			sh := uint(8 * i)
@@ -586,13 +651,7 @@ func (r *Renderer) emit(vm *anm.VM, spr *Sprite, snap bool) {
 		}
 		col = m
 	}
-	for i := range r.quad {
-		r.quad[i].Diffuse = col
-	}
-	// 8. Blend and filter state.
-	r.blendFilter(vm)
-	// 9. Append the two triangles (FUN_00442fe0).
-	r.push()
+	return col
 }
 
 // culled is step 4 of emit (0x4427c4-0x4429c8), on the shifted, snapped
@@ -651,9 +710,7 @@ func (r *Renderer) culled() bool {
 // r.blend, Flush, r.blend = b, and SetBlend(gfx.BlendAlpha) for b 0 or
 // SetBlend(gfx.BlendAdd) for b 1; b 2 and 3 make no call and leave the
 // device's blend as it was (the original only writes DESTBLEND, and only
-// for 0 and 1). Then with p = Flags bit 31 as a byte (0 or 1): if p !=
-// r.point, Flush, r.point = p, SetFilter(gfx.FilterPoint) if p else
-// SetFilter(gfx.FilterLinear). A cache of 0xff (Reset) always differs.
+// for 0 and 1). Then filter.
 func (r *Renderer) blendFilter(vm *anm.VM) {
 	b := uint8(vm.Flags >> 4 & 3)
 	if b != r.blend {
@@ -666,6 +723,14 @@ func (r *Renderer) blendFilter(vm *anm.VM) {
 			r.Dev.SetBlend(gfx.BlendAdd)
 		}
 	}
+	r.filter(vm)
+}
+
+// filter is the sampler half of FUN_004425a0 and FUN_004423e0, the same in
+// both: with p = Flags bit 31 as a byte (0 or 1), if p != r.point, Flush,
+// r.point = p, SetFilter(gfx.FilterPoint) if p else
+// SetFilter(gfx.FilterLinear). A cache of 0xff (Reset) always differs.
+func (r *Renderer) filter(vm *anm.VM) {
 	var p uint8
 	if vm.Flags&(1<<31) != 0 {
 		p = 1

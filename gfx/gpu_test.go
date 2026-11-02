@@ -98,6 +98,7 @@ func (tr *trace) draw3D(src *image.NRGBA, p Primitive, vs []Vertex3D) {
 	wvp := mul4(wv, d.proj)
 	clips := make([]clipVertex, len(vs))
 	for i, v := range vs {
+		v.U, v.V = texCoord(&d.tex0, v.U, v.V)
 		clips[i] = toClip(v, wvp, wv, d.cur.fog)
 	}
 	triangles(p, len(clips), func(a, b, c int) {

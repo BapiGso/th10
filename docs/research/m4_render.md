@@ -226,8 +226,8 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
   原作里 STD 节点会调用 `Perspective(Field)`，所以至少 ANM.Shift 会变成 Field.Shift；当前相机是否也切换，由 S3 取证。
 - **D1 拆分。**
   - **D1a**：supervisor 实现、`anmdraw.Reset`，`Stage.Draw` 改为 `drawFrame` 加 legacy 节点。
-  - **D1b**：World 层改用 `ANM.DrawLayer`。需要 `NewSheet`（R6-A），mode 0–3 的部分可以在 A1b 之前做。
-  - **D1c**：实体节点（敌人、子弹、激光、道具、自机）改用 `anmdraw`，依据 R6-F 的调用点。
+  - **D1b**：World 层改用 `ANM.DrawLayer`。需要 `NewSheet`（R6-A），mode 0–3 的部分可以在 A1b 之前做。——**已完成**（2026-11-01）：`scene/stage/chain.go` 的 `layers` 调 `sv.ANM.DrawLayer`；未移植的节点标 `legacy`。
+  - **D1c**：实体节点（敌人、子弹、激光、道具、自机）改用 `anmdraw`，依据 R6-F 的调用点。——2026-11-01 道具、激光、子弹（0x19、0x1b、0x1d）**已完成**（依据 `m4_r8.md`）；敌人（0x14 为空桩，敌人 VM 在 World 层）与自机（0x16）待 R9、R10 取证后移植。
   - **D1d**：GUI，即 front.anm，以及 `FUN_00415af0` → `FUN_00415800` 的 VM 数组。
   - P2（`-shot`）排在 D1a 之后，直接截 Frame。
 
@@ -249,7 +249,13 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
   `NewSheet` 按 R6-A 构造（`m4_r6.md`）：每个 entry 一张纹理（同名 entry 也各自一张），记录按 float32 公式计算，无半像素偏移。
   TH10 的 entry 全是 2 的幂，D3DX 不补边；格式只有 1、3、5，没有 Gray8；格式 3 的空白处是不透明黑。
 - **范围。** A1a 是 render mode 0–3（2D quad）；mode 4–9 是 A1b，按 R7 拆成：mode 8（STD 背景和 stgenm04 层 17 用，S3 依赖它）先做，
-  然后 mode 6/4、mode 9。R6 的更正：D3D9 在 COUNT2 下纹理矩阵的平移有效。
+  然后 mode 6/4（已完成）、mode 9（已完成）；模式 5、7 无嵌入 .anm 使用，不移植（`m4_modes.md`）。R6 的更正：D3D9 在 COUNT2 下纹理矩阵的平移有效。
+- **mode 8 的设备扩展（A1b）。**
+  - `gfx` 增加 `Texture0` 变换：`Draw3D` 按 COUNT2 把每个顶点的 `(u, v)` 乘以纹理矩阵（只用第 0、1、2 行），TL 顶点不受影响。th10 只设一次 COUNT2（`FUN_00439d20`），所以不做开关。
+  - `gfx.Mul`、`RotationX/Y/Z` 是 D3DX 的公式版本，不保证与 DLL 逐位相同，只用于绘制。
+  - TFACTOR 不进 `gfx`：模式 8 的 stage 0 参数是 TFACTOR 的时间段与 vtype 2 完全重合，`anmdraw` 把设备侧 TFACTOR 写进每个顶点的 `Diffuse`。
+  - 精灵指令重设的矩阵缓存（VM+0x27c）用 `anm.VM.Mat` 与 `MatStale` 表达，`draw8` 在读之前补算。
+  - 取证的更正见 `m4_r7.md` “R7 审校更正”。
 - `sprite.DrawVM` 迁移期保留，D1 把全部节点迁走后删除。
 
 ### 2.4 STD 场景
@@ -262,7 +268,7 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
     - entry 循环 `FUN_00403990`：没有运行中 quad 的 entry 被清掉，没有 quad 的 entry 在第一帧就清掉。
     - 每帧顺序：entry 循环 → 脚本 → 8 个槽位。
     - stage0N.anm 的脚本不抽随机数，所以放进 sim 不影响确定性。
-  - **S2b**：op 9 的 7 分量雾插值（`FUN_00405040`、`FUN_004049a0`）。还缺 `FUN_00404d40`、`FUN_00404da0`、`FUN_00404e10`、`FUN_00463b2c` 的 dump。
+  - **S2b**：op 9 的 7 分量雾插值（`FUN_00405040`、`FUN_004049a0`）。所需 dump（`FUN_00404d40`、`FUN_00404da0`、`FUN_00404e10`、`FUN_00463b2c`）已补，见 `m4_s2b.md`。
   - 不移植：+0x1eec 非零时步进的三个特殊 VM（写入者未追到）、VM +0x3a0/+0x3a1 两个置 0x10 的字节（读者未知）。
   - probe 也可以加采样相机块和雾参数（stage+0x2a4c），在 L3 之前先用 L1/L2 对上。
 - 绘制：新包 `std/stddraw` 设置 VIEW、PROJECTION 和雾，再按原作的遍历顺序对每个 quad 调 `anmdraw` 的 3D 模式。
@@ -322,14 +328,15 @@ th10 -replay X -chapter N -shot-frames F1,F2,… -shot-dir D
 | P3 | `th10pix`（§3.3）——**已完成** | Haiku | 单元测试（已知偏移、已知 PSNR） |
 | A1a | `anmdraw` render mode 0–3（§2.3）——**已完成**：契约与规格测试（我），实现（Haiku）；剔除的 NaN 行为按汇编更正（`m4_render_re.md` §3.9）；ins_65 锚点 3 在 46 个 .anm 的 597 条指令中未出现 | Haiku | `go test ./anm/anmdraw/`：锚点、取整与半像素、分组、旋转、裁剪、状态缓存与提交顺序、颜色与 tint、UV 滚动、Shift、Invalidate；另对照汇编核对分组 |
 | R6 | A1b 之前的取证：A 运行时精灵的构造；B 管理器 +0x5c/+0x60（Shift）的写入者；C VM +0x4c/+0x50 的写入者、flag 0x4000、bit 1；D mode 8/9；E mode 4–7；F `FUN_004451c0` 的其他调用者；G VM+0x39c 绘制前回调的写入者与语义——**已完成**（`m4_r6.md`）。B 的帧块写入者由我补上：`FUN_0043c5ca` 写 Field.Shift（§2.2） | Haiku | 我审文档 |
-| R7 | render mode 4/6/8/9 的绘制路径取证（`m4_r7.md`） | Haiku | 我审文档 |
-| A1b | `anmdraw` render mode 4–9（依赖 R6、R7）：先 mode 8（S3 依赖），再 6/4、9 | Haiku | 规格测试；L3：背景、子弹、特效 |
+| R7 | render mode 4/6/8/9 的绘制路径取证（`m4_r7.md`）——**已完成**（R7-A 至 R7-F 与“R7 审校更正”齐全；模式 9 的 Go 侧差距，无法确定 #8 已解决（`fillRing` 每帧读 `$10000`/`$10001`）） | Haiku | 我审文档 |
+| A1b | `anmdraw` render mode 4–9（依赖 R6、R7）——mode 8、4、6、9 **已完成**：契约与规格测试（我；mode 8 含 `gfx` 的 `Texture0` 与 D3DX 旋转），实现（Haiku）。模式 5、7 **不移植**（嵌入的 .anm 无人使用，`m4_modes.md`），`Draw` 遇到即 panic | Haiku | 规格测试（`anm/anmdraw/mode8_test.go`、`mode46_test.go`、`mode9_test.go`；`anm/ring_test.go`）；`scene/stage/std_smoke_test.go`（`TestSTDSmoke`）；L3：背景、子弹、特效 |
 | S2a | quad 与槽位的 ANM VM、op 14、entry 循环（§2.4）：契约与规格测试（我），实现与嵌入 stage0N.anm（Haiku）——**已完成**，游戏和 sim 在关卡开始时 `Enable` | Haiku | `std/objects_test.go`：参考 VM 逐帧比较；七面实际数据：quad 顺序、四面与六面 op 14 的帧、RNG 不动。`go test ./...` 全过 |
-| S2b | op 9 雾插值（依赖 dump） | Haiku | 单元测试；可选 probe 采样 |
-| S3 | `stddraw`（依赖 R4、G3、A1b） | Haiku | L3：各面背景 PSNR |
+| S2b | op 9 雾插值（依赖 dump）——**已完成**（`std/fog.go`；`m4_s2b.md` §6 尚有未核对项） | Haiku | 单元测试（`std/fog_test.go`）；可选 probe 采样（未做） |
+| S2c | STD 的 +0x1eec、+0x2a18 位、+0x2a1c 计时器与三个特殊 VM 的写入者（取证，`m4_s2c.md`）——**已完成**：+0x1eec 的非零写入者与特殊 VM 的启动点未找到，按静态证据视为不可达（推测，待运行时核对） | Haiku | 文档取证（`m4_s2c.md` §1–§6） |
+| S3 | `stddraw`（依赖 R4、G3、A1b）——**已完成**：七面背景全部改用 STD 绘制（节点 0x07、0x0a），手写 `BgDraw` 仅由 `TH10_LEGACY_BG=1` 切回（或无内嵌 STD 时回退），待用户目视对比后删除 | Haiku | 用户目视（`TH10_LEGACY_BG=1` 对比）；`TestSTDSmoke`；L3：各面背景 PSNR（待 P2） |
 | D1a | supervisor 与绘制链（§2.2）：契约与规格测试（我），实现与 `Stage.Draw` 迁移（Haiku）——**已完成**，待用户目视确认 | Haiku | `go test ./supervisor/ ./scene/stage/ ./anm/anmdraw/`；画面与迁移前相同，除了震屏只作用到 0x24 之前的节点 |
-| D1b | World 层改用 `ANM.DrawLayer`（`NewSheet` 已完成） | Haiku | 规格测试；L3 |
-| D1c | 实体节点改用 `anmdraw`（依赖 R6-F、A1b） | Haiku | L3 |
+| D1b | World 层改用 `ANM.DrawLayer`（`NewSheet` 已完成）——**已完成** | Haiku | `TestLayersANM`、`TestReplayDrawSmoke`；L3（待 P2） |
+| D1c | 实体节点改用 `anmdraw`（依赖 R6-F、A1b）——道具、激光、子弹**已完成**；敌人、自机待 R9、R10 | Haiku | `TestReplayDrawSmoke`；L3 |
 | D1d | GUI 与 front.anm | Haiku | L3 |
 
 可以并行的第一批：R1–R5、P1、S1，三者改的文件互不重叠；我同时做 G1。

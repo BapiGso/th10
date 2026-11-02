@@ -37,6 +37,16 @@ type eclActor struct {
 	anmFile, bodyFile, curScript, dirScript int
 	// bombScript and savedScript are ins_366's swap (+0x1448, +0x144c).
 	bombScript, savedScript int
+	// vms are the enemy's ANM objects in the effect world (+0xc0, visual.go).
+	vms [slotCount]*anm.VM
+	// dir is the way slot 0 faces (+0xf8): -1 left, 0 still, 1 right.
+	dir int32
+	// flash counts down the hit flash's hold-off (+0x1414).
+	flash int32
+	// phaseHP is the HP left before the first armed interrupt slot's
+	// threshold (B+0x2404), which checkInterrupt rewrites each time it
+	// reaches that slot; the hit sound reads it.
+	phaseHP int32
 
 	drops   dropTable
 	score   int32               // the defeat score (enemy +0x23f8)
@@ -134,23 +144,11 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		if t.owner != nil && len(in.Params) >= 1 {
 			f := int(vm.resolveInt(t, in.Params[0]))
 			vm.actorFor(t.owner).anmFile = f
-			t.owner.AnmSlot = f
 		}
-	case opAnmSetSlot, opAnmSetMain:
-		vm.anmSetSlot(t, in)
-	case opAnmPlay, opAnmPlayAbs:
-		if t.owner != nil && len(in.Params) >= 2 {
-			t.owner.Hidden = false
-			vm.applyEnemyAnimation(t.owner, int(vm.resolveInt(t, in.Params[1])))
-		}
-	case opAnmSetDir5: // the direction sprites (dirScript+5); visuals not modelled
-		if t.owner != nil && len(in.Params) >= 1 {
-			a := vm.actorFor(t.owner)
-			if vm.resolveInt(t, in.Params[0]) == 0 {
-				a.mv.size = vm.scriptSize(a.anmFile, a.dirScript+5)
-			}
-			t.owner.Hidden = false
-		}
+	case opAnmSetSlot, opAnmSetMain, opAnmSetDir5:
+		vm.slotOp(ctx, t, in)
+	case opAnmPlay, opAnmPlayAbs, opAnmPlayTail, opAnmPlayRot:
+		vm.effectOp(ctx, t, in)
 
 	// --- movement ---
 	case opSetPos, opSetPosB:
@@ -229,10 +227,16 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	case opFlagSet:
 		if t.owner != nil && len(in.Params) >= 1 {
 			t.owner.ECLFlags |= int(vm.resolveInt(t, in.Params[0]))
+			if t.owner.ECLFlags&0x10 != 0 {
+				vm.showSlots(vm.actorFor(t.owner), false)
+			}
 		}
 	case opFlagClear:
 		if t.owner != nil && len(in.Params) >= 1 {
 			t.owner.ECLFlags &^= int(vm.resolveInt(t, in.Params[0]))
+			if t.owner.ECLFlags&0x10 == 0 {
+				vm.showSlots(vm.actorFor(t.owner), true)
+			}
 		}
 	case opSetHP: // 331 S: HP and max HP; the life-bar markers go
 		if t.owner != nil && len(in.Params) >= 1 {
@@ -357,6 +361,8 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 			t.owner.ECLFlags &^= 0x200000
 			a.savedScript = a.dirScript
 		}
+	case 362: // case 0x16a: the card is survived, not shot down (+0x378c bit 3)
+		vm.card.Survival = true
 	case opLifeMarker:
 		vm.addLifeMarker(t, in)
 	case opRankPickI:
@@ -394,11 +400,9 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 			vm.actorFor(t.owner).fireR = float32(r * r)
 		}
 	default:
-		// Remaining no-ops with known-but-cosmetic binary effects: 272/273 spawn
-		// ANM effect objects at the enemy (case 0x110/0x111), 344 chapter
-		// bookkeeping, 360 stars, 361 (FUN_00405410),
-		// 362 HUD flag |8, 363 (FUN_0040cea0), 365 (FUN_0041c7d0). UI/spell-frame
-		// ops likewise.
+		// Remaining no-ops with known-but-cosmetic binary effects: 344 chapter
+		// bookkeeping, 360 stars, 361 (FUN_00405410), 363 (FUN_0040cea0), 365
+		// (FUN_0041c7d0). UI/spell-frame ops likewise.
 	}
 }
 
@@ -682,12 +686,7 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	}
 	wx, wy := eclToWorld(float64(pos[0]), float64(pos[1]))
 	e := enemy.New(wx, wy, int(hp), typ)
-	if typ != enemy.TypeFairy {
-		e.SpriteID = 1
-	}
 	e.Damaged = vm.damaged
-	e.Hidden = true // until an ANM op gives it a sprite
-	vm.applySpawnVisual(e, name)
 	if op == opEnmCreateM || op == opEnmCreateAM {
 		e.ECLFlags |= 0x800
 	}
@@ -719,33 +718,6 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	}
 }
 
-// anmSetSlot is 259/262 (cases 0x103/0x106): play script in an ANM slot of
-// the ins_258 file. Slot 0 is the body: its sprite sizes the offscreen test,
-// and 262 also makes the script the base 269 offsets.
-func (vm *VM) anmSetSlot(t *eclTask, in *Instr) {
-	if t.owner == nil || len(in.Params) < 2 {
-		return
-	}
-	a := vm.actorFor(t.owner)
-	slot := int(vm.resolveInt(t, in.Params[0]))
-	script := int(vm.resolveInt(t, in.Params[1]))
-	if in.Opcode == opAnmSetSlot && script < 0 {
-		return
-	}
-	if slot == 0 {
-		a.bodyFile = a.anmFile
-		a.curScript = script
-		a.mv.size = vm.scriptSize(a.anmFile, script)
-		if in.Opcode == opAnmSetMain {
-			t.owner.ECLFlags |= 0x1000
-			a.dirScript = script
-			t.owner.MainScript = script
-		}
-	}
-	t.owner.Hidden = false
-	vm.applyEnemyVisual(t.owner, script)
-}
-
 // anmFiles caches parsed ANM files by name (nil: not embedded).
 var anmFiles sync.Map
 
@@ -759,99 +731,6 @@ func loadANM(name string) *anm.File {
 	}
 	anmFiles.Store(name, f)
 	return f
-}
-
-// scriptSize is the slot-0 extent (+0x13a4/+0x13a8) for script in ANM file
-// index file (0 = bullet.anm, i = the ECL's i-th ANM): the sprite and scale
-// the script sets at time 0 (ANM ops 3 and 50), as (h*sy, w*sx). Zero if
-// the file is not embedded.
-func (vm *VM) scriptSize(file, script int) [2]float32 {
-	name := "bullet.anm"
-	if file > 0 {
-		if file > len(vm.prog.AnimNames) {
-			return [2]float32{}
-		}
-		name = vm.prog.AnimNames[file-1]
-	}
-	f := loadANM(name)
-	if f == nil || f.Scripts[script] == nil {
-		return [2]float32{}
-	}
-	var w, h float32
-	sx, sy := float32(1), float32(1)
-	for _, ins := range f.Scripts[script].Instrs {
-		if ins.Time > 0 {
-			break
-		}
-		switch ins.Op {
-		case 3:
-			if sp, ok := f.Sprites[int(ins.Arg(0))]; ok {
-				w, h = sp.W, sp.H
-			}
-		case 50:
-			sx = math.Float32frombits(uint32(ins.Arg(0)))
-			sy = math.Float32frombits(uint32(ins.Arg(1)))
-		}
-	}
-	return [2]float32{float32(h * sy), float32(w * sx)}
-}
-
-func (vm *VM) applyEnemyVisual(e *enemy.Enemy, id int) {
-	if e.Type != enemy.TypeFairy {
-		if id >= 0 && id <= 7 {
-			e.SpriteID = maxInt(1, id)
-		}
-		return
-	}
-	switch id {
-	case 0:
-		e.FairyKind = 0
-	case 40:
-		e.FairyKind = 5
-	case 45:
-		e.FairyKind = 2
-	case 46:
-		e.FairyKind = 1
-	case 47:
-		e.FairyKind = 3
-	case 48:
-		e.FairyKind = 4
-	default:
-		if id >= 0 && id < 8 {
-			e.FairyKind = id
-		}
-	}
-}
-
-func (vm *VM) applyEnemyAnimation(e *enemy.Enemy, id int) {
-	if e == nil {
-		return
-	}
-	if e.Type == enemy.TypeFairy {
-		vm.applyEnemyVisual(e, id)
-		return
-	}
-	if id >= 0 && id <= 7 {
-		e.SpriteID = maxInt(1, id)
-	}
-}
-
-func (vm *VM) applySpawnVisual(e *enemy.Enemy, name string) {
-	if e.Type != enemy.TypeFairy {
-		return
-	}
-	switch {
-	case strings.Contains(name, "RGirl"):
-		e.FairyKind = 1
-	case strings.Contains(name, "GGirl"):
-		e.FairyKind = 3
-	case strings.Contains(name, "YGirl"):
-		e.FairyKind = 4
-	case strings.Contains(name, "BGirl"):
-		e.FairyKind = 2
-	default:
-		e.FairyKind = 0
-	}
 }
 
 // bossItem is the boss remap of a power item kind (flag 0x8000, ins_327,
@@ -908,12 +787,19 @@ func (vm *VM) kill(a *eclActor) {
 	if a.deathSE >= 0 {
 		ctx.PlaySEID(int(a.deathSE))
 	}
-	if a.deathFx >= 0 && ctx.World != nil && ctx.BulletEnv != nil {
-		ctx.World.Spawn(ctx.BulletEnv.File, int(a.deathFx), a.mv.final.pos, ctx.Anm)
-	}
+	vm.spawnDeathFx(ctx, a)
 	vm.dropItems(ctx, a)
 	if ctx.State != nil {
 		ctx.State.AddFaithHold(10) // FUN_0040e5f0: FUN_00412ff0(10)
+	}
+}
+
+// spawnDeathFx is the death effect of FUN_0040e5f0 (0x40e613) and of the
+// sweep FUN_0040e6a0 (0x40e6e8): bullet.anm's deathFx script on layer 0 at the
+// enemy's final position, from the main RNG.
+func (vm *VM) spawnDeathFx(ctx *stage.Context, a *eclActor) {
+	if a.deathFx >= 0 && ctx != nil && ctx.World != nil && ctx.BulletEnv != nil {
+		ctx.World.Spawn(ctx.BulletEnv.File, int(a.deathFx), a.mv.final.pos, ctx.Anm)
 	}
 }
 
@@ -986,7 +872,8 @@ var spellSJISDec = japanese.ShiftJIS.NewDecoder()
 // declareSpell handles 342/348/357-359 (cases 0x156, 0x15c, 0x165-0x167):
 // (idx, timeLimit, bonus, name). The card's index is idx, plus the difficulty
 // for 357, less one for 358 and two for 359 (FUN_00409280's param); its timer
-// restarts and the capture is open. The time limit is the interrupt slot's.
+// restarts, the capture is open and the survival bit (362) clears. The time
+// limit is the interrupt slot's.
 func (vm *VM) declareSpell(t *eclTask, in *Instr) {
 	if len(in.Params) < 4 {
 		return
@@ -1007,6 +894,7 @@ func (vm *VM) declareSpell(t *eclTask, in *Instr) {
 		name = utf
 	}
 	vm.card.Active, vm.card.Capture = true, true
+	vm.card.Survival = false
 	vm.card.ID = id
 	vm.card.Timer.Reset()
 	vm.card.Bonus = int64(bonus)
@@ -1029,11 +917,4 @@ func (vm *VM) addLifeMarker(t *eclTask, in *Instr) {
 		}
 	}
 	a.markers = append(a.markers, marker)
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

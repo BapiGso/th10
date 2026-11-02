@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"th10/anm"
 	"th10/entity/enemy"
 	"th10/scene/dialog"
 	"th10/scene/stage"
@@ -42,15 +43,15 @@ func liveAsyncs(vm *VM, owner *enemy.Enemy) int {
 // instructions on the spot, so Hina's setBoss(0)/setHP(9000)/sprite are in
 // place before the spawner moves on (the stage's ins_340 relies on it).
 func TestVMCreateRunsTimeZero(t *testing.T) {
-	vm, _, boss := spawnStageSub(t, "ecl/stage02.ecl", "Boss")
+	vm, ctx, boss := spawnStageSub(t, "ecl/stage02.ecl", "Boss")
 	if vm.bossSlots[0] != boss || boss.ECLFlags&0x8000 == 0 {
 		t.Fatalf("boss slot 0 = %p (flags %#x), want the new boss", vm.bossSlots[0], boss.ECLFlags)
 	}
 	if boss.HP != 9000 || boss.MaxHP != 9000 {
 		t.Fatalf("HP %d/%d, want 9000/9000", boss.HP, boss.MaxHP)
 	}
-	if boss.Hidden {
-		t.Fatal("boss still hidden after its time-0 ins_259")
+	if v := vm.actors[boss].vms[0]; v == nil || !ctx.World.Contains(v) {
+		t.Fatal("no slot-0 object after the boss's time-0 ins_259")
 	}
 	// ins_335's 60, less the tick at the end of that first update.
 	if got := vm.actors[boss].invuln.cur; got != 59 {
@@ -104,8 +105,8 @@ func TestVMInterruptOnHP(t *testing.T) {
 	for _, e := range ctx.Enemies {
 		if ea := vm.actors[e]; e.Active && ea != nil && ea.main.sub.Name == "Ecl_EtBreak" {
 			breakers++
-			if !e.Hidden || e.Shootable() {
-				t.Fatalf("Ecl_EtBreak enemy hidden %v shootable %v, want hidden and unshootable", e.Hidden, e.Shootable())
+			if ea.vms != [slotCount]*anm.VM{} || e.Shootable() {
+				t.Fatalf("Ecl_EtBreak enemy slots %v shootable %v, want no sprites and unshootable", ea.vms, e.Shootable())
 			}
 		}
 	}

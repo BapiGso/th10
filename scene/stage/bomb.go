@@ -15,11 +15,15 @@ import (
 // (DAT_004776f4). The ECL VM owns it and points Context.Spell at it; a nil
 // card is no card.
 type SpellCard struct {
-	Active  bool      // +0x378c bit 0: from the declaration to its end
-	Capture bool      // +0x378c bit 1: not yet lost to a bomb
-	ID      int32     // +0x3788: the card's index, kept after it ends
-	Timer   zun.Timer // +0x3734: reset at the declaration, ticked by FUN_00408d60
-	Bonus   int64     // +0x3790
+	Active  bool // +0x378c bit 0: from the declaration to its end
+	Capture bool // +0x378c bit 1: not yet lost to a bomb
+	// Survival is +0x378c bit 3, set by ECL 362 and cleared by the
+	// declaration: a card that is survived, not shot down. Its timeout keeps
+	// the capture, and its hits sound the same throughout.
+	Survival bool
+	ID       int32     // +0x3788: the card's index, kept after it ends
+	Timer    zun.Timer // +0x3734: reset at the declaration, ticked by FUN_00408d60
+	Bonus    int64     // +0x3790
 }
 
 // Bombed is FUN_00405500: a bomb from a second into the card on loses its
@@ -105,7 +109,7 @@ func (b *Bomb) Update() {
 			rise = 1.3
 		}
 		b.Pos[1] -= rise
-		b.vm.SetOffset([3]float32{b.Pos[0] + 224, b.Pos[1] + 16, b.Pos[2]}) // FUN_004492f0
+		c.World.SetOffset(b.vm, [3]float32{b.Pos[0] + 224, b.Pos[1] + 16, b.Pos[2]}) // FUN_004492f0
 		b.Radius = b.vm.Scale[1]
 		b.clear()
 	}

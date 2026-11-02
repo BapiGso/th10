@@ -59,6 +59,48 @@ func TestToClip(t *testing.T) {
 	}
 }
 
+func TestTexCoord(t *testing.T) {
+	// Row 3 must not count: (u, v, 1, 0).
+	m := Mat4{{2, 0.5, 0, 0}, {0.25, 4, 0, 0}, {3, 5, 9, 9}, {100, 100, 100, 100}}
+	if u, v := texCoord(&m, 0.5, 0.25); u != 4.0625 || v != 6.25 {
+		t.Errorf("texCoord = (%v, %v), want (4.0625, 6.25)", u, v)
+	}
+	if u, v := texCoord(&Identity, 0.25, 0.75); u != 0.25 || v != 0.75 {
+		t.Errorf("identity: (%v, %v)", u, v)
+	}
+	// (1 + 2⁻²⁴) + 2⁻²⁴ rounds to 1 twice; 1 + (2⁻²⁴ + 2⁻²⁴) would not.
+	e := float32(math.Ldexp(1, -24))
+	m = Mat4{{1, 1, 0, 0}, {e, e, 0, 0}, {e, e, 0, 0}, {0, 0, 0, 1}}
+	if u, v := texCoord(&m, 1, 1); u != 1 || v != 1 {
+		t.Errorf("grouping: (%v, %v), want (1, 1)", u, v)
+	}
+}
+
+// TestDraw3DTexture0 checks that Draw3D runs U, V through the TEXTURE0
+// matrix before anything else: with identity world, view and projection
+// (w = 1) the batch's Custom0/Custom1 are the transformed coordinates.
+func TestDraw3DTexture0(t *testing.T) {
+	var d Device
+	d.Reset()
+	d.SetZEnable(false)
+	d.SetCull(CullNone)
+	d.SetTransform(Texture0, Mat4{{0.5, 0, 0, 0}, {0, 0.25, 0, 0}, {0.125, 0.75, 1, 0}, {0, 0, 0, 1}})
+	d.Draw3D(TriangleList, []Vertex3D{
+		{X: -0.5, Y: -0.5, Z: 0.5, U: 0, V: 0},
+		{X: 0.5, Y: -0.5, Z: 0.5, U: 1, V: 0},
+		{X: -0.5, Y: 0.5, Z: 0.5, U: 0, V: 1},
+	})
+	want := [][2]float32{{0.125, 0.75}, {0.625, 0.75}, {0.125, 1}}
+	if len(d.batch) != 3 {
+		t.Fatalf("%d batch vertices, want 3", len(d.batch))
+	}
+	for i, w := range want {
+		if v := d.batch[i]; v.Custom2 != 1 || v.Custom0 != w[0] || v.Custom1 != w[1] {
+			t.Errorf("vertex %d: u·q %v, v·q %v, q %v; want %v, q 1", i, v.Custom0, v.Custom1, v.Custom2, w)
+		}
+	}
+}
+
 func TestFogLinear(t *testing.T) {
 	for _, tc := range []struct{ start, end, d, want float32 }{
 		{100, 500, 100, 1},
@@ -396,6 +438,18 @@ func TestDeviceState(t *testing.T) {
 	if want := (state{vp: FullViewport, zOn: true, zWrite: true, zFunc: CmpLessEqual}); d.cur != want || d.cull != CullCCW {
 		t.Errorf("Reset: %+v cull %d", d.cur, d.cull)
 	}
+	if d.world != Identity || d.view != Identity || d.proj != Identity || d.tex0 != Identity {
+		t.Errorf("Reset: transforms %v %v %v %v", d.world, d.view, d.proj, d.tex0)
+	}
+	m := Mat4{{1, 2, 0, 0}, {3, 4, 0, 0}, {5, 6, 1, 0}, {0, 0, 0, 1}}
+	d.SetTransform(Texture0, m)
+	if d.tex0 != m || d.world != Identity {
+		t.Errorf("SetTransform(Texture0): tex0 %v world %v", d.tex0, d.world)
+	}
+	d.Reset()
+	if d.tex0 != Identity {
+		t.Errorf("Reset after SetTransform(Texture0): %v", d.tex0)
+	}
 	d.SetAlphaTest(true, 1)
 	if d.cur.alphaRef != 1 {
 		t.Errorf("SetAlphaTest(true, 1): ref %d", d.cur.alphaRef)
@@ -529,5 +583,58 @@ func TestEbitenBlend(t *testing.T) {
 	}
 	if BlendAdd.ebitenBlend() != ebiten.BlendLighter {
 		t.Error("BlendAdd is not BlendLighter")
+	}
+}
+
+func TestRotation(t *testing.T) {
+	a := float32(0.5)
+	c, s := float32(math.Cos(0.5)), float32(math.Sin(0.5))
+	for _, tc := range []struct {
+		name string
+		got  Mat4
+		want Mat4
+	}{
+		{"X", RotationX(a), Mat4{{1, 0, 0, 0}, {0, c, s, 0}, {0, -s, c, 0}, {0, 0, 0, 1}}},
+		{"Y", RotationY(a), Mat4{{c, 0, -s, 0}, {0, 1, 0, 0}, {s, 0, c, 0}, {0, 0, 0, 1}}},
+		{"Z", RotationZ(a), Mat4{{c, s, 0, 0}, {-s, c, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("Rotation%s(0.5) = %v, want %v", tc.name, tc.got, tc.want)
+		}
+	}
+	if RotationZ(0) != Identity {
+		t.Errorf("RotationZ(0) = %v", RotationZ(0))
+	}
+}
+
+func TestTranslation(t *testing.T) {
+	want := Mat4{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {1.5, -2, 3, 1}}
+	if got := Translation(1.5, -2, 3); got != want {
+		t.Errorf("Translation(1.5, -2, 3) = %v, want %v", got, want)
+	}
+}
+
+// TestVec3Project checks Vec3Project's formula on values exact in float32.
+func TestVec3Project(t *testing.T) {
+	vp := Viewport{X: 32, Y: 16, W: 384, H: 448, MinZ: 0, MaxZ: 1}
+	persp := Identity // w = z
+	persp[2][3], persp[3][3] = 1, 0
+	for _, tc := range []struct {
+		name              string
+		v                 [3]float32
+		vp                Viewport
+		proj, view, world Mat4
+		want              [3]float32
+	}{
+		{"identity", [3]float32{0.5, -0.5, 0.25}, vp, Identity, Identity, Identity, [3]float32{320, 352, 0.25}},
+		{"world", [3]float32{0, 0, 0}, vp, Identity, Identity, Translation(1, 2, 3), [3]float32{416, -208, 3}},
+		{"view", [3]float32{0, 0, 0}, vp, Identity, Translation(1, 2, 3), Identity, [3]float32{416, -208, 3}},
+		{"divide", [3]float32{2, 4, 4}, vp, persp, Identity, Identity, [3]float32{320, 16, 1}},
+		{"depth range", [3]float32{0, 0, 0.5}, Viewport{X: 0, Y: 0, W: 640, H: 480, MinZ: 0.25, MaxZ: 0.75},
+			Identity, Identity, Identity, [3]float32{320, 240, 0.5}},
+	} {
+		if got := Vec3Project(tc.v, tc.vp, tc.proj, tc.view, tc.world); got != tc.want {
+			t.Errorf("%s: Vec3Project(%v) = %v, want %v", tc.name, tc.v, got, tc.want)
+		}
 	}
 }

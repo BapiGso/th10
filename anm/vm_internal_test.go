@@ -157,3 +157,42 @@ func TestResetKeepsOffset(t *testing.T) {
 		t.Errorf("missing script: ended %v offset %v", vm.Ended(), vm.Offset)
 	}
 }
+
+// The sprite op marks Mat stale for the renderer and leaves Mat itself
+// alone; Reset clears both.
+func TestSpriteMarksMatStale(t *testing.T) {
+	f := synth(
+		ins(0, 3, 0, 5),
+		ins(2, 3, 0, 6),
+		ins(9, 0, 0),
+	)
+	env := testEnv()
+	vm := New()
+	if vm.MatStale {
+		t.Fatal("New: MatStale set")
+	}
+	vm.Start(f, 0, env)
+	if vm.Sprite != 5 || !vm.MatStale || vm.SpriteTime != 0 {
+		t.Fatalf("op 3 at 0: sprite %d stale %v time %d", vm.Sprite, vm.MatStale, vm.SpriteTime)
+	}
+	m := [4][4]float32{{2, 0, 0, 0}, {0, 3, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}
+	vm.Mat, vm.MatStale = m, false
+	for range 5 {
+		if vm.Sprite == 6 {
+			break
+		}
+		vm.Run(env)
+	}
+	if vm.Sprite != 6 || !vm.MatStale || vm.Mat != m || vm.SpriteTime != 2 {
+		t.Fatalf("op 3 at 2: sprite %d stale %v mat %v time %d", vm.Sprite, vm.MatStale, vm.Mat, vm.SpriteTime)
+	}
+	vm.Reset()
+	if vm.MatStale || vm.Mat != ([4][4]float32{}) {
+		t.Errorf("Reset: stale %v mat %v", vm.MatStale, vm.Mat)
+	}
+
+	vm.SetSprite(3)
+	if vm.Sprite != 3 || !vm.MatStale {
+		t.Errorf("SetSprite(3): sprite %d stale %v", vm.Sprite, vm.MatStale)
+	}
+}

@@ -141,3 +141,41 @@ func TestInterpMode8Smoothstep(t *testing.T) {
 		t.Errorf("smoothstep at 1/4, 1/2 = %v, want [0.15625 0.5]", got)
 	}
 }
+
+// Mode 8's h00 doubles t before adding 1 (FUN_00404610 0x404804-0x40481a,
+// FUN_00412ac0 from 0x412c38): at t = 1/5 and 1/6, (1 + t) + t would give
+// 0.8960001 and 0.92592585.
+func TestHermiteWeights(t *testing.T) {
+	for _, tc := range []struct {
+		t, h00 float32
+	}{
+		{0.2, 0.896},
+		{float32(1) / 6, 0.92592597},
+	} {
+		h00, h01, h10, h11 := HermiteWeights(tc.t)
+		a := tc.t - 1
+		if h00 != tc.h00 {
+			t.Errorf("t %v: h00 = %v, want %v", tc.t, h00, tc.h00)
+		}
+		if want := float32(float32((3-(tc.t+tc.t))*tc.t) * tc.t); h01 != want {
+			t.Errorf("t %v: h01 = %v, want %v", tc.t, h01, want)
+		}
+		if want := float32(float32((1-tc.t)*(1-tc.t)) * tc.t); h10 != want {
+			t.Errorf("t %v: h10 = %v, want %v", tc.t, h10, want)
+		}
+		if want := float32(float32(a*tc.t) * tc.t); h11 != want {
+			t.Errorf("t %v: h11 = %v, want %v", tc.t, h11, want)
+		}
+	}
+}
+
+// Interp's mode 8 uses those weights: from 1 to 0 over 5 frames, the first
+// frame is h00(1/5).
+func TestInterpMode8Weights(t *testing.T) {
+	var p Interp
+	p.Begin(5, 8)
+	p.Start = [3]float32{1, 1, 1}
+	if got := p.Step(1, 3); got != [3]float32{0.896, 0.896, 0.896} {
+		t.Errorf("first frame %v, want 0.896 each", got)
+	}
+}

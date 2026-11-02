@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"os"
 
-	"th10/game"
 	"th10/replay"
 	"th10/scene/stage"
 	"th10/scene/stage/extra"
@@ -63,35 +62,20 @@ func run() int {
 	}
 	ch := rp.Chapters[*chapterIdx]
 
-	// The global header's stage is where the run ended (8 = all clear); each
-	// chapter records its own stage.
-	stage := int(ch.Index)
-	if stage < 1 || stage > 7 {
-		stage = int(rp.Global.Stage)
-	}
+	// -stage replaces the chapter's stage before ConfigFor, which clamps the
+	// difficulty by that stage and falls back to the global stage when the
+	// chapter's is invalid. ch keeps the recorded index for the log line.
 	if *stageNum > 0 {
-		stage = *stageNum
+		if *stageNum > 7 {
+			fmt.Fprintf(os.Stderr, "th10sim: stage %d not simulatable (1..7)\n", *stageNum)
+			return 2
+		}
+		rp.Chapters[*chapterIdx].Index = uint16(*stageNum)
 	}
-	if stage < 1 || stage > 7 {
-		fmt.Fprintf(os.Stderr, "th10sim: stage %d not simulatable (1..7)\n", stage)
+	cfg, err := sim.ConfigFor(rp, *chapterIdx)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "th10sim:", err)
 		return 2
-	}
-	cfg := sim.Config{
-		Stage:      stage,
-		Character:  int(rp.Global.Character),
-		ShotType:   int(rp.Global.ShotType),
-		Difficulty: int(rp.Global.Difficulty),
-		Power:      int(ch.Power) * 5, // 0.05 units to hundredths
-		Lives:      int(ch.Lives),
-		Seed:       ch.Seed,
-		Rank:       int(ch.Rank),
-		PlayerX:    ch.PlayerX,
-		PlayerY:    ch.PlayerY,
-	}
-	// Extra (stage 7) runs at game.DiffExtra, which is above Luna but valid.
-	// Any other difficulty above Luna is out of range and runs as Normal.
-	if cfg.Difficulty > game.DiffLuna && !(stage == 7 && cfg.Difficulty == game.DiffExtra) {
-		cfg.Difficulty = game.DiffNormal
 	}
 
 	out := os.Stdout

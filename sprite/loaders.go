@@ -1,7 +1,6 @@
 package sprite
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -14,13 +13,9 @@ var Global *Resources
 
 // Resources 全部 sprite 资源
 type Resources struct {
-	Player      [2]*PlayerSprite // 0=灵梦, 1=魔理沙
-	ReimuAnm    *AnmSheet        // original pl00.anm shot/option scripts
-	Bullets     *BulletSprite
-	Enemies     *EnemySprite
-	EnemyAnm    *AnmSheet             // enemy.anm: 真实杂兵 sprite/脚本（ECL anmSetMain 驱动）
-	StageEnmAnm *AnmSheet             // stgenm01.anm: stage1 中/大 boss sprite/脚本
-	Bosses      map[int]*ebiten.Image // stage number (1-7) → boss idle frame
+	Player   [2]*PlayerSprite // 0=灵梦, 1=魔理沙
+	ReimuAnm *AnmSheet        // original pl00.anm shot/option scripts
+	Bullets  *BulletSprite
 }
 
 var loadOnce sync.Once
@@ -33,12 +28,8 @@ func Load() {
 				LoadPlayer("anm/player/pl00/pl00.png"),
 				LoadPlayer("anm/player/pl01/pl01.png"),
 			},
-			ReimuAnm:    LoadAnmSheet("anm/pl00.anm"),
-			Bullets:     LoadBullets("anm/bullet/etama.png"),
-			Enemies:     LoadEnemies("anm/enemy/enemy.png"),
-			EnemyAnm:    LoadAnmSheet("anm/enemy.anm"),
-			StageEnmAnm: LoadAnmSheet("anm/stgenm01.anm"),
-			Bosses:      LoadBossSprites(),
+			ReimuAnm: LoadAnmSheet("anm/pl00.anm"),
+			Bullets:  LoadBullets("anm/bullet/etama.png"),
 		}
 	})
 }
@@ -170,62 +161,4 @@ func (bs *BulletSprite) Frame(bulletType, colorIdx int) *ebiten.Image {
 		return nil
 	}
 	return seq[colorIdx%len(seq)]
-}
-
-// ---------- Enemy ----------
-
-// EnemySprite 敌人 sprite 集合
-type EnemySprite struct {
-	sheet *Sheet
-	Fairy [][]*ebiten.Image // [种类][帧]
-	Big   []*ebiten.Image   // 大型敌人 64x64
-}
-
-// LoadEnemies 加载通用杂兵 spritesheet (enemy.png)
-// 512x512: 前8行 32x32网格(12列) = 8种杂兵, y=256起 64x64区 = 大型敌人
-func LoadEnemies(path string) *EnemySprite {
-	sheet := LoadSheet(path)
-	es := &EnemySprite{sheet: sheet}
-
-	for row := 0; row < 8; row++ {
-		frames := sheet.GridFrames(32, 32, 12, row, 12)
-		es.Fairy = append(es.Fairy, frames)
-	}
-	for row := 0; row < 4; row++ {
-		for col := 0; col < 4; col++ {
-			x := col * 64
-			y := 256 + row*64
-			es.Big = append(es.Big, sheet.Sub("", x, y, 64, 64))
-		}
-	}
-	return es
-}
-
-// FairyFrame 获取杂兵帧 (kind=种类0-7, frame=帧索引)
-func (es *EnemySprite) FairyFrame(kind, frame int) *ebiten.Image {
-	if kind < 0 || kind >= len(es.Fairy) {
-		return nil
-	}
-	seq := es.Fairy[kind]
-	if len(seq) == 0 {
-		return nil
-	}
-	return seq[frame%len(seq)]
-}
-
-// ---------- Boss ----------
-
-// LoadBossSprites 加载各关 Boss 贴图，返回 stage number → idle frame (64x64)
-// 1=Stage1, ..., 6=Stage6, 7=Extra
-func LoadBossSprites() map[int]*ebiten.Image {
-	bosses := make(map[int]*ebiten.Image, 7)
-	for stageNum := 1; stageNum <= 7; stageNum++ {
-		path := fmt.Sprintf("anm/stgenm/stg%denm.png", stageNum)
-		sheet := LoadSheet(path)
-		if sheet.img.Bounds().Dx() <= 1 {
-			continue // 加载失败跳过
-		}
-		bosses[stageNum] = sheet.Grid(64, 64, 0, 0)
-	}
-	return bosses
 }

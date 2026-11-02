@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"th10/anm"
 	"th10/supervisor"
 	"th10/supervisor/supervisortest"
+	"th10/zun"
 )
 
 // TestChainTable checks drawChain against m4_render_re.md §1.3.
@@ -44,15 +46,61 @@ func TestChainDraws(t *testing.T) {
 	drawing := []uint8{
 		0x07, 0x09, 0x0a, 0x0b, 0x0d, // background and layers 0-2, 17, 18
 		0x0f, 0x10, 0x11, 0x12, 0x13, // layers 3-7
-		0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
+		0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
 		0x21, 0x24, 0x29, 0x2a, // layers 13-16
 		0x2b, // GUI
 		0x2e, // pause (a guess)
 	}
+	// Of those, the ones still drawing with Ebiten. Node 0x14 (0x40d820,
+	// MOV EAX,1; RET) draws nothing: the enemies are world objects.
+	legacy := []uint8{0x16, 0x2b, 0x2e}
 	for _, n := range drawChain {
 		if want := slices.Contains(drawing, n.prio); (n.draw != nil) != want {
 			t.Errorf("node %#x (%#x): draws %v, want %v", n.prio, n.fn, n.draw != nil, want)
 		}
+		if want := slices.Contains(legacy, n.prio); n.legacy != want {
+			t.Errorf("node %#x (%#x): legacy %v, want %v", n.prio, n.fn, n.legacy, want)
+		}
+	}
+}
+
+// TestLayersANM checks that the World layer nodes draw through anmdraw: a
+// bomb (bullet.anm 400, whose mode 9 children make the ring) drawn by the
+// chain's non-legacy nodes, but for the background, on a supervisor with
+// no back buffer, which a legacy draw would need. The ring reaches the
+// device as a triangle strip.
+func TestLayersANM(t *testing.T) {
+	w := &anm.World{}
+	env := &anm.Env{GameSpeed: 1, RNG: &zun.RNG{}, Alt: &zun.RNG{}, Spawn: w.Add}
+	w.Spawn(bulletFile(), 400, [3]float32{0, 300, 0}, env)
+	s := &Stage{ctx: &Context{World: w}}
+	d := &supervisortest.Rec{}
+	sv := supervisor.New(d, nil)
+	draws, strips, frames := 0, 0, 0
+	for ; frames < 600 && w.Len() > 0; frames++ {
+		w.Run(env)
+		sv.BeginFrame()
+		for _, n := range drawChain {
+			if n.enter != nil {
+				n.enter(sv)
+			}
+			if n.draw != nil && !n.legacy && !slices.Contains([]uint8{0x07, 0x19, 0x1b, 0x1d}, n.prio) { // the layer nodes
+				n.draw(s, sv)
+			}
+		}
+		sv.EndFrame()
+		for _, c := range d.Take() {
+			if strings.HasPrefix(c, "draw ") {
+				draws++
+			}
+			if strings.HasPrefix(c, "draw 5 ") {
+				strips++
+			}
+		}
+	}
+	t.Logf("%d frames, %d DrawTL, %d strips", frames, draws, strips)
+	if strips == 0 {
+		t.Errorf("no triangle strip in %d frames (%d DrawTL): the ring was not drawn", frames, draws)
 	}
 }
 
