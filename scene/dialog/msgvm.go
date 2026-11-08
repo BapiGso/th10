@@ -1,5 +1,7 @@
 package dialog
 
+import "th10/zun"
+
 // The MSG interpreter (FUN_00415e90): one .msg entry plays on its own clock
 // while the game keeps running. ECL 338 opens it, op 11 lets ECL 339 go on,
 // and op 0 deletes it.
@@ -74,14 +76,17 @@ type View struct {
 type MSG struct {
 	ID int32 // +0x00: the entry ECL 338 opened
 
-	code   []Instr
-	pc     int  // +0x5c
-	clock  int  // +0x1c: the timeline clock
-	wait   int  // +0x30: op 10's timer
-	Signal int  // +0x78: op 11 raises it for ECL 339, the next frame drops it
-	skip   bool // +0x7c bit 0
-	lines  int  // +0x80: lines op 16 has put in the box
-	hooks  Hooks
+	code       []Instr
+	pc         int            // +0x5c
+	clock      int            // +0x1c: the timeline clock
+	wait       int            // +0x30: op 10's timer
+	clockTimer zun.Timer      // +0x18: FUN_00415b00 binds DAT_00476f78
+	waitTimer  zun.Timer      // +0x2c: same game-speed pointer
+	GameSpeed  func() float32 // nil means the normal speed for standalone MSG tests
+	Signal     int            // +0x78: op 11 raises it for ECL 339, the next frame drops it
+	skip       bool           // +0x7c bit 0
+	lines      int            // +0x80: lines op 16 has put in the box
+	hooks      Hooks
 
 	View   View
 	visual *Presentation
@@ -89,7 +94,10 @@ type MSG struct {
 
 // NewMSG starts entry id's code with clock 0.
 func NewMSG(id int32, code []Instr, hooks Hooks) *MSG {
-	return &MSG{ID: id, code: code, hooks: hooks}
+	m := &MSG{ID: id, code: code, hooks: hooks}
+	m.clockTimer.Reset() // FUN_00415b00: Cur=0, F=0, Prev=-1
+	m.waitTimer.Reset()
+	return m
 }
 
 // SetPresentation attaches the ANM-side MSG effects without advancing its
@@ -113,12 +121,17 @@ func (m *MSG) Pos() (clock, wait, at, op int) {
 // (DAT_00474e62 & 0x1001), skip whether Ctrl is held (DAT_00474e5c & 0x100).
 // It reports false once op 0 ends the entry.
 func (m *MSG) Update(advance, skip bool) bool {
+	speed := float32(1)
+	if m.GameSpeed != nil {
+		speed = m.GameSpeed()
+	}
 	if m.Signal > 0 {
 		m.Signal--
 	}
 	// Ctrl jumps the clock to the next instruction.
 	if m.skip && skip && m.pc < len(m.code) {
 		m.clock = int(m.code[m.pc].Time)
+		m.clockTimer.Set(int32(m.clock)) // FUN_00415e90, 0x415ea1-0x415f02
 	}
 	v := &m.View
 	for m.pc < len(m.code) && int(m.code[m.pc].Time) <= m.clock {
@@ -150,9 +163,10 @@ func (m *MSG) Update(advance, skip bool) bool {
 			m.skip = in.Arg&1 != 0
 		case msgWait:
 			if m.wait < 1 {
-				m.wait = int(in.Arg)
+				m.waitTimer.Set(in.Arg) // 0x416a10-0x416a17, FUN_00405410
 			}
-			m.wait--
+			m.waitTimer.Add(-1, speed) // 0x416a1c-0x416a24, FUN_0044bf40
+			m.wait = int(m.waitTimer.Cur)
 			if !advance && m.wait > 0 {
 				if !(m.skip && skip) {
 					return true // the clock waits too
@@ -161,6 +175,7 @@ func (m *MSG) Update(advance, skip bool) bool {
 				m.hooks.SE(0)
 			}
 			m.wait, m.lines = 0, 0
+			m.waitTimer.Set(0) // FUN_00415e90: both advance paths clear the whole timer
 		case msgSignal:
 			m.Signal = 1
 		case msgPlayerFace:
@@ -207,6 +222,7 @@ func (m *MSG) Update(advance, skip bool) bool {
 		}
 		return false // every entry ends in op 0; a cut one ends here
 	}
-	m.clock++
+	m.clockTimer.Tick(speed) // FUN_00415e90's tail -> FUN_00404ed0, DAT_00476f78
+	m.clock = int(m.clockTimer.Cur)
 	return true
 }

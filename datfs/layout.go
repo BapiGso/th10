@@ -11,6 +11,12 @@ func EmbedPath(datName string) string {
 	switch ext := path.Ext(datName); ext {
 	case ".ecl", ".msg", ".sht", ".anm", ".std":
 		return ext[1:] + "/" + datName
+	case ".ect":
+		return "ecl/" + datName
+	case ".mst":
+		return "msg/" + datName
+	case ".ant":
+		return "anm/" + datName
 	case ".wav":
 		return "wav/se/" + datName
 	case ".fmt":

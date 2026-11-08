@@ -49,6 +49,16 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
 # exit 0 = 全程在 epsilon 内；exit 1 = 有分歧（打印首个分歧帧）
 ```
 
+续比只用于已证实的采样半帧，不替代完整比较：
+
+- `-from-frame N`：只比较原作参考帧号 ≥N 的帧（`-shift` 对齐在其后）。
+- `-after N`：跳过原作参考帧号 ≤N 的帧。
+- 两者同时给出时，跳过条件取并集。两者都不放宽 eps，也不删 M 行。
+
+原作末行截断或短 B 行时返回读取错误（exit 2，输出 `INCOMPLETE`），不会当作 MATCH。
+
+六章基准 `.tmp/trace/d1c2/base_cN.txt`：c5 已于 2026-11-08 更新为 t13 合并后的输出，旧版保存为 `base_c5.pre_t13.txt`。
+
 原作侧加 `-shot-frames 1200,1300-1302 -shot-dir .tmp/shot` 可在指定帧截取游戏窗口客区，写成 `f<前>-<后>.png`（前后为截图前后读到的帧计数）。原作须为窗口模式、32 位色、窗口未被遮挡、显示缩放 100%。
 
 ### 原作配置 th10.cfg

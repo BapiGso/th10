@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"th10/anm"
-	"th10/audio"
 	"th10/datfs"
 	"th10/entity/bullet"
 	"th10/entity/enemy"
@@ -72,9 +71,13 @@ type Context struct {
 	ReplaySlowSample    byte            // current performance sample, FUN_004297d0
 	Menu                *MenuController // DAT_00477830, whose +4 gates the player's faith rectangles
 	// GUI is DAT_0047770c; its arrays draw through anmdraw at node 0x2b.
-	GUI           *GUI
-	GUIController *GUIController                    // the same GUI control fields, also available to logic-only contexts
-	RequestShake  func(kind, frames, x, y, z int32) // FUN_0043c8b0; t7's runtime shake entry
+	GUI                *GUI
+	GUIController      *GUIController                                     // the same GUI control fields, also available to logic-only contexts
+	RequestShake       func(kind, frames, x, y, z int32)                  // FUN_0043c8b0; includes fade kinds as well as shakes
+	DrawScreenEffects  func(sv *supervisor.Supervisor, first, last int32) // FUN_0043c970's dynamic draw nodes
+	ClearScreenEffects func()                                             // FUN_0043cb00: release both nodes at stage exit
+	StageFlags         uint32                                             // DAT_00477810+0x58; screen-effect gates read this raw controller word
+	StageExiting       bool                                               // DAT_004918a4 != 0; set when this stage is released
 	// BossSection is DAT_00474c84: MSG entry id+1 while a message is up,
 	// reset by MSG op 0, or the raw section number written by ECL 344.
 	BossSection int32
@@ -158,6 +161,9 @@ func (c *Context) OpenMSG(id int32) {
 	if m == nil {
 		return
 	}
+	// FUN_00415b00 binds both MSG ZunTimers to DAT_00476f78, including
+	// stage 6's quarter-speed post-dialog; input still comes from this calc.
+	m.GameSpeed = func() float32 { return c.Anm.GameSpeed }
 	if c.GUI != nil {
 		c.GUI.attachMSG(m, c.msgs.Stage, c.State.Character&1)
 	}
@@ -186,12 +192,14 @@ func (c *Context) UpdateMSG(advance, skip bool) {
 
 // Stage 通用关卡场景，驱动一关的全部逻辑
 type Stage struct {
+	sceneFlags     uint32 // DAT_00477810+0x58, menu freeze is bit 0x10
 	ctx            *Context
 	script         Script
 	field          *ebiten.Image                                        // 游戏区域离屏缓冲
 	NextScene      func(g *game.Game, state *game.GameState) game.Scene // 通关后下一场景
 	OnGameOver     func(g *game.Game, state *game.GameState) game.Scene
 	OnContinue     func(g *game.Game, state *game.GameState) game.Scene // DAT_00491fb8 = 13 dispatcher hook
+	OnRetry        func(g *game.Game, state *game.GameState) game.Scene // DAT_00491fb8 = 10, return to initial stage
 	replaySeed     uint16
 	replayTemplate []byte
 	liveGame       *game.Game // nil for sim; original direct menu calls need the existing scene/audio host
@@ -312,9 +320,8 @@ func (s *Stage) Update(g *game.Game) error {
 	in := &input.Global
 	s.ctx.ReplaySlowSample = g.ReplaySample()
 
-	if s.ctx.Menu.Active() {
-		action := s.ctx.Menu.Calc(g, in)
-		s.ctx.Menu.world.Run(s.ctx.Menu.env)
+	action, blocked := s.UpdateMenu(g, in)
+	if blocked {
 		switch action {
 		case MenuNext:
 			if s.NextScene != nil {
@@ -324,7 +331,8 @@ func (s *Stage) Update(g *game.Game) error {
 			}
 		case MenuContinue:
 			if s.OnContinue != nil {
-				g.GoTo(s.OnContinue(g, s.ctx.State))
+				next := s.OnContinue(g, s.ctx.State) // preserve t5 callback timing/signature
+				g.GoToFactory(game.SceneContinue, func(*game.Game) (game.Scene, error) { return next, nil })
 			} else {
 				// FUN_004236f0 dispatches mode 13. Its global scene restart
 				// handler is not yet ported; do not silently treat it as Quit.
@@ -333,18 +341,17 @@ func (s *Stage) Update(g *game.Game) error {
 			}
 		case MenuTitle:
 			s.goGameOver(g)
+		case MenuRetry:
+			if s.OnRetry != nil {
+				g.GoToFactory(game.SceneRetry, func(g *game.Game) (game.Scene, error) { return s.OnRetry(g, s.ctx.State), nil })
+			} else {
+				s.ctx.Menu.OpenGameOver(g)
+				s.ctx.Menu.Error = "Retry constructor is not registered"
+			}
 		}
 		return nil
 	}
 
-	// 暂停切换
-	if in.JustPressed(input.KeyPause) {
-		s.ctx.State.Paused = !s.ctx.State.Paused
-		s.ctx.PlaySE(audio.SEPause)
-	}
-	if s.ctx.State.Paused {
-		return nil
-	}
 	in.ApplyReplayOptions(s.ctx.State.ConfigFlags)
 
 	if err := s.update(in); err != nil {
@@ -546,7 +553,6 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 	sv.Field.Shift = [2]float32{float32(sx), float32(sy)}
 	s.drawFrame(sv)
 	screen.DrawImage(sv.Frame, nil)
-	s.drawLegacyPause(screen)
 }
 
 // 确保 Stage 实现 game.Scene

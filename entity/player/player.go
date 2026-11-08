@@ -220,7 +220,8 @@ func (p *Player) respawn() bool {
 	t := p.StateTimer.Cur
 	p.IY = 48000 - t*8000/60
 	p.syncPos()
-	p.snapOptions() // FUN_00425730 state 0
+	p.snapOptions()            // FUN_00425730 state 0
+	p.advancePositionHistory() // 0x4257b3-0x425833, before state-0 clearing/transition.
 	if t < 30 {
 		r := float32(float32(t)*17.066668) + 64
 		if p.ClearRound != nil {

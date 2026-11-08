@@ -183,6 +183,9 @@ func (tr *Reader) Next() (*Frame, error) {
 			continue
 		}
 		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
 		switch fields[0] {
 		case "F":
 			prev := tr.held
@@ -209,7 +212,7 @@ func (tr *Reader) Next() (*Frame, error) {
 			}
 			var b BulletRow
 			if err := parseBulletLine(&b, fields); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("trace: frame %d: %w", tr.held.Index, err)
 			}
 			tr.held.B = append(tr.held.B, b)
 		case "M":
@@ -228,6 +231,9 @@ func (tr *Reader) Next() (*Frame, error) {
 func parseFrameLine(f *Frame, t []string) error {
 	// F <idx> p <x> <y> life <n> power <n> faith <n> score <n> graze <n>
 	//   state <n> invinc <n> bomb <n> | e <n> b <n> i <n> pb <n>
+	if len(t) < 30 {
+		return fmt.Errorf("trace: short F line %q", strings.Join(t, " "))
+	}
 	var err error
 	get := func(i *int) string { v := t[*i]; *i++; return v }
 	i := 1
@@ -279,6 +285,9 @@ func parseFrameLine(f *Frame, t []string) error {
 
 func parseEnemyLine(e *EnemyRow, t []string) error {
 	// E <x> <y> hp <n> act <n> type <n>
+	if len(t) < 9 {
+		return fmt.Errorf("trace: short E line %q", strings.Join(t, " "))
+	}
 	var err error
 	var act int
 	parseAt := func(idx int, dst any) {
@@ -324,6 +333,9 @@ func parseMSGLine(m *MSGRow, t []string) error {
 
 func parseBulletLine(b *BulletRow, t []string) error {
 	// B <x> <y> ang <f> spd <f> type <n> color <n>
+	if len(t) < 11 {
+		return fmt.Errorf("short bullet row: got %d fields, want at least 11", len(t))
+	}
 	var err error
 	parseAt := func(idx int, dst any) {
 		switch d := dst.(type) {

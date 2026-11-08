@@ -44,6 +44,7 @@ func LoadConfig() *Config {
 		if native, err := DecodeNativeConfig(data); err == nil {
 			cfg.Native = native
 			cfg.BGMVolume, cfg.SEVolume = float64(native.Raw[0x20])/100, float64(native.Raw[0x21])/100
+			cfg.Hint = native.Raw[0x22] != 1 // FUN_0042d920: On/Off/Auto, retain Auto in Raw
 		}
 	}
 	return cfg

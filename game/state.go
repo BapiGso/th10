@@ -89,6 +89,9 @@ type GameState struct {
 	// replay chapter restores it from its header (+0x02).
 	RNGSeed uint16
 	HasSeed bool
+	// DAT_004918b0 remains shared across live stage replacements. Replay
+	// chapter restoration still uses RNGSeed, never this continuation pointer.
+	stageRNG *zun.RNG
 	// Reference to Game's DAT_004918a8, not a per-run generator.
 	alternateRNG *zun.RNG
 	// Rank is the dynamic rank (DAT_00474c98, -1024..1024). It carries over
@@ -158,8 +161,8 @@ func (s *GameState) GainFaith(n int64) {
 }
 
 // GainPower is FUN_00418930: n units of 0.05 power (DAT_00474c48, which this
-// state keeps x5) unless already full, capped at 1.00 x5. It reports whether
-// the power level, one per 1.00, changed.
+// state keeps x5) unless already full, capped at raw 0x64 = displayed 5.00
+// (0x41893c/0x418963). It reports whether the raw /20 power tier changed.
 func (s *GameState) GainPower(n int) bool {
 	p := s.Power / 5
 	if p > 99 {

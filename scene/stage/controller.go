@@ -77,7 +77,7 @@ func (c *Context) clearStage() {
 		c.deliverClearMenu() // 0x416e55, no 120-frame ending wait for Extra
 	} else {
 		if c.RequestShake != nil {
-			c.RequestShake(5, 120, 0, 0, 0) // FUN_0043c8b0, 0x416d85; t7 owns the sampler/lifetime
+			c.RequestShake(5, 120, 0, 0, 0) // FUN_0043c8b0, 0x416d85: full-screen fade, no RNG
 		}
 		ctrl.Flags |= 0x10
 		ctrl.ClearTimer = 0 // 0x416d95..0x416da2
@@ -111,15 +111,28 @@ func (s *Stage) deliverSceneRequest(g *game.Game) {
 	if state.ReplayMode != 1 && !state.DebugMode {
 		_ = g.SaveProgress() // FUN_00417c80 saves before releasing/transferring the stage
 	}
+	if s.ctx.GUIController.SceneRequest == 0xb && state.StageMode != 1 && state.ReplayMode != 1 {
+		state.CarryStageRNG(s.ctx.RNG) // FUN_00417c80: DAT_004918b0 survives the stage transfer
+	}
+	s.ctx.StageExiting = true // DAT_004918a4, before releasing this stage's effect nodes
+	if s.ctx.ClearScreenEffects != nil {
+		s.ctx.ClearScreenEffects() // FUN_0043cb00; no pending sample after scene replacement
+	}
 	switch s.ctx.GUIController.SceneRequest {
 	case 0xb, 0xe:
 		if s.NextScene != nil {
-			g.GoTo(s.NextScene(g, state))
+			next := s.NextScene(g, state) // t8's existing callback runs at the request, unchanged
+			request := game.SceneID(s.ctx.GUIController.SceneRequest)
+			g.GoToFactory(request, func(*game.Game) (game.Scene, error) { return next, nil })
 		} else {
 			g.GoTo(resultscene.New(state, resultscene.ModeStageClear, nil))
 		}
 	default: // native 4 (replay exit) or system override 2
-		s.goGameOver(g)
+		if s.ctx.GUIController.SceneRequest == 2 {
+			g.RequestScene(game.SceneExitSystem)
+		} else {
+			s.goGameOver(g)
+		}
 	}
 }
 

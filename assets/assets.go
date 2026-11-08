@@ -10,5 +10,5 @@ import "embed"
 // Chinese text. Menus keep their current font policy; numeric GUI sprites
 // come from front.anm/ascii.anm rather than a font.
 //
-//go:embed anm ecl msg sht std "font/Bimini Bold.ttf" font/DFYuGaSo-W3.ttc font/DFYuGaSo-W7.ttc misc/musiccmtt.txt wav/se/*.wav wav/bgm/*.ogg wav/bgm/thbgm.fmt
+//go:embed anm ecl msg sht std "font/Bimini Bold.ttf" font/DFYuGaSo-W3.ttc font/DFYuGaSo-W7.ttc misc/demo*.rpy misc/musiccmt.txt misc/musiccmtt.txt wav/se/*.wav wav/bgm/*.ogg wav/bgm/thbgm.fmt
 var Assets embed.FS

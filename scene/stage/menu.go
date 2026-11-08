@@ -10,23 +10,29 @@ import (
 	"th10/game"
 	"th10/gamedata"
 	"th10/input"
+	sceneui "th10/scene/ui"
 	"th10/zun"
 )
 
-// MenuState is DAT_00477830+4, not the pause flag. States 1..5 belong to
-// the separately scoped pause path; FUN_004236f0 handles end-menu states.
+// MenuState is DAT_00477830+4, not the pause flag. FUN_00422c80 handles
+// states 1..5, FUN_004236f0 handles 6..13; stage +0x58 bit 0x10 freezes play.
 type MenuState int32
 
 const (
-	MenuDormant    MenuState = 0
-	MenuPrompt     MenuState = 6
-	MenuRankCheck  MenuState = 7
-	MenuChoices    MenuState = 8
-	MenuSlots      MenuState = 10
-	MenuReplayName MenuState = 11
-	MenuRanking    MenuState = 12
-	MenuLeaving    MenuState = 13
-	MenuFinished   MenuState = 21
+	MenuDormant      MenuState = 0
+	MenuPauseOpening MenuState = 1
+	MenuPauseChoices MenuState = 2
+	MenuPauseLeaving MenuState = 3
+	MenuPauseConfirm MenuState = 4
+	MenuPauseAnswer  MenuState = 5
+	MenuPrompt       MenuState = 6
+	MenuRankCheck    MenuState = 7
+	MenuChoices      MenuState = 8
+	MenuSlots        MenuState = 10
+	MenuReplayName   MenuState = 11
+	MenuRanking      MenuState = 12
+	MenuLeaving      MenuState = 13
+	MenuFinished     MenuState = 21
 )
 
 type MenuAction uint8
@@ -36,6 +42,7 @@ const (
 	MenuContinue            // DAT_00491fb8 = 0x0d
 	MenuNext                // DAT_00491fb8 = 0x0a
 	MenuTitle               // FUN_0040ac90(4)
+	MenuRetry               // DAT_00491fb8 = 0x0a, distinct from mode 13 continue
 )
 
 // Exact 0x4746d8 -> 0x46e2f8 table; the last three spaces stand for the
@@ -80,6 +87,8 @@ type MenuController struct {
 	env               *anm.Env
 	priorSpeed        float32 // +0x2c0
 	capturePending    bool
+	pauseSelector     sceneui.Selector
+	pauseExtra        *anm.VM // +0x1dc
 }
 
 // NewMenuController is FUN_00422360 -> FUN_004220e0 / FUN_00422150: clear
@@ -159,9 +168,12 @@ func (m *MenuController) initName(g *game.Game) {
 	}
 }
 
-// Calc is FUN_00422a90 -> FUN_004223f0 -> FUN_004236f0, states 6..13.
+// Calc is FUN_00422a90 -> FUN_004223f0, with pause and end-menu dispatch.
 func (m *MenuController) Calc(g *game.Game, in *input.State) MenuAction {
-	defer m.Timer.Tick(m.stage.ctx.Anm.GameSpeed)
+	defer func() { m.Timer.Tick(m.stage.ctx.Anm.GameSpeed) }() // FUN_004223f0 reloads speed after UnPause/close
+	if m.State >= MenuPauseOpening && m.State <= MenuPauseAnswer {
+		return m.calcPause(g, in.Menu())
+	}
 	ok, cancel := in.JustPressed(input.KeyOk), in.JustPressed(input.KeyCancel)
 	switch m.State {
 	case MenuPrompt: // FUN_004236f0 case 6: accept only after nine frames

@@ -1,5 +1,7 @@
 package stage
 
+import "th10/game"
+
 // Sound 是 Stage 运行时对音频的最小需求。真实实现是 *audio.Manager；无头
 // 模拟器（sim 包）把 Context.Audio 留为 nil，逐帧模拟不依赖音频设备。
 type Sound interface {
@@ -39,6 +41,9 @@ func (c *Context) PlaySEIDAt(id int, x float32) {
 
 // PlayBGM 切换 BGM；Audio 为 nil 时静默（无头模拟）。
 func (c *Context) PlayBGM(idx int) {
+	if c.State != nil && c.State.RunFlags&game.RunFlagDemo != 0 {
+		return
+	} // FUN_00417870: title-demo keeps the title track
 	if c.Audio != nil {
 		c.Audio.PlayBGM(idx)
 	}

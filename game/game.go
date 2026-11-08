@@ -7,6 +7,7 @@ import (
 	thaudio "th10/audio"
 	"th10/input"
 	"th10/pacing"
+	"th10/supervisor"
 	"th10/zun"
 	"time"
 
@@ -38,6 +39,10 @@ type Game struct {
 	current        Scene
 	next           Scene
 	nextSet        bool
+	scenes         sceneSwitcher // FUN_004218d0: numbered request/constructor/lifecycle
+	TitleEntry     int           // DAT_00491c00: initial/menu/replay/player-data entry
+	Selection      MenuSelection
+	RunState       *GameState // application globals alias the existing t8 run
 	audioContext   *audio.Context
 	audioMgr       *thaudio.Manager
 	Config         *Config
@@ -69,6 +74,8 @@ func New() *Game {
 	audioMgr := thaudio.NewManager(ctx)
 	audioMgr.SetBGMVolume(cfg.BGMVolume)
 	audioMgr.SetSEVolume(cfg.SEVolume)
+	native := cfg.NativeBytes()
+	audioMgr.SetNativeVolumes(native[0x20], native[0x21]) // FUN_0042e5a0, same curve after reload
 	g := &Game{
 		audioContext:   ctx,
 		audioMgr:       audioMgr,
@@ -79,6 +86,7 @@ func New() *Game {
 		start:          now,
 		showPace:       os.Getenv("TH10_PACE") == "1",
 	}
+	g.BindMusicProgress(nil) // FUN_00420b10's ST music flags, before title playback
 	// One Update per display refresh; the Pacer picks the refreshes that run
 	// a logic frame, and a skipped refresh keeps the last frame on screen.
 	ebiten.SetTPS(ebiten.SyncWithFPS)
@@ -92,6 +100,8 @@ func (g *Game) AlternateRNG() *zun.RNG { return &g.alternateRNG }
 
 // BindState attaches application-lifetime state before any STD/ANM starts.
 func (g *Game) BindState(state *GameState) {
+	g.RunState = state
+	g.BindMusicProgress(state)
 	state.alternateRNG = g.AlternateRNG()
 	state.SystemFlags = g.SystemFlags
 	if g.SpellHistory == nil {
@@ -123,7 +133,18 @@ func (g *Game) NewState(character, shotType, difficulty int) *GameState {
 }
 
 func (g *Game) SetScene(s Scene) {
+	g.initScenes()
+	if life, ok := g.current.(SceneLifecycle); ok {
+		life.SceneLeave(g, sceneMode(s))
+	}
+	g.scenes.previous = g.scenes.current
+	g.scenes.current, g.scenes.request = sceneMode(s), sceneMode(s)
+	g.next, g.nextSet, g.scenes.pending = nil, false, nil
 	g.current = s
+	g.scenes.clearPending = true
+	if life, ok := s.(SceneLifecycle); ok {
+		g.scenes.err = life.SceneEnter(g)
+	}
 }
 
 func (g *Game) Update() error {
@@ -140,17 +161,12 @@ func (g *Game) Update() error {
 	}
 
 	// 每帧最先采集输入（文章第10篇：输入采集在数据处理之前）
+	if g.Config != nil && g.Config.Native != nil {
+		input.Global.SetGamepadBindings(g.Config.Native.JoystickBindings())
+	}
 	input.Global.Update()
 
-	if g.nextSet {
-		g.current = g.next
-		g.next = nil
-		g.nextSet = false
-	}
-	var err error
-	if g.current != nil {
-		err = g.current.Update(g)
-	}
+	err := g.CalcScene()
 	// FUN_00439390 (0x43943b) flushes sounds after the calc chain, so all
 	// same-id x requests contribute to this frame's average pan.
 	if g.audioMgr != nil {
@@ -166,6 +182,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	g.fresh = false
 	screen.Clear()
+	if g.scenes.clearPending {
+		supervisor.Get().ClearColor = 0xff000000 // FUN_004218d0, 0x421914
+		g.scenes.clearPending = false
+	}
 	if g.current != nil {
 		g.current.Draw(screen)
 	}
@@ -204,6 +224,8 @@ func (g *Game) Layout(_, _ int) (int, int) {
 
 // GoTo 切换到下一个场景（下一帧生效，允许 nil 表示回到空状态）
 func (g *Game) GoTo(s Scene) {
+	g.initScenes()
+	g.scenes.request, g.scenes.pending = sceneMode(s), nil
 	g.next = s
 	g.nextSet = true
 }

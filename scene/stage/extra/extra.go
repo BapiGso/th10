@@ -37,6 +37,7 @@ func (s *ScriptExtra) loadBg() {
 }
 
 func (s *ScriptExtra) Init(ctx *stage.Context) {
+	s.vm.BindContext(ctx) // FUN_00417870: manager exists before the first calc.
 	ctx.PlayBGM(audio.BGMExtra)
 	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
 	// clears the stage.

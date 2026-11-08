@@ -4,11 +4,13 @@
 // Usage:
 //
 //	th10diff -a original.trace -b replica.trace [-eps 0.001] [-context 3]
-//	         [-shift 0] [-scope all|motion] [-bullets]
+//	         [-shift 0] [-scope all|motion] [-bullets] [-from-frame 0] [-after 0]
 //
 // Frames are matched by index (A's index plus -shift), so frames the sampler
 // dropped are skipped instead of misaligning the rest. Comparison ends when
 // the reference runs out; the replica ending first is a divergence.
+// -after N explicitly skips reference frames through N before comparison,
+// for continuing past a separately confirmed invalid sampler frame.
 //
 // -scope motion compares only the player, enemy and bullet positions, enemy
 // HP, angles, speeds and counts: what the ECL and the RNG decide on their own
@@ -44,6 +46,8 @@ type diffFlags struct {
 	context int
 	maxRows int
 	shift   int
+	from    int
+	after   int
 	scope   string
 	bullets bool
 }
@@ -58,12 +62,14 @@ func parseFlags() (diffFlags, bool) {
 	fs.IntVar(&f.context, "context", 3, "frames of context to print around the divergence")
 	fs.IntVar(&f.maxRows, "max-rows", 8, "max entity rows to show per side")
 	fs.IntVar(&f.shift, "shift", 0, "added to A's frame indices before matching")
+	fs.IntVar(&f.from, "from-frame", 0, "first reference frame to compare (inclusive; earlier frames are not validated)")
+	fs.IntVar(&f.after, "after", 0, "compare only reference frames after N (0 = all)")
 	fs.StringVar(&f.scope, "scope", "all", "fields to compare: all or motion")
 	fs.BoolVar(&f.bullets, "bullets", false, "on divergence, list every differing enemy bullet in the frame")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		return f, false
 	}
-	return f, f.pathA != "" && f.pathB != "" && (f.scope == "all" || f.scope == "motion")
+	return f, f.pathA != "" && f.pathB != "" && f.from >= 0 && f.after >= 0 && (f.scope == "all" || f.scope == "motion")
 }
 
 func run() int {
@@ -87,9 +93,18 @@ func run() int {
 
 	ra, rb := trace.NewReader(fa), trace.NewReader(fb)
 	diff := &differ{eps: opts.eps + posUnit + slack, angEps: opts.angEps + angUnit + slack,
-		maxRows: opts.maxRows, context: opts.context, shift: opts.shift, motion: opts.scope == "motion",
+		maxRows: opts.maxRows, context: opts.context, shift: opts.shift, from: opts.from, after: opts.after, motion: opts.scope == "motion",
 		bullets: opts.bullets}
+	if opts.from > 0 {
+		fmt.Printf("Comparing from reference frame %d (inclusive); earlier frames are not validated\n", opts.from)
+	}
+	if opts.after > 0 {
+		fmt.Printf("Comparing after reference frame %d (explicit -after; tolerances unchanged)\n", opts.after)
+	}
 	code := diff.compare(ra, rb)
+	if code == 2 {
+		fmt.Printf("INCOMPLETE: %d frames compared before the read error; invalid data is not validated\n", diff.frames)
+	}
 	if code == 0 {
 		fmt.Printf("MATCH: %d frames compared, all within eps (pos %.4g px, ang %.4g rad)\n",
 			diff.frames, opts.eps, opts.angEps)
@@ -119,6 +134,8 @@ type differ struct {
 	maxRows int
 	context int
 	shift   int
+	from    int  // inclusive reference index, before -shift
+	after   int  // explicit reference-frame cutoff; zero leaves comparison unchanged
 	motion  bool // -scope motion
 	bullets bool // -bullets
 	frames  int
@@ -139,6 +156,22 @@ func (d *differ) compare(ra, rb *trace.Reader) int {
 		return 2
 	}
 	for {
+		// A deliberate range selection is not a sampler gap. Both sides
+		// still use the same alignment and budgets inside the selected range.
+		if (a != nil && a.Index < d.from) || (d.after > 0 && a != nil && a.Index <= d.after) {
+			if a, err = ra.Next(); err != nil {
+				fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
+				return 2
+			}
+			continue
+		}
+		if (b != nil && b.Index < d.from+d.shift) || (d.after > 0 && b != nil && b.Index <= d.after+d.shift) {
+			if b, err = rb.Next(); err != nil {
+				fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
+				return 2
+			}
+			continue
+		}
 		if a == nil {
 			for b != nil {
 				d.tail++

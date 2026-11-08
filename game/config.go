@@ -10,7 +10,7 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		BGMVolume: 0.8,
+		BGMVolume: 1, // FUN_00418c40: cfg +0x20 defaults to 100
 		SEVolume:  0.8,
 		Hint:      true,
 		Native:    DefaultNativeConfig(),

@@ -1,0 +1,8 @@
+# Text files are stored and checked out with LF line endings, whatever core.autocrlf says.
+* text=auto eol=lf
+
+# Byte-exact copies of original resources extracted by tools/th10extract. Tests compare
+# them with th10.dat / th10c.dat (e.g. gamedata/presentation_test.go reads musiccmtt.txt),
+# so git must never normalize their line endings.
+assets/** -text
+assets/*.go text eol=lf

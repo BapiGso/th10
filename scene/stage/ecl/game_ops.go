@@ -58,10 +58,11 @@ type eclActor struct {
 	fireR   float32             // ins_346's squared no-fire radius (+0x1454)
 	markers []lifeMarker
 
-	slots   [8]interruptSlot // boss phase interrupts (interrupt.go)
-	phase   eclTimer         // phase timer, reset by ins_333 and each interrupt
-	invuln  eclTimer         // ins_335 invulnerability timer (+0x2458)
-	bossIdx int              // the boss slot ins_332 put this enemy in
+	slots      [8]interruptSlot // boss phase interrupts (interrupt.go)
+	phase      eclTimer         // phase timer, reset by ins_333 and each interrupt
+	invuln     eclTimer         // ins_335 invulnerability timer (+0x2458)
+	contactOff eclTimer         // ins_361 contact-off timer (EnemyData+0x1430)
+	bossIdx    int              // the boss slot ins_332 put this enemy in
 }
 
 // dropTable is the defeat drops (+0x13cc): items[0] is the main item's kind
@@ -271,6 +272,11 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		if t.owner != nil && len(in.Params) >= 1 {
 			vm.actorFor(t.owner).invuln.set(vm.resolveInt(t, in.Params[0]))
 		}
+	case opContactOff:
+		// FUN_0040e770 case 361, 0x41004c-0x41005d: separate from 335.
+		if t.owner != nil && len(in.Params) >= 1 {
+			vm.actorFor(t.owner).contactOff.set(vm.resolveInt(t, in.Params[0]))
+		}
 	case opDropClear: // 326: the scatter counts, not the main item
 		if t.owner != nil {
 			clear(vm.actorFor(t.owner).drops.items[1:])
@@ -420,7 +426,7 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		}
 	default:
 		// Remaining no-ops with known-but-cosmetic binary effects:
-		// 361 (FUN_00405410), 363 (FUN_0040cea0), 365
+		// 363 (FUN_0040cea0), 365
 		// (FUN_0041c7d0). UI/spell-frame ops likewise.
 	}
 }

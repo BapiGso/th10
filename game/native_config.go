@@ -44,6 +44,21 @@ func DecodeNativeConfig(data []byte) (*NativeConfig, error) {
 func (c *NativeConfig) Flags() uint32         { return binary.LittleEndian.Uint32(c.Raw[0x30:]) }
 func (c *NativeConfig) SetFlags(flags uint32) { binary.LittleEndian.PutUint32(c.Raw[0x30:], flags) }
 
+// JoystickBindings is the native nine-word input table at cfg +4.
+// Option's Key Config changes only indices 0..3/8; all other words survive.
+func (c *NativeConfig) JoystickBindings() (keys [9]int16) {
+	for i := range keys {
+		keys[i] = int16(binary.LittleEndian.Uint16(c.Raw[4+i*2:]))
+	}
+	return keys
+}
+
+func (c *NativeConfig) SetJoystickBindings(keys [9]int16) {
+	for _, i := range [...]int{0, 1, 2, 3, 8} { // FUN_0042f540, 0x42f75f..0x42f7d3
+		binary.LittleEndian.PutUint16(c.Raw[4+i*2:], uint16(keys[i]))
+	}
+}
+
 func (c *Config) NativeBytes() []byte {
 	native := DefaultNativeConfig()
 	if c != nil && c.Native != nil {

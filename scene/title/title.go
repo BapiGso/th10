@@ -1,208 +1,113 @@
 package title
 
 import (
-	"image/color"
-	"th10/audio"
+	"fmt"
+	"github.com/hajimehoshi/ebiten/v2"
 	"th10/game"
+	"th10/gamedata"
 	"th10/input"
-	"th10/render"
+	"th10/replay"
 	"th10/scene/menus"
 	selector "th10/scene/select"
+	"th10/scene/stage"
 	sceneui "th10/scene/ui"
-
-	"github.com/hajimehoshi/ebiten/v2"
+	"th10/supervisor"
 )
 
-const (
-	menuStart = iota
-	menuExtraStart
-	menuPractice
-	menuReplay
-	menuPlayerData
-	menuMusicRoom
-	menuOption
-	menuQuit
-	menuCount
-)
-
-var menuLabels = [menuCount]string{
-	"Game Start",
-	"Extra Start",
-	"Practice Start",
-	"Replay",
-	"Player Data",
-	"Music Room",
-	"Option",
-	"Quit",
-}
-
-// 菜单文字配色 — 参照原版 TH10 题图（.tmp/img_2.jpg）。
-var (
-	menuIdleColor     = color.NRGBA{69, 43, 44, 255}    // 暗酒红：未选中
-	menuHoverColor    = color.NRGBA{255, 163, 163, 255} // 亮粉红：选中（hover/focus）
-	menuOutlineColor  = color.NRGBA{0, 0, 0, 235}       // 黑色描边
-	menuDisabledColor = color.NRGBA{80, 70, 70, 220}    // Extra 锁住时
-	hintColor         = color.NRGBA{228, 222, 214, 240}
-)
-
-const (
-	menuStepX        = 8  // 阶梯：每往下一行，文字右缘再向右挪 8px
-	menuLineH        = 30 // 行高
-	menuRightMargin  = 24 // 最末项右缘距屏幕右边缘的留白
-	menuVerticalBias = 40 // 整组菜单相对屏幕中心的纵向偏移
-)
-
-// Title 标题场景。
-//
-// 这里的菜单不直接走 ebitenui Button —— 我们要给文字加八方向描边，
-// 而 ebitenui Button 没有 outline 选项；通过 sceneui.MenuList 走自绘路径。
+// Title is the game.Scene adapter for DAT_0047784c. Every native menu
+// page uses Controller's single world and selector stack.
 type Title struct {
-	frame       int
-	menu        *sceneui.MenuList
-	extraUnlock bool
-	bgmStarted  bool
-	bgImg       *ebiten.Image
-	quit        bool
+	Controller *sceneui.TitleController
+	Pages      map[sceneui.TitlePage]sceneui.TitlePageHooks
 }
 
-func New() *Title {
-	t := &Title{}
-	// title00s.png 是完整的静态标题画面（已含 東方風神録 / Mountain of Faith
-	// 文字、巫女与背景），所以不再单独叠加 title_logo.png — 否则会出现重复 logo。
-	t.bgImg = render.LoadImage("anm/title/title00s.png")
-	return t
+func New() *Title                      { return &Title{} }
+func (*Title) SceneMode() game.SceneID { return game.SceneTitle }
+func (t *Title) SetPageHooks(page sceneui.TitlePage, hooks sceneui.TitlePageHooks) {
+	if t.Pages == nil {
+		t.Pages = make(map[sceneui.TitlePage]sceneui.TitlePageHooks)
+	}
+	t.Pages[page] = hooks
+	if t.Controller != nil {
+		t.Controller.Hooks[page] = hooks
+	}
 }
-
-func (t *Title) buildMenu(g *game.Game) *sceneui.MenuList {
-	itemFace := render.LoadSystemFace(22)
-
-	items := make([]sceneui.MenuItem, menuCount)
-	for i := 0; i < menuCount; i++ {
-		items[i] = sceneui.MenuItem{Label: labelOf(i, t.extraUnlock)}
+func (t *Title) SceneEnter(g *game.Game) error {
+	if t.Controller != nil {
+		return nil
 	}
-	if !t.extraUnlock {
-		items[menuExtraStart].Disabled = true
+	c := sceneui.NewTitleController(g, g.TitleEntry)
+	t.Controller = c
+	for page, hooks := range t.Pages {
+		c.Hooks[page] = hooks
 	}
-
-	// 计算 baseX：让"最远右伸"那行也能贴近右边距而不出屏
-	maxExtent := 0
-	for i := 0; i < menuCount; i++ {
-		w, _ := render.MeasureText(itemFace, items[i].Label)
-		ext := i*menuStepX + w
-		if ext > maxExtent {
-			maxExtent = ext
+	// Temporary adapters keep t11's existing public scenes usable. A
+	// registered native page hook replaces its adapter, without a scene switch.
+	for _, page := range []sceneui.TitlePage{sceneui.TitleReplay, sceneui.TitlePlayerData, sceneui.TitleMusicRoom, sceneui.TitlePlayerDataDetail, sceneui.TitlePlayerDataCards} {
+		if c.Hooks[page].Calc == nil {
+			c.Hooks[page] = sceneui.TitlePageHooks{Calc: func(_ *sceneui.TitleController, g *game.Game, _ *input.State) error {
+				g.GoToFactory(game.SceneTitle, func(g *game.Game) (game.Scene, error) {
+					switch page {
+					case sceneui.TitleReplay:
+						return menus.NewReplay(t), nil
+					case sceneui.TitleMusicRoom:
+						return menus.NewMusicRoom(t), nil
+					default:
+						return menus.NewPlayerData(g.Save, t), nil
+					}
+				})
+				return nil
+			}}
 		}
 	}
-	baseX := game.ScreenWidth - menuRightMargin - maxExtent
-	totalH := menuCount * menuLineH
-	topY := game.ScreenHeight/2 + menuVerticalBias - totalH/2
-
-	menu := &sceneui.MenuList{
-		Items:  items,
-		X:      baseX,
-		Y:      topY,
-		LineH:  menuLineH,
-		StepX:  menuStepX,
-		Cursor: 0,
-		Style: sceneui.MenuStyle{
-			Face:     itemFace,
-			Idle:     menuIdleColor,
-			Hover:    menuHoverColor,
-			Disabled: menuDisabledColor,
-			Outline:  menuOutlineColor,
-		},
-		OnMove: func(int) {
-			g.Audio().PlaySE(audio.SESelect)
-		},
-		OnActivate: func(idx int) {
-			g.Audio().PlaySE(audio.SEOk)
-			t.activate(g, idx)
-		},
-		// X 只把光标挪到 Quit；想退出还得再按 Z 确认（沿用旧行为）
-		OnCancel: func() {
-			menu := t.menu
-			if menu != nil {
-				menu.Cursor = menuQuit
-			}
-		},
-	}
-	return menu
-}
-
-func (t *Title) Update(g *game.Game) error {
-	t.frame++
-	t.extraUnlock = g.Save != nil && g.Save.ExtraUnlocked
-
-	if !t.bgmStarted {
-		g.Audio().PlayBGM(audio.BGMTitle)
-		t.bgmStarted = true
-	}
-
-	// 第一次/解锁状态变化时重建菜单（label 含 "(Locked)" 字样会变）
-	if t.menu == nil {
-		t.menu = t.buildMenu(g)
-	} else {
-		// 只更新 label/disabled，不改 cursor，避免重置选中
-		for i := 0; i < menuCount; i++ {
-			t.menu.Items[i].Label = labelOf(i, t.extraUnlock)
-			t.menu.Items[i].Disabled = (i == menuExtraStart && !t.extraUnlock)
-		}
-	}
-
-	t.menu.Update()
-	_ = input.Global // input 由 menu.Update 内部读取
-
-	if t.quit {
-		return ebiten.Termination
-	}
+	c.SetRunHooks(func(g *game.Game, state *game.GameState) error { return selector.Launch(g, state, t) }, t.startDemo)
 	return nil
 }
-
-func (t *Title) activate(g *game.Game, i int) {
-	switch i {
-	case menuStart:
-		g.GoTo(selector.New(t))
-	case menuExtraStart:
-		if t.extraUnlock {
-			g.GoTo(selector.NewExtra(t))
-		}
-	case menuPractice:
-		g.GoTo(selector.NewPractice(t))
-	case menuReplay:
-		g.GoTo(menus.NewReplay(t))
-	case menuPlayerData:
-		g.GoTo(menus.NewPlayerData(g.Save, t))
-	case menuMusicRoom:
-		g.GoTo(menus.NewMusicRoom(t))
-	case menuOption:
-		g.GoTo(menus.NewOption(g, t))
-	case menuQuit:
-		t.quit = true
+func (t *Title) SceneLeave(g *game.Game, _ game.SceneID) {
+	if t.Controller != nil {
+		t.Controller.Remember(g)
+		t.Controller.Dispose()
+		t.Controller = nil
 	}
 }
-
+func (t *Title) Update(g *game.Game) error {
+	if err := t.SceneEnter(g); err != nil {
+		return err
+	}
+	return t.Controller.Calc(g, &input.Global)
+}
 func (t *Title) Draw(screen *ebiten.Image) {
-	if t.bgImg != nil {
-		screen.DrawImage(t.bgImg, nil)
-	} else {
-		screen.Fill(color.RGBA{12, 8, 32, 255})
+	if t.Controller != nil {
+		t.Controller.Draw(screen)
 	}
-
-	if t.menu != nil {
-		t.menu.Draw(screen)
+}
+func (t *Title) DrawPorted(sv *supervisor.Supervisor) {
+	if t.Controller != nil {
+		t.Controller.DrawPorted(sv)
 	}
-
-	// 底部操作提示
-	hintFace := render.LoadSystemFace(16)
-	hint := "Arrow Keys: Move   Z: Select   X: Cancel"
-	hw, _ := render.MeasureText(hintFace, hint)
-	render.DrawText(screen, hint, hintFace, (game.ScreenWidth-hw)/2, game.ScreenHeight-30, hintColor)
 }
 
-// labelOf 返回某一项当前应显示的文字（处理 Extra 锁定）。
-func labelOf(i int, extraUnlock bool) string {
-	if i == menuExtraStart && !extraUnlock {
-		return "Extra Start"
+// startDemo is FUN_0042cdf0, 0x42ce4a..0x42cf31. The first populated
+// chapter and the 1/2/3/0 table order come from the original resources.
+func (t *Title) startDemo(g *game.Game, index int) error {
+	number := [...]int{1, 2, 3, 0}[index&3]
+	data, err := gamedata.ReadFile(fmt.Sprintf("misc/demo%d.rpy", number))
+	if err != nil {
+		return err
 	}
-	return menuLabels[i]
+	r, err := replay.Decode(data)
+	if err != nil {
+		return err
+	}
+	first := 0
+	for first < len(r.Chapters) && len(r.Chapters[first].Records) == 0 {
+		first++
+	}
+	if first == len(r.Chapters) {
+		return fmt.Errorf("title: demo%d has no populated chapter", number)
+	}
+	g.GoToFactory(game.ScenePlayback, func(g *game.Game) (game.Scene, error) {
+		return stage.NewDemoPlayback(g, r, first, selector.ReplayScript, t)
+	})
+	return nil
 }

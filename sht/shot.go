@@ -107,6 +107,8 @@ func Parse(data []byte) (*File, error) {
 	return f, nil
 }
 
+// PowerLevel is FUN_00428160, 0x428160-0x42817d: raw Power/20, capped at
+// tier 4, not the resource ceiling of 5.00 (FUN_00418930). Each tier is 1.00.
 func PowerLevel(power int) int { return max(0, min(power/100, 4)) }
 
 func (f *File) Shots(power int, focused bool) []Shot {

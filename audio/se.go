@@ -113,7 +113,11 @@ func (m *Manager) flushSE() {
 			p.PauseAndStopReading()
 		}
 		name, _ := SEName(q.id)
-		m.seByID[q.id] = m.playSEPan(name, seGain(q.id), q.pan())
+		gain := seGain(q.id)
+		if m.nativeVolume {
+			gain = nativeGain(m.nativeSE, int32(seTable[q.id].vol), true)
+		}
+		m.seByID[q.id] = m.playSEPan(name, gain, q.pan())
 	}
 	m.seQueue = m.seQueue[:0]
 }

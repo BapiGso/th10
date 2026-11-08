@@ -8,7 +8,7 @@
 //
 // Usage:
 //
-//	th10extract [-dir DIR] [-out assets] [-list] [-bgm [-q 4]] [-textures] [PATTERN ...]
+//	th10extract [-dir DIR] [-archive th10.dat|th10c.dat] [-out assets] [-list] [-bgm [-q 4]] [-textures] [PATTERN ...]
 //
 // PATTERNs are path.Match globs over th10.dat names ("stage01.std",
 // "se_*.wav"). -list prints every th10.dat file and whether it is embedded.
@@ -37,6 +37,7 @@ import (
 
 func main() {
 	dir := flag.String("dir", "", "TH10 install holding th10.dat and thbgm.dat")
+	archive := flag.String("archive", "th10.dat", "resource archive within DIR (th10.dat or th10c.dat)")
 	out := flag.String("out", "assets", "assets directory to write into")
 	list := flag.Bool("list", false, "list th10.dat and mark what is embedded")
 	bgm := flag.Bool("bgm", false, "encode every thbgm.dat track (needs ffmpeg with libvorbis)")
@@ -47,20 +48,27 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := run(*dir, *out, *list, *bgm, *textures, *quality, flag.Args()); err != nil {
+	if err := runArchive(*dir, *archive, *out, *list, *bgm, *textures, *quality, flag.Args()); err != nil {
 		fmt.Fprintln(os.Stderr, "th10extract:", err)
 		os.Exit(1)
 	}
 }
 
 func run(dir, out string, list, bgm, textures bool, quality float64, patterns []string) error {
+	return runArchive(dir, "th10.dat", out, list, bgm, textures, quality, patterns)
+}
+
+func runArchive(dir, archive, out string, list, bgm, textures bool, quality float64, patterns []string) error {
+	if archive != "th10.dat" && archive != "th10c.dat" {
+		return fmt.Errorf("unsupported resource archive %q", archive)
+	}
 	if dir == "" {
 		var err error
 		if dir, err = datfs.Locate(); err != nil {
 			return err
 		}
 	}
-	dat, err := datfs.Open(filepath.Join(dir, "th10.dat"))
+	dat, err := datfs.Open(filepath.Join(dir, archive))
 	if err != nil {
 		return err
 	}
@@ -95,7 +103,7 @@ func run(dir, out string, list, bgm, textures bool, quality float64, patterns []
 			n++
 		}
 		if n == 0 {
-			return fmt.Errorf("%q matches nothing in th10.dat", pat)
+			return fmt.Errorf("%q matches nothing in %s", pat, archive)
 		}
 	}
 

@@ -86,18 +86,22 @@ const (
 
 // Manager 管理 BGM 和 SE 播放
 type Manager struct {
-	ctx       *audio.Context
-	bgm       *audio.Player
-	bgmVolume float64
-	fadeLeft  int // FadeOutBGM: frames left, 0 = not fading
-	fadeTotal int
-	seVolume  float64
-	seCache   map[string][]byte
-	sePlayers []*audio.Player
-	seQueue   []seRequest // FUN_0043dd10's per-id pan requests for this frame
-	seByID    [len(seTable)]*audio.Player
+	ctx         *audio.Context
+	bgm         *audio.Player
+	bgmVolume   float64
+	fadeLeft    int // FadeOutBGM: frames left, 0 = not fading
+	fadeTotal   int
+	bgmObserver func(int) // FUN_00420b10/00420b90: music-room unlock ordinal
+	seVolume    float64
+	seCache     map[string][]byte
+	sePlayers   []*audio.Player
+	seQueue     []seRequest // FUN_0043dd10's per-id pan requests for this frame
+	seByID      [len(seTable)]*audio.Player
 	// seAux is the unused +6 attribute copied to manager+0x408 (0x43dd8b).
-	seAux [len(seTable)]int16
+	seAux               [len(seTable)]int16
+	nativeVolume        bool
+	nativeBGM, nativeSE uint8
+	bgmPaused           bool
 }
 
 func NewManager(ctx *audio.Context) *Manager {
@@ -114,6 +118,9 @@ func (m *Manager) PlaySE(name string) {
 }
 
 func (m *Manager) playSE(name string, gain float64) {
+	if m.nativeVolume {
+		gain *= nativeGain(m.nativeSE, 0, true)
+	}
 	m.playSEPan(name, gain, 0)
 }
 
@@ -163,11 +170,15 @@ func (m *Manager) loadSEPCM(name string) ([]byte, error) {
 func (m *Manager) Update() {
 	m.flushSE()
 	m.cleanupSE()
-	if m.fadeLeft > 0 {
+	if m.fadeLeft > 0 && !m.bgmPaused {
 		if m.fadeLeft--; m.fadeLeft == 0 {
 			m.StopBGM()
 		} else if m.bgm != nil {
-			m.bgm.SetVolume(m.bgmVolume * float64(m.fadeLeft) / float64(m.fadeTotal))
+			gain := m.bgmVolume * float64(m.fadeLeft) / float64(m.fadeTotal)
+			if m.nativeVolume {
+				gain = nativeGain(m.nativeBGM, int32(m.fadeLeft*5000/m.fadeTotal)-5000, false)
+			}
+			m.bgm.SetVolume(gain)
 		}
 	}
 }
@@ -221,8 +232,34 @@ func (m *Manager) clearSEID(p *audio.Player) {
 // PlayBGM 播放 BGM：[0, Size) 先播一遍，之后循环 [Intro, Size)（thbgm.fmt）。
 // idx 为 0-based BGM 编号。
 func (m *Manager) PlayBGM(idx int) {
+	m.playBGM(idx, true)
+}
+
+// PlayBGMPreview is Music Room's FUN_00433ef0 at 0x43479b: same stream,
+// but unlike FUN_00420b10, auditioning an unseen track does not unlock it.
+func (m *Manager) PlayBGMPreview(idx int) {
+	m.playBGM(idx, false)
+}
+
+// SetBGMObserver connects original playback requests to score ST+0x26.
+// It receives the thbgm.fmt/music-room ordinal, not the WAV name number.
+func (m *Manager) SetBGMObserver(observer func(int)) { m.bgmObserver = observer }
+
+func (m *Manager) playBGM(idx int, unlock bool) {
 	m.StopBGM()
 	m.fadeLeft = 0
+	m.bgmPaused = false
+	if idx < 0 || idx >= len(BGMNames) {
+		return
+	}
+	// The original writes the unlock byte after queuing the request, even
+	// when sound is disabled; device initialization is not the gate.
+	if unlock && m.bgmObserver != nil {
+		m.bgmObserver(idx)
+	}
+	if m.ctx == nil {
+		return
+	}
 	loop, err := NewBGMStream(idx, m.ctx.SampleRate())
 	if err != nil {
 		return
@@ -297,6 +334,7 @@ func (m *Manager) FadeOutBGM(frames int) {
 }
 
 func (m *Manager) SetBGMVolume(v float64) {
+	m.nativeVolume = false // preserve the existing linear-gain API for non-native callers/tests
 	if v < 0 {
 		v = 0
 	}
@@ -310,6 +348,7 @@ func (m *Manager) SetBGMVolume(v float64) {
 }
 
 func (m *Manager) SetSEVolume(v float64) {
+	m.nativeVolume = false
 	if v < 0 {
 		v = 0
 	}

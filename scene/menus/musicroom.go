@@ -2,141 +2,250 @@ package menus
 
 import (
 	"fmt"
-	"image/color"
+	"math"
+	"slices"
+	"strings"
+
+	"th10/anm"
 	"th10/audio"
 	"th10/game"
 	"th10/input"
-	sceneui "th10/scene/ui"
+	"th10/render"
+	"th10/supervisor"
+	"th10/zun"
 
-	"github.com/ebitenui/ebitenui"
-	"github.com/ebitenui/ebitenui/widget"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
-type bgmEntry struct {
-	Index int
-	Label string
-}
-
-// Scene Music Room：ebitenui List 驱动。
+// MusicRoom is TitleInf state 14, FUN_00433ef0. Tracks and comments are
+// original data; the timelines are title.anm/text.anm World VMs.
 type MusicRoom struct {
-	ui      *ebitenui.UI
-	list    *widget.List
-	now     *widget.Text
-	back    game.Scene
-	current int
+	core           nativeMenu
+	back           game.Scene
+	save           *game.SaveData
+	tracks         []MusicTrack
+	selection      int
+	first          int // +0x58d8: ten-row window
+	state          int
+	timer          zun.Timer
+	current        int // playing BGM ordinal, -1 after the warning stops it
+	commentTrack   int // +0x690: comments follow the last confirmed song
+	commentAt      int
+	commentContent [8]string
+	warning        bool // +0x694: second confirmation permits an unseen track
+	labels         []*anm.VM
+	comments       [8]*anm.VM
+	initialized    bool
+	closed         bool
+	Background     func(*supervisor.Supervisor) // optional t10 persistent title backdrop
 }
 
 func NewMusicRoom(back game.Scene) *MusicRoom {
-	s := &MusicRoom{back: back, current: -1}
-	s.build()
+	s := &MusicRoom{back: back, current: audio.BGMTitle}
+	s.timer.Set(1) // FUN_0042c5c0's entry has already passed the calc-tail tick
 	return s
 }
 
-func (s *MusicRoom) build() {
-	theme := sceneui.DefaultTheme()
-
-	root := sceneui.NewRoot(theme, widget.NewAnchorLayout())
-
-	panel := widget.NewContainer(
-		widget.ContainerOpts.BackgroundImage(theme.Panel),
-		widget.ContainerOpts.Layout(widget.NewRowLayout(
-			widget.RowLayoutOpts.Direction(widget.DirectionVertical),
-			widget.RowLayoutOpts.Spacing(10),
-			widget.RowLayoutOpts.Padding(widget.NewInsetsSimple(24)),
-		)),
-		widget.ContainerOpts.WidgetOpts(
-			widget.WidgetOpts.LayoutData(widget.AnchorLayoutData{
-				HorizontalPosition: widget.AnchorLayoutPositionCenter,
-				VerticalPosition:   widget.AnchorLayoutPositionCenter,
-			}),
-			widget.WidgetOpts.MinSize(520, 420),
-		),
-	)
-	root.AddChild(panel)
-
-	panel.AddChild(sceneui.Label("Music Room", theme.TitleFace, theme.HighColor))
-
-	entries := make([]any, 0, len(audio.BGMNames))
-	for i, name := range audio.BGMNames {
-		entries = append(entries, bgmEntry{Index: i, Label: fmt.Sprintf("%02d. %s", i+1, name)})
+func (s *MusicRoom) init(g *game.Game) error {
+	if err := s.core.init(g, 0x5f, 0x67); err != nil { // 0x433f55/0x433f83
+		return err
 	}
-
-	entryFace := theme.ItemFace
-	s.list = widget.NewList(
-		widget.ListOpts.ContainerOpts(widget.ContainerOpts.WidgetOpts(
-			widget.WidgetOpts.MinSize(480, 320),
-		)),
-		widget.ListOpts.ScrollContainerImage(&widget.ScrollContainerImage{
-			Idle:     theme.Panel,
-			Disabled: theme.Panel,
-			Mask:     theme.Panel,
-		}),
-		widget.ListOpts.SliderParams(&widget.SliderParams{
-			TrackImage:   theme.Slider,
-			HandleImage:  theme.Handle,
-			TrackPadding: widget.NewInsetsSimple(2),
-		}),
-		widget.ListOpts.HideHorizontalSlider(),
-		widget.ListOpts.EntryFontFace(&entryFace),
-		widget.ListOpts.EntryColor(&widget.ListEntryColor{
-			Selected:                   color.NRGBA{R: 255, G: 240, B: 200, A: 255},
-			Unselected:                 color.NRGBA{R: 244, G: 238, B: 228, A: 255},
-			SelectedBackground:         color.NRGBA{R: 100, G: 70, B: 40, A: 220},
-			SelectingBackground:        color.NRGBA{R: 80, G: 60, B: 40, A: 200},
-			SelectingFocusedBackground: color.NRGBA{R: 110, G: 80, B: 50, A: 230},
-			SelectedFocusedBackground:  color.NRGBA{R: 140, G: 100, B: 60, A: 240},
-			FocusedBackground:          color.NRGBA{R: 80, G: 60, B: 40, A: 180},
-			DisabledUnselected:         color.NRGBA{R: 120, G: 120, B: 120, A: 255},
-			DisabledSelected:           color.NRGBA{R: 120, G: 120, B: 120, A: 255},
-			DisabledSelectedBackground: color.NRGBA{R: 60, G: 50, B: 40, A: 200},
-		}),
-		widget.ListOpts.EntryLabelFunc(func(e interface{}) string {
-			return e.(bgmEntry).Label
-		}),
-		widget.ListOpts.EntryTextPadding(widget.NewInsetsSimple(4)),
-		widget.ListOpts.EntryTextPosition(widget.TextPositionStart, widget.TextPositionCenter),
-	)
-	s.list.SetEntries(entries)
-	if len(entries) > 0 {
-		s.list.SetSelectedEntry(entries[0])
+	var err error
+	s.tracks, err = musicFiles()
+	if err != nil {
+		return err
 	}
-	panel.AddChild(s.list)
-
-	s.now = widget.NewText(widget.TextOpts.Text(" ", &theme.HintFace, theme.HintColor))
-	panel.AddChild(s.now)
-
-	panel.AddChild(sceneui.Label("Up/Down: Move   Z: Play   X: Back", theme.HintFace, theme.HintColor))
-
-	s.ui = &ebitenui.UI{Container: root}
-	s.ui.SetFocusedWidget(s.list)
-}
-
-func (s *MusicRoom) Update(g *game.Game) error {
-	in := &input.Global
-
-	if in.JustPressed(input.KeyUp) {
-		s.list.FocusPrevious()
+	s.save = g.Save
+	g.BindMusicProgress(nil)
+	s.labels = make([]*anm.VM, len(s.tracks))
+	for i := range s.comments {
+		s.comments[i] = s.core.spawnText(0x27 + i) // 0x4340b0, text.anm
 	}
-	if in.JustPressed(input.KeyDown) {
-		s.list.FocusNext()
-	}
-	if in.JustPressed(input.KeyOk) {
-		s.list.SelectFocused()
-		if entry, ok := s.list.SelectedEntry().(bgmEntry); ok {
-			g.Audio().PlayBGM(entry.Index)
-			s.current = entry.Index
-			s.now.Label = fmt.Sprintf("Now Playing: %s", audio.BGMNames[entry.Index])
-		}
-	}
-	if in.JustPressed(input.KeyCancel) {
-		g.GoTo(s.back)
-	}
-	s.ui.Update()
+	s.initialized = true
 	return nil
 }
 
+func (s *MusicRoom) Update(g *game.Game) error {
+	if s.closed {
+		return nil
+	}
+	if !s.initialized {
+		if err := s.init(g); err != nil {
+			return err
+		}
+	}
+	switch s.state {
+	case 0: // 0x434103..0x434343: two labels per frame, then state 1
+		if s.timer.Cur < 10 {
+			for i := int(s.timer.Cur)*2 - 2; i < int(s.timer.Cur)*2 && i < len(s.tracks); i++ {
+				if i < 0 {
+					continue
+				}
+				v := s.core.spawnTitle(0xad + i) // the labels are in title.anm, not text.anm
+				s.labels[i] = v
+				label := s.tracks[i].Title
+				if !s.TrackUnlocked(i) {
+					label = fmt.Sprintf("No.%d  %s", i+1, strings.Repeat("\uff1f", 11)) // PE 0x46ecf4
+				}
+				render.WriteVMText(v, label, render.TextStyle{Size: 16, Color: 0xffffff})
+				s.moveLabel(i, v)
+			}
+		} else {
+			s.state, s.commentAt = 1, 0
+			s.timer.Reset()
+		}
+	case 1:
+		s.revealComment()
+		if s.timer.Cur > 4 {
+			s.state = 2 // 0x4343f6..0x43440a
+			s.timer.Reset()
+		}
+	case 2:
+		s.revealComment()
+		previous := s.selection
+		if menuRepeat(&input.Global, input.KeyUp) {
+			s.selection = wrapSelection(s.selection-1, len(s.tracks))
+		}
+		if menuRepeat(&input.Global, input.KeyDown) {
+			s.selection = wrapSelection(s.selection+1, len(s.tracks))
+		}
+		if previous != s.selection {
+			menuSE(g, 12)
+			s.warning = false // 0x434667; the playing song/comments remain unchanged
+			if s.selection < s.first {
+				s.first = s.selection
+			} else if s.selection >= s.first+10 {
+				s.first = s.selection - 9
+			}
+			s.moveLabels()
+		}
+		if input.Global.JustPressed(input.KeyOk) {
+			if err := s.Play(g, s.selection); err != nil {
+				return err
+			}
+		}
+		if input.Global.JustPressed(input.KeyCancel) {
+			for _, v := range s.labels {
+				s.core.interrupt(v, 1)
+			}
+			for _, v := range s.comments {
+				s.core.interrupt(v, 1)
+			}
+			s.state = 3
+			s.timer.Reset()
+			menuSE(g, 11)
+		}
+	case 3:
+		if s.timer.Cur >= 10 { // 0x43494e
+			s.Close()
+			if a := g.Audio(); a != nil {
+				a.PlayBGM(audio.BGMTitle) // 0x4349a1..0x4349b1
+			}
+			g.RecordMusicPlayed(0)
+			g.GoTo(s.back)
+			return nil
+		}
+	}
+	s.timer.Tick(1) // FUN_0042cdf0's calc tail
+	s.core.calc()
+	return nil
+}
+
+func (s *MusicRoom) TrackUnlocked(index int) bool {
+	return index >= 0 && index < len(s.tracks) && s.save != nil && s.save.Native.MusicUnlocked(index)
+}
+
+func (s *MusicRoom) Tracks() []MusicTrack { return slices.Clone(s.tracks) }
+
+func (s *MusicRoom) Play(g *game.Game, index int) error {
+	if index < 0 || index >= len(s.tracks) {
+		return fmt.Errorf("music room: track %d out of range", index)
+	}
+	if index != s.commentTrack {
+		s.warning = false
+	}
+	s.commentTrack, s.commentAt = index, 0
+	s.timer.Reset()
+	for _, v := range s.comments {
+		s.core.interrupt(v, 3) // 0x434690..0x4346d4
+	}
+	if !s.TrackUnlocked(index) && !s.warning {
+		s.warning = true // 0x434745..0x43478f
+		s.Stop(g)        // original sound command 3, not a permanently disabled entry
+		return nil
+	}
+	s.current = s.tracks[index].BGMIndex
+	if a := g.Audio(); a != nil {
+		a.PlayBGMPreview(s.current) // 0x43479b; do not unlock the previewed song
+	}
+	g.RecordMusicPlayed(0) // 0x4347e4 writes only the title-song byte
+	s.warning = false
+	return nil
+}
+
+func (s *MusicRoom) Stop(g *game.Game) {
+	s.current = -1
+	if a := g.Audio(); a != nil {
+		a.StopBGM() // FUN_0043e460 command 3 at 0x43477e
+	}
+}
+
+func (s *MusicRoom) revealComment() {
+	if s.timer.Cur%2 != 0 || s.commentAt >= len(s.comments) {
+		return
+	}
+	i := s.commentAt
+	text, colour := s.tracks[s.commentTrack].Comments[i], uint32(0xffffff)
+	if !s.TrackUnlocked(s.commentTrack) && s.warning {
+		text, colour = musicWarning[i], 0x8080ff // 0x434471..0x43448b
+	}
+	render.WriteVMText(s.comments[i], text, render.TextStyle{Size: 16, Color: colour})
+	s.commentContent[i] = text
+	s.core.interrupt(s.comments[i], 2)
+	s.commentAt++
+}
+
+func (s *MusicRoom) moveLabels() {
+	// 0x434547..0x434661: Y=96+(row-first)*20, selected X=64-8.
+	for i, v := range s.labels {
+		s.moveLabel(i, v)
+	}
+}
+
+func (s *MusicRoom) moveLabel(i int, v *anm.VM) {
+	if v == nil {
+		return
+	}
+	if i >= s.first && i < s.first+10 {
+		v.Flags |= anm.FlagDraw
+	} else {
+		v.Flags &^= anm.FlagDraw
+	}
+	target := [3]float32{64, float32(96 + (i-s.first)*20), 0}
+	label := int16(3)
+	if i == s.selection {
+		target[0] -= 8 // double at 0x470c98 is exactly 8
+		label = 2
+	}
+	if math.Abs(float64(v.Pos[1]-target[1])) < 40 { // PE 0x470c64
+		s.core.move(v, target)
+	} else {
+		v.Pos = target
+		delete(s.core.positions, v)
+	}
+	s.core.interrupt(v, label)
+}
+
+func (s *MusicRoom) Close() { s.closed = true; s.core.close() }
+
 func (s *MusicRoom) Draw(screen *ebiten.Image) {
-	screen.Fill(color.RGBA{16, 10, 20, 255})
-	s.ui.Draw(screen)
+	sv := supervisor.Get()
+	s.DrawPorted(sv)
+	if screen != nil && sv.Frame != nil {
+		screen.DrawImage(sv.Frame, nil)
+	}
+}
+
+func (s *MusicRoom) DrawPorted(sv *supervisor.Supervisor) {
+	s.core.draw(sv, s.Background, nil) // Music Room has no extra native draw callback
 }

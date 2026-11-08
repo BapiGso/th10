@@ -10,6 +10,7 @@ import (
 	"th10/anm"
 	"th10/audio"
 	"th10/entity/bullet"
+	"th10/entity/enemy"
 	"th10/entity/item"
 	"th10/entity/laser"
 	"th10/entity/player"
@@ -43,6 +44,9 @@ func NewContext(state *game.GameState) *Context {
 	rng := &zun.RNG{State: 0x1234}
 	if state.HasSeed {
 		rng.State = state.RNGSeed
+	}
+	if r := state.StageRNG(); r != nil && state.StageMode != 1 && state.ReplayMode != 1 {
+		rng = r // DAT_004918b0 is not re-seeded by a live scene-0x0b transfer
 	}
 	c := &Context{
 		State:         state,
@@ -160,6 +164,25 @@ func (c *Context) respawnClear(x, y, r float32) {
 	c.Bullets.CircleClear(x, y, r, false, true, c.BulletEnv)
 	c.Bullets.CircleClear(x, y, float32(r*0.25), false, false, c.BulletEnv)
 	c.Lasers.CircleClear([3]float32{x, y, 0}, r, false, c.LaserEnv)
+}
+
+// EnemyContact is FUN_004266b0 at FUN_0040dc80's 0x40e2df call site:
+// the enemy body (+0xb8/+0xbc), not its shootable hurtbox (+0xb0/+0xb4),
+// against the player's post-movement rectangle. The ignored return value
+// neither cancels the enemy nor produces bullet graze effects.
+func (c *Context) EnemyContact(e *enemy.Enemy) {
+	if c.Player == nil || c.BulletEnv == nil {
+		return
+	}
+	x, y := float32(e.X-gameX), float32(e.Y-gameY)
+	hw, hh := float32(e.BodyWidth)*0.5, float32(e.BodyHeight)*0.5
+	box := c.BulletEnv.Box
+	// FUN_004266b0, 0x4266b3-0x42671c: round each bound to float32;
+	// touching edges count, as with the original bullet hit test.
+	if x+hw < box[0] || y+hh < box[1] || box[2] < x-hw || box[3] < y-hh {
+		return
+	}
+	c.bulletHit() // FUN_004266b0, 0x42671e-0x426761 -> FUN_00426cf0
 }
 
 // bulletHit is the player side of FUN_004266b0's hit: none while a dialog is

@@ -153,15 +153,24 @@ func (p *Player) clearOptions() {
 // history; entries beyond the last option repeat its terminal sample.
 func (p *Player) updatePositionHistory(moved bool) {
 	if !p.focus && moved {
-		end := min(p.optionCount*8, 32)
-		for i := 32; i > end; i-- {
-			p.positionHistory[i] = p.positionHistory[end]
-		}
-		for i := end; i > 0; i-- {
-			p.positionHistory[i] = p.positionHistory[i-1]
-		}
+		p.advancePositionHistory()
+		return
 	}
 	p.positionHistory[0] = [2]int32{p.IX, p.IY} // 0x4255a1-0x4255b3
+}
+
+// advancePositionHistory is the same queue in FUN_004250b0 (0x425532-
+// 0x4255b3) and FUN_00425730 state 0 (0x4257b3-0x425833). Respawn advances
+// it unconditionally, including focused/stationary frames.
+func (p *Player) advancePositionHistory() {
+	end := max(0, min(p.optionCount*8, 32))
+	for i := 32; i > end; i-- {
+		p.positionHistory[i] = p.positionHistory[end]
+	}
+	for i := end; i > 0; i-- {
+		p.positionHistory[i] = p.positionHistory[i-1]
+	}
+	p.positionHistory[0] = [2]int32{p.IX, p.IY}
 }
 
 // FUN_00427960 (Marisa A's O+0x90 callback). The x87 keeps an interpolation

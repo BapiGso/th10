@@ -2,136 +2,224 @@ package menus
 
 import (
 	"fmt"
-	"image/color"
-	"th10/game"
-	"th10/input"
-	selectscene "th10/scene/select"
-	"th10/scene/stage"
-	sceneui "th10/scene/ui"
+	"math"
 	"time"
 
-	"github.com/ebitenui/ebitenui"
-	"github.com/ebitenui/ebitenui/widget"
+	"th10/audio"
+	"th10/game"
+	"th10/input"
+	"th10/replay"
+	selectscene "th10/scene/select"
+	"th10/scene/stage"
+	"th10/supervisor"
+	"th10/zun"
+
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
+// Replay is TitleInf state 12, FUN_004315c0/00431ba0. It lists t5's
+// native .rpy store, loads full input only for the selected entry, and keeps
+// the same scene as the playback return target.
 type Replay struct {
-	ui      *ebitenui.UI
-	list    *widget.List
-	status  *widget.Text
-	back    game.Scene
-	entries []*replayMenuEntry
-	loaded  bool
-	frame   int
+	core       nativeMenu
+	back       game.Scene
+	entries    []*replayMenuEntry
+	loaded     bool
+	state      int
+	timer      zun.Timer
+	selection  int
+	chosen     int
+	chapter    int // native stage position 0..6
+	chapters   [7]int
+	selected   *replay.Replay
+	playing    *stage.Playback
+	status     string
+	returning  bool
+	closed     bool
+	Source     ReplayMenuSource
+	Background func(*supervisor.Supervisor)
 }
 
 type replayMenuEntry struct{ slot game.ReplaySlot }
 
 func NewReplay(back game.Scene) *Replay {
 	s := &Replay{back: back}
-	s.build()
+	s.timer.Reset()
 	return s
 }
 
-func (s *Replay) build() {
-	theme := sceneui.DefaultTheme()
-	root := sceneui.NewRoot(theme, widget.NewAnchorLayout())
-
-	panel := widget.NewContainer(
-		widget.ContainerOpts.BackgroundImage(theme.Panel),
-		widget.ContainerOpts.Layout(widget.NewRowLayout(
-			widget.RowLayoutOpts.Direction(widget.DirectionVertical),
-			widget.RowLayoutOpts.Spacing(8),
-			widget.RowLayoutOpts.Padding(widget.NewInsetsSimple(24)),
-		)),
-		widget.ContainerOpts.WidgetOpts(
-			widget.WidgetOpts.LayoutData(widget.AnchorLayoutData{
-				HorizontalPosition: widget.AnchorLayoutPositionCenter,
-				VerticalPosition:   widget.AnchorLayoutPositionCenter,
-			}),
-			widget.WidgetOpts.MinSize(560, 420),
-		),
-	)
-	root.AddChild(panel)
-
-	panel.AddChild(sceneui.Label("Replay", theme.TitleFace, theme.HighColor))
-	entryFace := theme.HintFace
-	s.list = widget.NewList(
-		widget.ListOpts.ContainerOpts(widget.ContainerOpts.WidgetOpts(widget.WidgetOpts.MinSize(512, 280))),
-		widget.ListOpts.ScrollContainerImage(&widget.ScrollContainerImage{Idle: theme.Panel, Disabled: theme.Panel, Mask: theme.Panel}),
-		widget.ListOpts.SliderParams(&widget.SliderParams{TrackImage: theme.Slider, HandleImage: theme.Handle, TrackPadding: widget.NewInsetsSimple(2)}),
-		widget.ListOpts.HideHorizontalSlider(),
-		widget.ListOpts.EntryFontFace(&entryFace),
-		widget.ListOpts.EntryColor(&widget.ListEntryColor{
-			Selected: theme.HighColor, Unselected: theme.TextColor,
-			SelectedBackground:         color.NRGBA{100, 70, 40, 220},
-			SelectingBackground:        color.NRGBA{80, 60, 40, 200},
-			SelectingFocusedBackground: color.NRGBA{110, 80, 50, 230},
-			SelectedFocusedBackground:  color.NRGBA{140, 100, 60, 240},
-			FocusedBackground:          color.NRGBA{80, 60, 40, 180},
-			DisabledUnselected:         theme.DimColor,
-			DisabledSelected:           theme.DimColor,
-			DisabledSelectedBackground: color.NRGBA{60, 50, 40, 200},
-		}),
-		widget.ListOpts.EntryLabelFunc(func(e interface{}) string { return replayEntryLabel(e.(*replayMenuEntry).slot) }),
-		widget.ListOpts.EntryTextPadding(widget.NewInsetsSimple(4)),
-		widget.ListOpts.EntryTextPosition(widget.TextPositionStart, widget.TextPositionCenter),
-	)
-	entries := make([]any, len(s.entries))
-	for i, entry := range s.entries {
-		entries[i] = entry
+func (s *Replay) init(g *game.Game) error {
+	if err := s.core.init(g, 0x5e, 0x65); err != nil { // 0x431626/0x431653
+		return err
 	}
-	s.list.SetEntries(entries)
-	if len(entries) > 0 {
-		s.list.SetSelectedEntry(entries[0])
+	if s.Source == nil {
+		s.Source = g
 	}
-	panel.AddChild(s.list)
-	s.status = sceneui.Label("Select a saved replay. Empty slots are shown too.", theme.HintFace, theme.HintColor)
-	panel.AddChild(s.status)
-	panel.AddChild(sceneui.Label("Up/Down: Move   Z: Play   X/Esc: Back", theme.HintFace, theme.HintColor))
-
-	s.ui = &ebitenui.UI{Container: root}
-	s.ui.SetFocusedWidget(s.list)
+	s.entries = nil
+	for _, slot := range s.Source.ListReplays() {
+		s.entries = append(s.entries, &replayMenuEntry{slot: slot})
+	}
+	s.selection = wrapSelection(s.selection, len(s.entries))
+	s.loaded, s.state = true, 1
+	s.selected = nil
+	s.timer.Reset()
+	g.BindMusicProgress(nil)
+	if s.returning {
+		if a := g.Audio(); a != nil {
+			a.PlayBGM(audio.BGMTitle) // FUN_0042cdf0's replay-return state
+		}
+		s.returning = false
+	}
+	return nil
 }
 
 func (s *Replay) Update(g *game.Game) error {
+	if s.closed {
+		return nil
+	}
 	if !s.loaded {
-		slots := g.ListReplays()
-		for _, slot := range slots {
-			s.entries = append(s.entries, &replayMenuEntry{slot: slot})
+		if err := s.init(g); err != nil {
+			return err
 		}
-		s.loaded = true
-		s.build()
 	}
-	s.frame++
 	in := &input.Global
-	if in.JustPressed(input.KeyUp) {
-		s.list.FocusPrevious()
-	}
-	if in.JustPressed(input.KeyDown) {
-		s.list.FocusNext()
-	}
-	if s.frame > 10 && in.JustPressed(input.KeyOk) {
-		s.list.SelectFocused()
-		if entry, ok := s.list.SelectedEntry().(*replayMenuEntry); ok {
-			r, err := g.LoadReplay(entry.slot.Number)
-			if err != nil {
-				s.status.Label = err.Error()
+	switch s.state {
+	case 1:
+		if s.timer.Cur > 6 { // 0x43174f..0x4317ac
+			s.state = 2
+			s.timer.Reset()
+		}
+	case 2:
+		before := s.selection
+		if menuRepeat(in, input.KeyUp) {
+			s.selection = wrapSelection(s.selection-1, len(s.entries))
+		}
+		if menuRepeat(in, input.KeyDown) {
+			s.selection = wrapSelection(s.selection+1, len(s.entries))
+		}
+		if s.selection != before {
+			menuSE(g, 12)
+		}
+		if in.JustPressed(input.KeyCancel) {
+			s.state = 5
+			s.timer.Reset()
+			menuSE(g, 11)
+		} else if in.JustPressed(input.KeyOk) {
+			if err := s.openSlot(s.selection); err != nil {
+				s.status = err.Error()
 			} else {
-				p, err := stage.NewPlayback(g, r, 0, selectscene.ReplayScript, s)
-				if err != nil {
-					s.status.Label = err.Error()
-				} else {
-					g.GoTo(p)
-				}
+				menuSE(g, 10)
 			}
 		}
+	case 4:
+		if s.timer.Cur >= 15 { // 0x4318fd: chapter input is locked during the header move
+			before := s.chapter
+			if menuRepeat(in, input.KeyUp) {
+				s.moveChapter(-1)
+			}
+			if menuRepeat(in, input.KeyDown) {
+				s.moveChapter(1)
+			}
+			if s.chapter != before {
+				menuSE(g, 12)
+			}
+			if in.JustPressed(input.KeyCancel) {
+				s.selection, s.state, s.selected = s.chosen, 2, nil
+				s.timer.Reset() // 0x43196e..0x43198b, restore the slot cursor
+				menuSE(g, 11)
+			} else if in.JustPressed(input.KeyOk) {
+				s.state = 3
+				s.timer.Reset()
+			}
+		}
+	case 3:
+		if s.timer.Cur == 2 {
+			s.core.fade = newMenuFade(32) // 0x4319c9..0x4319d2
+		}
+		if s.timer.Cur >= 32 {
+			if a := g.Audio(); a != nil {
+				a.FadeOutBGM(360) // 0x431a18 passes float32 6 seconds
+			}
+			p, err := stage.NewPlayback(g, s.selected, s.chapters[s.chapter], selectscene.ReplayScript, s)
+			if err != nil {
+				s.status, s.state = err.Error(), 4
+				s.timer.Reset()
+				s.core.fade = nil
+			} else {
+				s.playing = p
+				s.core.close()
+				s.loaded, s.returning, s.state = false, true, 0
+				g.GoTo(p) // FUN_004315c0 requests scene 12 at 0x431a32
+				return nil
+			}
+		}
+	case 5:
+		if s.timer.Cur >= 6 { // 0x431a9e
+			s.Close()
+			g.GoTo(s.back)
+			return nil
+		}
 	}
-	if in.JustPressed(input.KeyCancel) {
-		g.GoTo(s.back)
-	}
-	s.ui.Update()
+	s.timer.Tick(1) // FUN_0042cdf0 calc tail
+	s.core.calc()
 	return nil
+}
+
+func (s *Replay) openSlot(index int) error {
+	if index < 0 || index >= len(s.entries) {
+		return fmt.Errorf("replay menu: slot out of range")
+	}
+	slot := s.entries[index].slot
+	if slot.Error != nil {
+		return slot.Error
+	}
+	if slot.Replay == nil {
+		return fmt.Errorf("replay menu: empty slot")
+	}
+	r, err := s.Source.LoadReplay(slot.Number)
+	if err != nil {
+		return err
+	}
+	if err := r.ValidatePlayback(); err != nil {
+		return err
+	}
+	for i := range s.chapters {
+		s.chapters[i] = -1
+	}
+	for i, ch := range r.Chapters {
+		s.chapters[int(ch.Index)-1] = i // FUN_0042a200's stage-indexed pointers
+	}
+	s.chapter = 0
+	for s.chapter < len(s.chapters) && s.chapters[s.chapter] < 0 {
+		s.chapter++
+	}
+	s.selected, s.chosen, s.state, s.status = r, index, 4, ""
+	s.timer.Reset()
+	return nil
+}
+
+func (s *Replay) moveChapter(delta int) {
+	for range len(s.chapters) {
+		s.chapter = wrapSelection(s.chapter+delta, len(s.chapters))
+		if s.chapters[s.chapter] >= 0 {
+			return // 0x4318b0..0x4318f3, skip absent stages
+		}
+	}
+}
+
+func (s *Replay) Slots() []game.ReplaySlot {
+	slots := make([]game.ReplaySlot, len(s.entries))
+	for i, e := range s.entries {
+		slots[i] = e.slot
+	}
+	return slots
+}
+
+func (s *Replay) Close() {
+	s.closed = true
+	s.core.close()
+	s.selected = nil
+	s.entries = nil
 }
 
 func replayEntryLabel(slot game.ReplaySlot) string {
@@ -142,13 +230,60 @@ func replayEntryLabel(slot game.ReplaySlot) string {
 		return fmt.Sprintf("No.%02d  -- empty --", slot.Number)
 	}
 	g := slot.Replay.Global
-	chara := []string{"Reimu", "Marisa"}[g.Character]
-	diff := []string{"Easy", "Normal", "Hard", "Lunatic", "Extra"}[g.Difficulty]
+	chara, diff := "Unknown", "Unknown"
+	if g.Character < 2 {
+		chara = []string{"Reimu", "Marisa"}[g.Character]
+	}
+	if g.Difficulty < 5 {
+		diff = []string{"Easy", "Normal", "Hard", "Lunatic", "Extra"}[g.Difficulty]
+	}
 	return fmt.Sprintf("No.%02d  %-8s %s  %s%c / %s  St%d", slot.Number, g.User,
 		time.Unix(int64(g.Timestamp), 0).Format("06/01/02"), chara, 'A'+g.ShotType, diff, g.Stage)
 }
 
 func (s *Replay) Draw(screen *ebiten.Image) {
-	screen.Fill(color.RGBA{14, 14, 22, 255})
-	s.ui.Draw(screen)
+	sv := supervisor.Get()
+	s.DrawPorted(sv)
+	if screen != nil && sv.Frame != nil {
+		screen.DrawImage(sv.Frame, nil)
+	}
+}
+
+func (s *Replay) DrawPorted(sv *supervisor.Supervisor) {
+	s.core.draw(sv, s.Background, func() {
+		switch s.state {
+		case 2:
+			first := s.selection / 25 * 25 // fixed t5 slots; optional catalog pages stay bounded
+			for i := first; i < min(first+25, len(s.entries)); i++ {
+				colour := uint32(0xff808080)
+				if i == s.selection {
+					colour = 0xffffff00
+				}
+				s.core.smallText(sv, replaySlotLine(s.entries[i].slot), 58, float32(80+(i-first)*15), colour)
+			}
+		case 4:
+			d := s.Details()
+			y := float32(80)
+			if s.timer.Cur < 10 {
+				// 0x431bf7..0x431c1a: selected list row -> Y 80 in ten frames.
+				x := float32(10 - s.timer.F)
+				x = float32(x * float32((s.chosen%25)*15))
+				x = float32(x * math.Float32frombits(0x3dcccccd))
+				y = float32(x + 80)
+			}
+			s.core.smallText(sv, d.Header, 80, y, 0xffffffff)
+			if s.timer.Cur >= 10 {
+				for i, row := range d.Chapters {
+					colour := uint32(0xff808080)
+					if i == s.chapter {
+						colour = 0xffffff00
+					}
+					s.core.smallText(sv, row.Text, 220, float32(128+i*18), colour)
+				}
+			}
+		}
+		if s.status != "" {
+			s.core.smallText(sv, s.status[:min(len(s.status), 60)], 48, 448, 0xffffffff)
+		}
+	}) // FUN_00431ba0, dispatched at 0x42d275
 }

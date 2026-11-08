@@ -87,7 +87,7 @@ type VM struct {
 	hudStars     int32
 	displayNames map[string]string // original spell text -> th10c.dat text
 
-	// FUN_0043c970 kind 1 objects run at calc 0x0e, before this manager.
+	// FUN_0043c970 screen-effect objects run at calc 0x0e, before this manager.
 	shakes     []*screenShake
 	shakeShift [2]float32 // DAT_00491e64/68, copied to Field.Shift by Draw
 
@@ -287,16 +287,37 @@ func (vm *VM) sweepEnemies() {
 	}
 }
 
-// Update runs the enemy manager (FUN_0040d750) for one frame.
-func (vm *VM) Update(ctx *stage.Context) {
-	vm.frame++
+// BindContext exposes the manager before the first player calc. FUN_00417870
+// creates/reuses DAT_00477704 at 0x417b33/0x417b86 before any calc callback;
+// FUN_00428280's laser gate must not wait for the first FUN_0040d750 update.
+func (vm *VM) BindContext(ctx *stage.Context) {
+	if vm == nil {
+		return
+	}
 	vm.ctx = ctx
-	vm.prune()
 	if ctx != nil {
 		ctx.ManagerOrder = vm.ManagerOrder
 		ctx.Boss0 = vm.boss0Pos
 		ctx.Spell = &vm.card
 		ctx.CalcShake = vm.CalcShake // FUN_0043c970 registers independently at priority 0x0e
+		if ctx.RequestShake == nil {
+			ctx.RequestShake = vm.RequestShake // FUN_00415e90, 0x416d85: kind 5, draw 0x31
+		}
+		if ctx.DrawScreenEffects == nil {
+			ctx.DrawScreenEffects = vm.DrawScreenEffects
+		}
+		if ctx.ClearScreenEffects == nil {
+			ctx.ClearScreenEffects = vm.ClearScreenEffects // FUN_0043cb00
+		}
+	}
+}
+
+// Update runs the enemy manager (FUN_0040d750) for one frame.
+func (vm *VM) Update(ctx *stage.Context) {
+	vm.frame++
+	vm.BindContext(ctx)
+	vm.prune()
+	if ctx != nil {
 		if ctx.Anm != nil {
 			vm.gameSpeed = ctx.Anm.GameSpeed // the player's respawn resets it
 		}
@@ -427,9 +448,18 @@ func (vm *VM) updateActor(a *eclActor) bool {
 	if name, ok := vm.checkInterrupt(e, a); ok {
 		vm.interrupt(e, a, name)
 	}
+	// FUN_0040dc80, 0x40e2bd-0x40e2df: body contact is after damage
+	// and both interrupt checks, before sprites and timer decrements.
+	// Flag 0x1 prevents damage, not contact; only 0x2/0x10 suppress it.
+	if e.ECLFlags&0x12 == 0 && a.contactOff.cur < 1 && vm.ctx != nil {
+		vm.ctx.EnemyContact(e)
+	}
 	vm.updateVisual(a)
 	if a.invuln.cur > 0 {
 		a.invuln.add(-1, vm.gameSpeed)
+	}
+	if a.contactOff.cur > 0 {
+		a.contactOff.add(-1, vm.gameSpeed) // FUN_0040dc80, 0x40e558-0x40e56d
 	}
 	a.phase.tick(vm.gameSpeed)
 	return true

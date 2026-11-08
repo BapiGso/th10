@@ -169,13 +169,23 @@ func (s *Stage) runChain(sv *supervisor.Supervisor, legacy bool) {
 		panic("stage: runChain without the legacy nodes needs the STD drawer")
 	}
 	sv.BeginFrame()
+	first := int32(-1 << 31)
 	for _, n := range drawChain {
+		if draw := s.ctx.DrawScreenEffects; draw != nil {
+			// FUN_00449b70 inserts newly registered effects before equal
+			// priorities; MSG's full-screen fade is between 0x30/0x32.
+			draw(sv, first, int32(n.prio))
+		}
+		first = int32(n.prio) + 1
 		if n.enter != nil {
 			n.enter(sv)
 		}
 		if n.draw != nil && (legacy || !n.legacy) {
 			n.draw(s, sv)
 		}
+	}
+	if draw := s.ctx.DrawScreenEffects; draw != nil {
+		draw(sv, first, 1<<31-1)
 	}
 	sv.EndFrame()
 }
