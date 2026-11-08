@@ -1,41 +1,31 @@
 # 表现层：背景（STD）、ANM、渲染的偏差审计（2026-10-26）
 
-结论：原作道中背景是 **STD 脚本驱动的 3D 场景**（相机、FOV、线性雾，quad 内容由 ANM 脚本驱动），
-项目把 PNG 当 2D 平铺。只有 stage1 用了部分 STD 数据，而且是手抄后的 2D 近似。仓库里没有任何代码
-读取 `.std`，ANM 也只做了精灵切换。
+当前结论：七面默认已经使用 STD 脚本驱动的 3D 场景、相机／雾与 quad ANM；gfx／anmdraw／supervisor 和
+World 层表均已实现。旧“没有 STD／逐帧 ANM／3D／shader”的结论已经过时。
+
+> 2026-11-08，t9 按 t4 第 5 阶段审计与第一轮合并代码更新现状。STD／渲染依据为 `FUN_00402720`／`FUN_00403a30`／`FUN_004451c0`；t1 自机依据 `FUN_004247f0`／`FUN_00426cf0`，t2 符卡依据 `FUN_00409280`／`FUN_00408d60`，t3 GUI／MSG 依据 `FUN_00415800`／`FUN_00415e90`，t5 菜单依据 `FUN_00422660`。原审计中的手写背景仅作 legacy 备用描述，不是默认绘制；像素与听音仍待用户。
 
 ## 1. 屏幕与场地
 
 - `game/game.go:13-23`：640×480，场地 384×448，偏移 (32,16)，与原作一致。
-- `stage.go:152` 把场地画到 384×448 离屏图，`:512-518` 放到 (32,16)；`front00s.png` 作为全屏边框
-  （`:168-170`、`:521-523`）。
-- 没有纹理过滤等渲染设置（`cmd/main.go:23` 只设窗口大小）。
+- 默认整帧经 `supervisor`／`gfx` 画到 640×480 Frame，按原 draw 链切场地／全屏 viewport；原 384×448 场地图只在 legacy 背景回退时使用。
+- t3 已用 front.anm 的 World VM 绘制框／标签，旧 ebitenui HUD 与 PNG 对话叠层删除；不能再把 `front00s.png` 描述为默认关卡边框。
+- `gfx` 已实现 point／linear 过滤、wrap／clamp、混合、雾、透视采样、深度与 alpha test；实际 D3D9 像素差异仍待 L3。
 
 ## 2. ANM
 
-- `anm/loader.go` 正确解析 entry 头、精灵表（`u32 id; f32 x,y,w,h`）、脚本与指令
-  （`u16 op,size,time,mask`）；**有意跳过纹理块**，改读 `assets/anm/` 下预先导出的 PNG。
-- `anm/resolve.go` 只处理 0（end）、1（stop）、3（set sprite）、4（goto）、5（loop），其余
-  `default: pc++`（`:74`）。`SpriteAt(age)` 只返回精灵 id。
-- 未实现：位置、旋转、缩放、alpha、颜色、定时插值（56-60）、翻转、中断标签（64）、锚点（65）、
-  blend 模式（66）、render 模式（67）、图层（68）、UV 滚动（70/71）、z-write（73）、寄存器/数学指令（6-47）。
-- **没有逐帧 VM**：`ScriptSprite()`（`sprite/anm.go:76-89`）每次 Draw 都从第 0 帧重放脚本（O(age)），
-  且用的是敌人年龄，不是脚本被设置时刻起算的时间。
-- `sprite/anm.go:68-69` 用 `SubImage` 切精灵，会被裁到纹理边界。背景精灵依赖超出纹理的 UV 环绕，
-  例如 `stage01.anm` 精灵 0 为 `{x:1,y:1,w:510,h:254}`，纹理只有 256×256（横向环绕两次）。
-- **bug**：`sprite/sheet.go:35-42` 的 `Sub()` 按名字缓存，而 `sprite/loaders.go:147`、`:198` 总传 `""`，
-  所以 8 种中玉颜色和 16 帧大型敌人全部取到第一张切图。
-- `sprite/loaders.go:36-41` 只加载 `pl00.anm`、`enemy.anm`、`stgenm01.anm`；`bullet.anm` 嵌入了但从未加载；
-  `stgenm02-07.anm`、`stage0N.anm`、`front.anm`、`ascii.anm` 都不在 assets 中。
-- 原作 ANM VM 已 dump：`.tmp/ecl_dump/top/func_0043ee30.c`（1927 行，92 个 case）。
-  ins_66（`case 0x42`，:1594）写 2 位 blend 模式（0x30）；ins_67（`case 0x43`，:1600）写 4 位 render 模式
-  （0x3c00000）。stage1 代码注释把 "ins_67(6)" 当成加法混合，可能把两者搞反了
-  （`stg1bg2` 地面脚本用的是 `ins_66(1); ins_51(192)`）。blend 值 1 的确切含义待核实。
+- `anm/loader.go` 解析原容器／精灵／脚本，`anm/texture.go` 解码 THTX，嵌入 PNG 与原贴图校验；不是故意忽略纹理的旧路径。
+- 完整 `anm.VM`／`World` 已执行位置、旋转、缩放、alpha／颜色、插值、中断、锚点、blend／render／图层、UV 与数学指令；`resolve.go` 的时间线子集仍是静态辅助，不能代表运行时全部能力。
+- `anmdraw.NewSheet` 与 gfx 的 wrap shader 支持超范围 UV，不再把 STD quad 裁成 SubImage；旧空名字缓存／统一 stgenm01 的敌人路径已删除。
+- 已实现渲染模式 0–4、6、8、9；5／7 未移植，模式 10 粒子仍 panic。ins_66 是 blend、ins_67 是 render mode，二者不混同；模式与原设备状态见 `m4_render_re.md`／`m4_r7.md`。
+- 原 bullet／enemy／pl00／pl01、stage01–07／stgenm01–07 均已嵌入；t3／t5 又接 front／ascii／text／七面 logo，不能保留“front／ascii 不在 assets”说法。旧 17 文件模式调查不自动覆盖新增文件，见 `m4_modes.md`。
+- t1 本体为角色级共享文件的嵌入 VM，判定点／被弹为 World VM；t2 已接环／闪光／1–6 面 cut-in，t3 GUI／MSG 和 t5 菜单也使用 VM。仍是静态图片的副机／自机子弹归第二轮 t6，cdbg 归 t7，字体光栅化仍近似。
 
 ## 3. 各关背景现状
 
-`Stage.Draw` 调用 `s.script.BgDraw(s.field)`（`stage.go:494`）。Go 源码中没有任何 3D、透视、相机、
-`DrawTriangles` 或 shader 代码。
+七面默认由 `std/stddraw` 的 `Drawer.Node7`／`Drawer.Node0A` 在 0x07／0x0a 按 pass 绘制；相机、透视、雾、深度与
+ANM quad 均经 `std`／`supervisor`／`gfx`，不是平铺 PNG。`BgDraw` 只在 `TH10_LEGACY_BG=1` 或缺少内嵌 STD 时回退，
+以下手写滚动／云参数描述仅指这个 legacy 备用路径，不能作为当前默认背景缺口。
 
 - **stage1**（`scene/stage/stage1/ecl_script.go`）：
   - 相机（:122-172）：手写关键帧，只插值 X/Y；忽略相机 Z（-470 到 -630）、朝向（ins_4/5）、
@@ -45,7 +35,7 @@
   - 雾（:218-254）：全屏色块 + 手调 alpha。原作是按深度的线性雾：ins_8/9 设颜色与近/远距离，
     例如 `#70a0f0`，900 到 2000。
   - 云（:280-383）：STD entry 4-7 抄成 Go 字面量，带 `cloudScale=0.72`、视差 0.50/0.68、亮度 0.30 等经验系数。
-- **stage2–6、Extra**：每关填一个底色，`bg1` 匀速平铺，`bg2` 以分数速度 + 低 alpha 平铺，没有用任何 STD 数据。
+- **stage2–6、Extra 的 legacy 背景**：底色与 bg1／bg2 平铺，不使用 STD；默认路径已经使用原 STD，表中滚动量不是默认渲染参数。
 
 | 关 | 文件 | 每帧滚动 | 加载了但没画 |
 |---|---|---|---|
@@ -59,8 +49,9 @@
 原作脚本实际行为示例：stage4 相机倾斜、多次换雾，并通过 `ins_14(0,4)` 触发 ANM 中断；
 stage6 用 up 向量 (0,0,-1)，相机在 X 和 Z 上移动，FOV 从 0.628 变到 0.98。
 
-- **符卡背景**：`cdbg*` 从未绘制。ECL 342（`game_ops.go:376-377`）只记录了符卡名；使用 `cdbg01` 的脚本
-  在 `stgenm01.anm` 中，已加载但没有任何东西去执行它。
+- **符卡背景仍未接**：t2 已移植 ECL 宣言的奖励／计时与已知 World 环／cut-in，342 不再只存名字。
+  cdbg 是 `DAT_004776f4+0x10/+0x3bc` 两个内联 VM，由 `FUN_00404f30` 启动、calc 0x16 步进、draw 0x0e 绘制，不是 World。
+  当前只留步进接口，没有初始化／draw；符卡计时 ≥ 60 隐藏 STD 后会缺背景。现成 dump 已补齐，第二轮 t7 处理中。
 
 ## 4. 原作数据与工具（本地，均在 gitignore 的 `.tmp/` 下）
 
@@ -73,41 +64,35 @@ stage6 用 up 向量 (0,0,-1)，相机在 X 和 Z 上移动，FOV 从 0.628 变�
 - `.tmp/thtk-src/`：thtk 完整 C 源码（未编译）。STD 格式表 `thstd/thstd.c:65-106`；ANM v4 表
   `thanm/thanm.c:280-398`；THA1 解包 `thtk/thdat95.c`。
 
-## 5. 实体精灵来源（`stage.go`）
+## 5. 当前实体与 GUI 来源
 
-| 实体 | 行 | 来源 | 备注 |
+| 实体 | 节点／路径 | 来源 | 剩余边界 |
 |---|---|---|---|
-| 道具 | 543-559 | 彩色矩形 | |
-| 特效 | 860-869 | 圆 | `effect.go` 没有精灵数据 |
-| 激光 | 699-714 | `vector.StrokeLine` | |
-| 自机 | 737-785 | ganim8 网格切 `pl00.png` | 基于时间；`anim.Update()` 在 Draw 中调用（:773） |
-| 自机子弹 | 561-579 | `pl00.anm` 脚本精灵，固定 alpha 128 | |
-| 副机 | 581-595 | `pl00.anm` 脚本 17，只取第 0 帧 | |
-| 妖精 | 608-626 | `enemy.anm`，按 ECL 设置的脚本 id（`game_ops.go:166-188`） | 回退到硬编码 `FairyKind` 网格 |
-| Boss/中 Boss | 631-651 | 总是 `stgenm01.anm` | 2–7 面用一面的文件解析脚本 id，显示错图或缺图；`AnmSlot`（`game_ops.go:164`）存了没用 |
-| 敌弹 | 661-697 | `etama.png` 网格，只有 4 种形状 | `mapBulletType` 把 28 种压成 4 种 |
+| 道具 | 0x19 | item VM／bullet.anm，`FUN_0041b8e0` | 特效 0x189、直接道具采样与 L3 |
+| 特效 | World 层 | 原死亡／擦弹／消弹 ANM，t1 被弹 0x162／0x163 | `entity/effect` 圆池已删除，不能再列为默认来源 |
+| 激光 | 0x1b | beam／emitter VM，`FUN_0041d7c0`／`FUN_0041ea40` | 冻结位、直接激光 trace 与像素 |
+| 自机 | 0x16 直接 ANM.Draw | t1 的 pl00／pl01 嵌入 VM，`FUN_00426360` | 本体已迁移；整个节点仍 legacy，矩形外部门控待 t6 |
+| 自机子弹 | legacy 0x16 | 旧 SHT 脚本静态图／固定 alpha | World 双句柄、命中存活期、层 8 顺序归 t6 |
+| 副机 | legacy 0x16 | 旧脚本 17 静态图 | 两个 World VM／中断／其余机体归 t6 |
+| 妖精／Boss／中 Boss | World 槽 VM | `ecl/visual.go` 按 ANIM 文件表选择 enemy／stgenm0N | 已有方向／蓝色受击，原本体碰撞仍缺，L3 待确认 |
+| 敌弹 | 0x1d | bullet.anm VM 与原弹种表 | 不再四种形状；冻结位与 L3 |
+| GUI／符卡数字／MSG | 0x2b 数组、0x25 数字及 World 层 | t3 的 front／ascii／text／logo／立绘 VM | 真实历史／结算提示接线归 t7，字体与控制器适配待验证 |
+| 关卡内菜单 | 层 15／16 与 0x2e | t5 的 front／ascii／捕获纹理 | 非暂停；捕获时机与小字库待用户 |
 
-ECL 272/273（ANM 特效对象）为空操作（`game_ops.go:409-414`）。
+ECL 272／273 已由 D1c-2 生成自由 VM，依据 `FUN_0040e770` 与 `ecl/visual.go`，不是空操作。
 
 ## 6. 绘制顺序与混合
 
-- 顺序硬编码在 `stage.go:494-509`：背景、道具、自机弹、敌人、敌弹、副机、自机、特效、灵击闪光、Boss HUD。
-- 加法混合只出现在两处：`b.Additive` 的子弹（`stage.go:682-683`，但 ECL 路径总传 `false`，
-  `bullet_ops.go:327`；激光传 `true` 却画成矢量线，标志无效），以及 stage1 的云（`ecl_script.go:16-23`）。
-- 从不读取 ANM 的 blend 模式、render 模式和图层。
-- `README.md:120` 描述的 `render/layer.go`（11 层渲染器）并不存在。
+- 当前 `scene/stage/chain.go` 按原 41 个 draw 节点执行，World 层由 `sv.ANM.DrawLayer` 绘制；实体三节点直接 ANM.Draw，0x14 空桩，不额外画敌人。
+- t3 的 0x23／0x25／0x2b 与 t5 的 0x2e 已接且非 legacy；当前 legacy 标记仅剩 0x16，旧暂停遮罩在链外，手写背景只是显式回退。
+- blend／render／图层／UV／过滤状态按 `FUN_004451c0`／`FUN_004423e0`／`FUN_004425a0` 消费，不是只有旧两处加法混合。t1 的 Rect 在原调用点 flush／失效，依据 `FUN_0043bda0`。
+- 第一轮合并后完整 smoke 已通过，不再被 Rect 桩或绘制列表阻塞；没有做像素 diff，也没有证明 cdbg 未接路径已完成。
 
-## 7. 还原背景所需
+## 7. 剩余表现层工作
 
-1. **STD 解析**：entry（位置/尺寸）、quad（ANM 脚本索引、位置、尺寸）、face/实例（位置），以及带时间戳的脚本段。
-2. **STD VM**：每帧推进相机位置与定时移动（2/3）、朝向（4/5）、up 向量（6）、FOV（7）、雾与定时雾（8/9）、
-   跳转（1）、ANM 中断（14），使用真实缓动（与 ECL 共用 `FUN_0044c350`）。
-3. **3D 投影**：look-at 视图矩阵 + 透视投影到 384×448 场地，参数从 exe 取证；CPU 变换四角，用
-   `DrawTrianglesShader` + 自定义顶点属性（u/w、v/w、1/w）做透视校正采样，`AddressRepeat` 支持 UV 环绕。
-   Ebiten 默认仿射插值，大地面 quad 不做透视校正会扭曲。按 entry 顺序绘制（与原作一致，待核实）。
-4. **雾**：按视深的线性雾（ins_8/9 的近/远），把颜色向雾色混合；按顶点还是按像素待取证。
-5. **完整 ANM VM**（参考 `FUN_0043ee30`）：每实例状态、定时插值、UV 滚动、中断、blend/render 模式
-   （3D 模式让精灵进入 STD 场景）、图层。背景、符卡背景、Boss、特效、子弹都依赖它。
-6. **符卡背景**：ECL 342 启动 `stgenm0N.anm` 中的 cdbg 脚本，画在 STD 层之上。
-7. **小修**：支持 UV 环绕的精灵绘制替代 `SubImage`；修 `Sheet.Sub("")` 缓存 bug；按关卡选择 Boss ANM；
-   不再保留加载了却不用的纹理。
+1. 第二轮 t6 的副机／自机子弹、其余五机体、灵击余项与矩形门控；t7 的 cdbg／宣言 VM／Extra／337／344／符卡 GUI 接线。
+2. 用户按同帧截图核对七面 STD、实体、GUI／MSG／菜单与字体；通过后再删除 `TH10_LEGACY_BG=1` 的备用背景，不因 smoke 通过自动删除。
+3. 继续确认 D3DX／D16／alpha／过滤的像素舍入与捕获时机；STD 特殊路径／冻结等仍见各研究文档。
+4. t8 的模式／最终通关控制与应用级备用 RNG 是接线工作，不是重新实现已完成的 STD／ANM／gfx。
+
+已完成的 STD 解析／VM／雾、透视采样、UV 环绕、逐帧 ANM、敌机文件选择与原 draw 链不再列为待实现。

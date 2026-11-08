@@ -44,6 +44,11 @@ type VM struct {
 	shake  byte
 	shakeT zun.Timer
 	Op13   int32
+	// BackgroundVisible is +0x2a18 bit 0. FUN_00402230 sets it; the
+	// spell calc FUN_00408d60 clears it at timer >= 60, and the spell end
+	// FUN_00409c00 sets it again. It gates the STD slots and passes, not
+	// the effect World's layers 17/18 or the camera script.
+	BackgroundVisible bool
 
 	// The stage's ANM objects (objects.go), idle until Enable. Quads[k] is
 	// the VM of the k-th quad in FUN_00404450's order (Entries in order,
@@ -62,7 +67,7 @@ type VM struct {
 // (0, 0, -600) facing (0, 300, 600), up (0, 1, 0), and the field of view of
 // the camera defaults (FUN_004216f0).
 func New(f *File) *VM {
-	v := &VM{f: f}
+	v := &VM{f: f, BackgroundVisible: true}
 	for i := range v.Slots {
 		v.Slots[i] = *anm.New() // no script until op 14
 	}

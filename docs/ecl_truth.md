@@ -1,18 +1,18 @@
-# TH10 ECL — Ground Truth
+# TH10 ECL：真值与当前边界
 
-Authoritative reference for the Touhou 10 ECL bytecode and our VM, reverse-engineered
-from the official `th10.exe` (Ghidra) and cross-checked against thtk source. This is the
-"don't guess, restore" record: every claim below is backed by a binary function or thtk's
-loader, not inferred from observed behavior.
+依据原版 `th10.exe` 的反编译／汇编与 thtk 格式表，区分原作事实、已移植逻辑和剩余接线。
+不再沿用旧“Pareto 近似”清单，把已经完成的 RNG、缓动、etEx、激光、符卡与 GUI 写成占位。
 
-Sources:
-- `th10.exe` decompiles in `.tmp/ecl_dump/` (regenerate via the pipeline in memory `ecl-re-pipeline`).
-- thtk `thecl10.c` (container + param model), `expr.c` (system-op table), `thecl.h` (opcode constants).
-- Our implementation: `scene/stage/ecl/{loader,opcodes,disasm,vm,game_ops,bullet_ops}.go`.
+> 2026-11-08，t9 按第一轮合并代码补正；过时项索引来自 t4 第 5 阶段审计。新增状态依据为 t4 的 `FUN_0040e770` 349–354／`FUN_00425730` rank，t2 的 `FUN_00409280`／`FUN_00408d60`／`FUN_00409c00`，t3 的 `FUN_00414900`／`FUN_00415800`，t5 的回放模式；M2／D1c-2 的既有事实仍见 `docs/research/m2_motion.md`、`docs/research/m2_bullets.md`、`docs/research/m4_r9.md`。总账与待决分别见 `docs/fidelity.md`、`docs/open_items.md`。
 
-## 1. Container format (on-disk, little-endian)
+来源：
+- `.tmp/ecl_dump/` 下的原作 C／ASM，只作为只读证据。
+- thtk 的 `thecl10.c`（容器／参数）、`expr.c`（系统指令）、`thecl.h`（操作码）。
+- `scene/stage/ecl/` 的 loader、opcodes、vm、game_ops、motion、special、bullet_ops、visual、rank_ops、spell_visual。
 
-From `thecl10.c::th10_open`. Magic `SCPT`.
+## 1．容器格式（磁盘，小端）
+
+来自 `thecl10.c::th10_open`，魔数为 `SCPT`。以下结构记号保留二进制字段名。
 
 ```
 SCPT header (36B):  magic[4] | u16 =1 | u16 include_len | u32 include_off(=36)
@@ -25,126 +25,133 @@ SCPT header (36B):  magic[4] | u16 =1 | u16 include_len | u32 include_off(=36)
                  instruction stream until sub_offsets[i+1] / EOF
 ```
 
-Instruction (16B header + params):
+每条指令为 16 字节头加参数：
 
 ```
 u32 time | u16 id | u16 size | u16 param_mask | u8 rank_mask | u8 param_count | u32 zero
 params... (size-16 bytes) ; next instr = this + size
 ```
 
-`rank_mask` bits `1111LHNE`: bit0 Easy, 1 Normal, 2 Hard, 3 Lunatic (top 4 always set).
+`rank_mask` 为 `1111LHNE`：低四位分别对应 Easy／Normal／Hard／Lunatic，Extra 使用 Lunatic 位。
 
-## 2. Parameters & variables (`FUN_0044fdb0`, thtk dump loop)
+## 2．参数与变量（`FUN_0044fdb0`／`FUN_0044fe40`）
 
-Each parameter consumes one `param_mask` bit, LSB first (`H` type consumes an extra bit
-first). Signature types per opcode come from `th10_fmts` (see `opcodes.go`):
-`S`=int32, `f`=float32, `m`=string(len-prefixed, pad 4), `x`=xor-string, `o`=jump offset,
-`t`=jump time, `D`=typed call-arg(8B: from,to,zero,val), `*`=repeat next.
+每个参数消耗一个 `param_mask` 位，低位优先；`H` 类型先额外消耗一位。格式来自 `th10_fmts`，
+当前表在 `opcodes.go`：`S`＝int32，`f`＝float32，`m`＝带长度并补齐到 4 字节的字符串，`x`＝XOR 字符串，
+`o`＝跳转偏移，`t`＝跳转时间，`D`＝8 字节带类型调用参数，`*`＝重复下一项。
 
-- **mask bit 0** → the 4 bytes are an **immediate** literal.
-- **mask bit 1** → the 4 bytes are a **variable id**:
-  - `id >= 0` → local stack-frame variable at **byte offset `id`** (slots are 4-byte).
-  - `id == -1` → **pop** the typed data stack.
-  - `id < -1` → **special/global** variable (vtable in the binary).
+- 掩码位为 0：四字节是立即数。
+- 掩码位为 1：四字节是变量编号；非负编号是局部帧的字节偏移，−1 表示弹栈，小于 −1 是特殊／全局变量。
+- 浮点参数的变量编号按数值转为 float32 存储，例如局部偏移 12 编为 `12.0f`，特殊编号编为对应负浮点数；整数参数直接存 int32。见 `Param.VarID()`。
+- 参数读取顺序也是语义：弹栈和 RNG 不能重排；分档只读取命中的参数。
 
-Crucial encoding quirk: a **float** parameter encodes its var id as a **float bit pattern**
-(local `%D` at offset 12 is stored as `12.0f`; the aim special as `-9998.0f`). Int params
-store the id directly. See `Param.VarID()`.
+### 常用特殊变量（不是旧一面猜测表）
 
-### Special variables observed in Stage 1 (behavioral mapping — refine via diff)
-| id | meaning |
+依据 `FUN_0044fdb0`／`FUN_0044fe40`、敌机 getter `FUN_00412350` 与表 `0x4125f8`；
+完整表和整数 getter 的差别见 `docs/research/m2_motion.md` 第 8 节、`special.go`。
+
+| id | 含义 |
 |----|---------|
-| -9959 | difficulty / rank (0=E … 4=X) |
-| -9989 | angle from this enemy to the player (`atan2(py-ey, px-ex)`) |
-| -9999, -9987 | random float [0,1) |
-| -9998 | random / spiral seed angle |
-| -9986 | spell-practice / replay flag (0 in normal play) |
-| -10000 | global frame counter |
+| −9959 | 难度，0–4；不是动态 rank |
+| −9960 | 动态 rank |
+| −9989／−9956／−9955 | 分别从最终位置／层 A／层 B 指向自机的角度 |
+| −9999 | 随机 float，范围［0，1） |
+| −9987 | 随机 float，范围［−1，1） |
+| −9998 | 随机有符号值×π |
+| −9986 | 敌机超时标志 0x10000；不是练习／回放模式 |
+| −10000 | RNG 原始取值；不是全局帧计数 |
 
-## 3. Execution model — the virtual clock (confirmed via Boss1/Boss1At1 Time fields)
+## 3．执行模型：虚拟时钟
 
-Each task has a `clock`. Per frame:
-1. If an explicit `wait` is pending, decrement it and yield (clock frozen).
-2. Run instructions while `instr.Time <= clock`.
-3. When the next instruction's `Time > clock`, yield; `clock++` (one frame elapsed).
+依据 `FUN_0044e1a0`，M1／M2 已按原作实现，不使用独立“wait 倒数时钟冻结”近似：
 
-- `+N:` time labels in thtk text = instructions carrying an absolute `Time`; the gap is the wait.
-- `goto/if/unless` (12/13/14) format `ot`: jump to `instrOffset + o`, **set clock = t**.
-  Loops reset their clock with `if @offset t0` (e.g. Boss1's 200-frame loop, Boss1At1's
-  1-frame-per-iteration spiral).
-- `wait`(83) adds **N extra frames on top of** the clock schedule (clock frozen meanwhile).
+1．执行所有时间不大于当前任务时钟的指令；未来指令留到后续帧。
+2．83 的 `wait(n)` 令任务时钟倒退 n，随后按游戏速度推进；`wait(1)` 后的同时间指令下一帧执行。
+3．返回 −1 的游戏指令阻塞，下一帧从同一条重试，时钟不前进，例如 339／340。
+4．12／13／14 的 `ot` 跳到当前指令偏移＋o，同时设置时钟 t；thtk 的 `+N:` 仍是绝对指令时间。
+5．op 1 与空调用栈的 op 10 结束任务；主任务结束删除敌机，异步任务只释放自身。
 
-## 4. System opcodes 0-93 — the stack machine (`expr.c`, confirmed by the ANM VM `FUN_0043ee30`)
+新敌机先首次更新再入链表，敌人逐个执行移动／ECL／伤害／中断／计时；同帧追加是否再次遍历由“先取 next”的尾部规则决定。
+依据 `FUN_0040cfb0`／`FUN_0040d750`／`FUN_0040dc80`，不是先执行全部 ECL 再统一碰撞。
+
+## 4．系统指令 0–93：栈机
+
+依据 `expr.c` 与 ECL 执行器 `FUN_0044e1a0`；不能把 ANM 的 `FUN_0043ee30` 当作 ECL 系统执行入口。
 
 | id | op | id | op |
 |----|----|----|----|
-|1|delete (RET_BIG: kill owner + end)|10|return|
-|11|call (sync, `m*D`)|12|goto `ot`|
-|13|unless (pop; !v → jump)|14|if (pop; v → jump)|
-|15|callAsync (`m*D`)|16|callAsyncId (`mS*D`)|
-|17|killAsync(id)|21|killAllAsync|
-|40|stackAlloc (frame bytes → `var`)|42/44|push int/float|
-|43/45|pop → int/float var|50-58|+ - * / % (I and F variants)|
-|59-70|== != < <= > >= (I/F)|71-77|! && \|\| ^ \| &|
-|78|dec (push old, var--)|79/80|sin/cos|
-|81|polar (out_x,out_y = cos/sin(angle)·r)|82|validRad (normalize angle var)|
-|83|wait(N)|84|neg|88|sqrt|
+|1|结束任务，主任务结束时删除敌机|10|返回，空栈时结束任务|
+|11|同步调用 `m*D`|12|跳转 `ot`|
+|13|弹栈，为假则跳转|14|弹栈，为真则跳转|
+|15|异步调用 `m*D`|16|带编号异步调用 `mS*D`|
+|17|结束指定异步任务|21|结束全部异步任务|
+|40|分配局部帧字节|42/44|入栈 int／float|
+|43/45|弹栈写 int／float 变量|50-58|整数／浮点加减乘除与余数|
+|59-70|整数／浮点比较|71-77|逻辑与位运算|
+|78|入栈旧值后自减|79/80|sin／cos|
+|81|极坐标转矩形坐标|82|规范角度变量|
+|83|wait，时钟倒退|84/85|整数取负／浮点位模式整数取负|
+|88|sqrt| | |
 
-Expression ops pop operands off the typed data stack and push the result; `LOAD` pushes a
-resolved value; `ASSIGN`/`DEC` write a frame variable. `eVal` carries int/float bits and
-coerces on read, so mixed int/float arithmetic (`push int 32` then `addf`) works.
+`eVal` 保存 int／float 位模式并在读取时转换；赋值与自减写回局部变量。85 已按原作缺陷移植，
+是对 float 位模式做整数 neg，不是数学上的浮点取负（`0x44f812`，三面差分已取证）。
 
-## 5. Game opcodes 256-436 (`FUN_0040e770`)
+## 5．游戏指令 256–436（`FUN_0040e770`）
 
-### Enemy create & visuals
-- 256/257/260/261/265-268 enmCreate `mffSSS` = (subName, x, y, hp, score, dropPower). The
-  named sub runs as the new enemy's routine (owner = new enemy). x,y are ECL coords
-  (center-relative X, top-relative Y) → world via `eclToWorld`.
-- 258 anmSelect, 259/262 anmSetSprite/Main, 263/264/269 anmPlay → enemy sprite/fairy kind.
+### 创建与 ANM
 
-### Movement — two layers, final pos = layer A (`enemy+0x58`) + layer B (`+0x84`)
-Each opcode has an A form and a "+2" B form. Most enemies use only layer A.
-- 280/282 setVel `ff` (angle, speed) instant.
-- 281/283 movePosTime `SSff` (time, mode, x, y) — position ease over `time`, easing by `mode`.
-- 284/286 setDir/Vel `ff`.
-- 285/287 moveVelTime `SSff` (time, mode, angle, speed) — velocity ease; **mode 7 =
-  continuous acceleration** (no target); angle uses 2π shortest-path; args ≤ sentinel
-  (`_DAT_00470d58`, ≈ large negative) mean "keep previous".
-- 288/290 moveCircle, 292/293 moveRand `SSf` (time, mode, speed) — **random heading**
-  (not a target point) + steer toward field interior when at a `moveLimit` edge.
-- 296/298 moveAdd, 324 moveLimit `ffff`, 325 clear.
+- 256／257／260／261／265–268 的 `mffSSS` 为子程序、x、y、HP、击破分、主道具；绝对／相对／镜像与 Boss 条件按各 case。270／271 增加 z，处理 3D 相机位移；逻辑使用游戏坐标，不把绘制偏移重复加进状态。
+- 258 选择文件；259／262／269 删除旧槽并头插新 VM，敌机有十个槽；263／264／272／273 是自由 VM，不写槽，272 尾插、273 写旋转。D1c-2 已实现，不再映射成 `SpriteID`／`FairyKind` 或红矩形；隐藏、方向切换、蓝色受击与删除作用于实际 VM。
+- 敌机通过 World 层表绘制，0x14 回调 `0x40d820` 是空桩，不能在这里额外画敌人。
 
-### Enemy state / drops / flow
-320 setHurtbox, 321 setHitbox, 322/323 flagSet/Clear, 326 dropClear, 327 dropExtra,
-329 dropItems, 330 dropMain, 331 setHP, 332 setBoss, 333 timerReset, 334 setInterrupt,
-335 setInvuln, 336 playSound, 338/339 dialog, 340 bossWait, 343 spellEnd,
-355/356 rankPick (5-way by difficulty). 337/341/342/344/347/357-360 are HUD/bookkeeping
-(approximated/no-op).
+### 两层运动
 
-### Bullets — the "ET" emitter templates (each enemy has 16, 0x210B each)
-- 400 etNew, 402 sprite/color, 403 offset, 404 angle/angleInc, 405 speed/speedInc,
-  406 count(ways `+0x4b8`)/stacks(`+0x4ba`), 407 aim, 408 sound, 409 etEx (22 timed
-  modifiers ×0x18B), 411 copy, 410 clearAll, 401 **fire**.
-- 401 emits `stacks × ways` bullets: `FUN_004073e0` loops stacks (outer) × ways (inner)
-  and calls per-bullet `FUN_004067d0(way, stack, aimAngle)`, `aimAngle = atan2(py-y, px-x)`.
-  **Now ported faithfully** (`emit`/`perBullet` in `bullet_ops.go`): speed interpolates
-  `speed → speed2` across stacks; angle by template mode (`tp.aim` = `unaff_EBX[0xfc]`):
-  0/1 centered fan (0 adds aim, odd index mirrors via `-1`), 2/3 even ring (`way·2π/ways`,
-  2 adds aim), 4/5 offset ring (`+π/ways`), 6/7/8 random angle/speed/both. Constants
-  (`0.5, 2π, π, -1`) from `consts.txt`. RNG (modes 6-8) stays behavioral (Pareto).
-- 412 laserOnA `SSffffSf`, 413 laserStOn `SSSfffSSSSfS` (moving / stationary lasers).
-- 420 etCancel / 421 etClear (clear active bullets); 425-427 rank-interpolated count.
+最终位置为层 A（敌机数据 +0x58）加层 B（+0x84），两个运动并行，每层与总和分别做 0．01 网格取整：
 
-## 6. Deliberate approximations (Pareto, per project decision)
-- **RNG**: the VM implements ZUN's `FUN_0044bb90` generator bit-exactly (`rngRaw` in vm.go), but the seed is hard-coded to 0x1234 rather than taken from the replay chapter header, and ANM-side random draws that share the same state are not modelled.
-- **Movement easing modes**: a small curve set (linear / accel / decel / smooth); exact ZUN
-  easing function pointers (`&DAT_00476f78…`) not ported.
-- **Random ET modes (6-8)** and **lasers (412/413)** and **`etEx` (409) timing** are still
-  approximate; the deterministic per-bullet emission (modes 0-5) is ported from `FUN_004067d0`.
-- **UI/HUD opcodes** (spell cards, chapters, stars, screen shake) are no-ops.
-- **Op 334** (fixed in M1, 2026-10-27) registers one of 8 boss interrupt slots (HP threshold, time, sub) checked every frame by `FUN_004127a0`, which replaces the main routine; see `scene/stage/ecl/interrupt.go` and `docs/research/m1_interrupts.md`.
+- 280／282 是立即 setPos `ff`，不是角度／速度；281／283 为 `SSff` 位置插值。
+- 284／286 立即设角度／速度；285／287 做定时插值，只有这组显式角度受 flip 镜像。mode 7 限时累加，mode 17 二阶累加，mode 8 Hermite，不是永久加速度或缺失缓动。
+- 288／290 为 `ffff` 绕圆，289／291 为 `SSffff` 定时绕圆；292／293 按随机航向并在边界向内修正。
+- 294／295 把 A／B 位置设为 Boss 位置；296／297 以 `fff` 加 xyz；298／299 以 `ff` 设置对应层的 delta，再把层位置设为 Boss 位置；324／325 设置／清除移动边界。
+- 未设置哨兵是 −999999；float32 常量与 `FUN_0044c350`／`FUN_00412ac0`／`FUN_00404610` 的分组已移植。
 
-These are the points to tighten with the differential harness (dump live th10.exe per-frame
-enemy/bullet traces for Stage 1 and diff against the VM).
+完整语义见 `docs/research/m2_motion.md` 第 4–8 节。
 
-Full gap audit: `docs/research/ecl_gaps.md`.
+### 状态、掉落、符卡与 GUI
+
+| 指令 | 当前实现与依据 |
+|---|---|
+| 320／321、322／323 | 判定盒与标志；0x10 隐藏／显示槽 VM，已实现 |
+| 326–330 | 掉落个数／椭圆／主道具与立即散布，`FUN_0040c9d0` 的 RNG 消耗已实现 |
+| 331–335、340／341 | HP、Boss 槽、阶段时钟、八槽中断、无敌、只等 Boss 0 号槽与超时子程序；`FUN_00412720`／`FUN_004127a0` 已实现 |
+| 336 | 原 SE 表与 x 声像，t4 已接 `FUN_0043dd10` |
+| 337 | t2 仅移植 `sampleShake` 主体；原构造／回调未接，旧运行时图案仍在，第二轮 t7 处理中 |
+| 338／339／345／346 | MSG 打开／信号阻塞／扫敌与发射禁射半径已实现；MSG 不冻结世界 |
+| 342／348／357–359 | t2 按 `FUN_00409280` 宣言，arg 2 仍求值但不作奖励；奖励＝`(stage*3+10)*(GameState.Faith/10)*10`；难度偏移分别为 0、0、＋难度、＋难度−1、＋难度−2 |
+| 343／362 | `FUN_00409c00` 结算／内存历史与耐久标志；343 不清弹／激光、不产道具。耐久卡不衰减、超时保留收取 |
+| 344 | `DAT_00474c84` 接线仍缺，Boss 名字暂用敌人类型适配；第二轮 t7 处理中 |
+| 347／360 | t3 已写四个比例／ARGB 色段和原星数，经 GUI VM 绘制，不再是空操作／白刻度 |
+| 349–354 | t4 已逐条实现；349／352 保留低、中档都读 p0 的缺陷，350／353 只读 p0–p4，351／354 做 float32／int32 插值；354 格式 `SSS`，七关使用次数均为 0 |
+| 355／356、366／367 | 按难度取值、灵击换实际槽脚本与游戏速度已接；不再只存一个脚本号或速度标志 |
+
+符卡数值、内存历史、演出与持久化是不同边界：历史写入按 `!ReplayMode`，bool 表示原 mode == 1；
+GUI 的真实历史／收取／失败接线归 t7，score.dat 与原模式字段归 t8。
+
+### 弹幕与激光
+
+- 每敌机 16 个 0x210 字节 ET 模板；400 重置模板，401 按外层 stacks／内层 ways 发射，402–409 设置精灵、偏移、角度、速度、数量、模式、声音和变换链，411 拷贝。
+- `FUN_004073e0`／`FUN_004067d0` 的模式 0–8、出生状态、float32 速度、2000 槽游标分配、按精灵尺寸出屏与 etEx 顺序执行均已移植，随机模式不再是旧近似。实现位于 `entity/bullet`，不是旧 `emit`／`perBullet` 代码。
+- 激光 412–419／428–429／431–434 已接 `entity/laser` 的 `FUN_0041c510`／`FUN_0041c480`／`FUN_0041c330` 等；模板变换表、句柄和直线／无限长生命周期已实现，直接原作激光 trace 仍缺。
+- 410 按原作空矩形消弹并清激光；420／421 以敌机为圆心消弹，出道具参数分别为 1／0，产物使用真正的种类 8 消弹道具；422–427 按 rank 分档／插值，435／436 按难度选择。
+- 掉落／拾取与击破得分经 `FUN_0041bb00`／`FUN_0041afd0`／`FUN_00409d90` 等实现，不是旧矩形道具或二次信仰倍率。
+
+逐条参数顺序、格式、各关使用次数及未接冻结位见 `docs/research/m2_bullets.md`。
+
+## 6．剩余边界与验收
+
+- 主 RNG 按章节 +0x02 恢复，ECL／子弹 ANM 共用 `ctx.RNG`；无回放时仍用 0x1234。t4 已查明备用 RNG 的启动毫秒低 16 位来源；当前每个 GameState 种子 0，架构师已定应用级一次播种策略，第二轮 t8 实现，不能再写“备用种子未知”。
+- t2 的前三个宣言 World VM、cdbg 初始化／draw 0x0e、Extra／344、震屏运行时和符卡 GUI 接线仍缺，第二轮 t7 处理中；t3 已有 GUI／MSG／数字，不把全部 HUD 指令统称空操作。
+- 本体碰撞、自机 state 3、冻结位与缺少直接原作采样等仍见各研究文档；完整字体与像素效果不称位精确。
+- 六章 th10_05 trace 在第一轮合并后与基线逐字节相同，motion 为 15853／17733／29763／29469／39343／40099；c0 正式参考是 `orig_d.txt`。这是架构师提供的验收，t9 未复跑。
+- `-scope all` 仍须用户用修正探针重采 score／faith／state／invinc，道具与激光直接差分也未齐；golden 是自身回归快照，不是原作真值。
+
+缺口审计见 `docs/research/ecl_gaps.md`，差分用法见 `docs/harness.md`。

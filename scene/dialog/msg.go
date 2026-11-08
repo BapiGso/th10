@@ -16,11 +16,13 @@ package dialog
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"sync"
 
 	"th10/gamedata"
 
 	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 // ParseMSG decodes a TH10 .msg byte slice into its entries in file order, the
@@ -136,6 +138,7 @@ type StageMSG struct {
 	Entries    [][]Instr
 	PlayerName string
 	BossNames  []string // the right speaker of each entry
+	Stage      int
 }
 
 var (
@@ -162,14 +165,60 @@ func LoadStage(stage string, character int) *StageMSG {
 	path := fmt.Sprintf("msg/st%02d_%02d.msg", stageNum, character&1)
 	if data, err := gamedata.ReadFile(path); err == nil {
 		if entries := ParseMSG(data); len(entries) > 0 {
-			sm = &StageMSG{Entries: entries, PlayerName: "博麗霊夢", BossNames: msgSpeakers[stage].rightBySeg}
+			sm = &StageMSG{Entries: entries, PlayerName: "博麗霊夢", BossNames: msgSpeakers[stage].rightBySeg, Stage: stageNum}
 			if character&1 == 1 {
 				sm.PlayerName = "霧雨魔理沙"
+			}
+			if localized, err := gamedata.ReadFile(fmt.Sprintf("msg/st%02d_%02d.mst", stageNum, character&1)); err == nil {
+				attachDisplayTexts(entries, localized)
 			}
 		}
 	}
 	msgCache[key] = sm
 	return sm
+}
+
+// attachDisplayTexts extracts only th10c.dat's GBK-encoded traditional text.
+// It never replaces a timestamp, opcode or argument with the patch's stream.
+// Existing View/timing tests intentionally continue to see original text.
+func attachDisplayTexts(entries [][]Instr, data []byte) {
+	if len(data) < 4 {
+		return
+	}
+	n := int(binary.LittleEndian.Uint32(data))
+	if n != len(entries) || 4+n*8 > len(data) {
+		return
+	}
+	dec := simplifiedchinese.GBK.NewDecoder()
+	for i, code := range entries {
+		start := int(binary.LittleEndian.Uint32(data[4+i*8:]))
+		end := len(data)
+		if i+1 < n {
+			end = int(binary.LittleEndian.Uint32(data[4+(i+1)*8:]))
+		}
+		if start < 0 || start > end || end > len(data) {
+			continue
+		}
+		localized := parseMSGStream(data, start, end, dec)
+		var texts []string
+		for _, in := range localized {
+			if in.Op >= msgLine1 && in.Op <= msgText {
+				// FUN_00417010 / sprintf consumes a NUL-terminated string.
+				// Some patch entries retain old encrypted padding after it.
+				text, _, _ := strings.Cut(in.Text, "\x00")
+				texts = append(texts, text)
+			}
+		}
+		j := 0
+		for k := range code {
+			if code[k].Op >= msgLine1 && code[k].Op <= msgText {
+				if j < len(texts) {
+					code[k].DisplayText = texts[j]
+				}
+				j++
+			}
+		}
+	}
 }
 
 // Open starts entry id (ECL 338's FUN_00415db0); nil when there is no such

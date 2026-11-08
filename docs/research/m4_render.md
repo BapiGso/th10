@@ -1,8 +1,10 @@
 # M4 / L3 渲染架构设计（2026-11-01）
 
 本文是 3D 背景（M4）、ANM 绘制（M3 剩余部分）和截图差分（L3）共用的基础设施设计。现状见
-`presentation_gaps.md`。逻辑侧已经就绪：STD 相机 VM 与投影（`std/`，四面全章差分）、ANM VM
-（`anm/vm.go`，驱动子弹与特效）。缺的是"怎么画"和"怎么验证画得对"。
+`presentation_gaps.md`。STD／gfx／anmdraw／supervisor 与 World 层绘制已实现，第一轮又接了本体、GUI／MSG、
+符卡已知环／cut-in 与关卡内菜单；不再是只完成逻辑、尚无绘制的阶段。剩余缺口是部分实体／符卡接线和 L3 验证。
+
+> 2026-11-08，t9 按 t4 第 5 阶段审计与合并代码更新 D1 状态；原设计契约与历史任务分工保留，不作为第二轮调度指令。t1／t2／t3／t5 的依据为 `FUN_00426360`／`FUN_00409280`／`FUN_00415800`／`FUN_00422660`。第二轮实际分工见共用规则第 8 节；t4 已更正的矩形语义与 0x2e 定义不重复。
 
 分工：本文和 §2 的接口由我设计；§1 取证、§3 工具和 §4 中标注 Haiku 的实现都交给 Haiku 子代理，
 我审 diff。
@@ -206,29 +208,29 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
   - 坐标沿用屏幕坐标：Ebiten 的 SubImage 与原图共用坐标系。
   - 偏移取 `sv.ANM.Shift`，也就是此刻 ANM quad 会加上的平移。
 
-  D1a 的节点分配：
+  当前节点分配（原 D1a 分配已被后续实现替换）：
 
   | 节点 | 内容 | 依据 |
   |---|---|---|
-  | 7 | `BgDraw` 画到离屏的场地图，再贴到 (32, 16) + Field.Shift，裁到场地区域 | STD 背景；STD 会抄 Field.Shift |
+  | 7 | 默认 STD Node7，pass 0–7；BgDraw 只作显式 legacy 回退 | `FUN_00402850`；S3 |
   | 9、0xb、0xd | World 层 0、1、2 | §1.3 |
-  | 0xa | World 层 17、18 | `FUN_00402ca0` 先画层 17、18，再画 pass 8–11 |
+  | 0xa | STD Node0A，按原顺序交错 World 层 17／18 与 pass 8–11 | `FUN_00402ca0`；S3 |
   | 0xf、0x10–0x13、0x15、0x17、0x18、0x1a、0x1c、0x21、0x24、0x29、0x2a | World 层 3–16 | §1.3 |
-  | 0x14 | 敌人 | |
-  | 0x16 | 自机子弹、子机、自机、特效 | 这个顺序是猜的，等 R6-F 追踪调用点 |
-  | 0x19 | 道具 | |
-  | 0x1b | 激光 | |
-  | 0x1d | 子弹 | |
-  | 0x2b | Boss HUD、对话、front 框、HUD 文字 | GUI 节点；内部顺序沿用项目现状 |
-  | 0x2e | 暂停遮罩 | 猜测，`FUN_00422150` 待查 |
+  | 0x14 | 空桩，不画敌人；敌机槽 VM 在 World 层 | D1c-2，`0x40d820` |
+  | 0x16 | t1 自机本体直接 ANM.Draw；旧副机／自机子弹尚在此节点，矩形门控传 false | `FUN_00426360`；节点仍 legacy，完整 World 层 8 迁移归 t6；旧几何特效已删除 |
+  | 0x19／0x1b／0x1d | 道具／激光／敌弹直接 ANM.Draw，均非 legacy | D1c，`FUN_0041b8e0`／`FUN_0041d7c0`／`FUN_004066e0` |
+  | 0x23 | t3 独立得分弹出字，非 legacy | `FUN_0042b4d0`／`FUN_0042b780` |
+  | 0x25 | t3 的八奖励／五历史数字 VM，原属符卡 helper | `FUN_00409270`→`FUN_004091c0`；真实历史／结果调用归 t7 |
+  | 0x2b | t3 GUI 内嵌数字／Boss 箭头与矩形；框／标签／MSG 等自由 VM 在 World 层 | `FUN_00415af0`→`FUN_00415800`；非 legacy，不把全部 front 对象塞进 0x2b |
+  | 0x2e | t5 排行／名字／回放菜单文字，非 legacy | `FUN_00422aa0`→`FUN_00422660`；沿用 R11／t4 的非暂停定义，旧暂停遮罩在链外 |
 
-  S3 之前，层 0–2、17、18 在 `Start` 设的 Screen 相机下画：不裁到场地，也不震。
-  原作里 STD 节点会调用 `Perspective(Field)`，所以至少 ANM.Shift 会变成 Field.Shift；当前相机是否也切换，由 S3 取证。
+  S3 已按原作由 STD 节点把相机块载入 Field 并调用 Perspective，层 0–2／17／18 的相机不再停在早期 Screen 近似。
+  0x0e 仍无 cdbg draw；完整 smoke 通过不能证明这个未接节点已完成。
 - **D1 拆分。**
   - **D1a**：supervisor 实现、`anmdraw.Reset`，`Stage.Draw` 改为 `drawFrame` 加 legacy 节点。
   - **D1b**：World 层改用 `ANM.DrawLayer`。需要 `NewSheet`（R6-A），mode 0–3 的部分可以在 A1b 之前做。——**已完成**（2026-11-01）：`scene/stage/chain.go` 的 `layers` 调 `sv.ANM.DrawLayer`；未移植的节点标 `legacy`。
-  - **D1c**：实体节点（敌人、子弹、激光、道具、自机）改用 `anmdraw`，依据 R6-F 的调用点。——2026-11-01 道具、激光、子弹（0x19、0x1b、0x1d）**已完成**（依据 `m4_r8.md`）；敌人（0x14 为空桩，敌人 VM 在 World 层）与自机（0x16）待 R9、R10 取证后移植。
-  - **D1d**：GUI，即 front.anm，以及 `FUN_00415af0` → `FUN_00415800` 的 VM 数组。
+  - **D1c**：道具／激光／敌弹已迁移，D1c-2 已迁移敌机槽；t1 已迁移本体／判定点／被弹并实现 Rect，旧副机／自机子弹与矩形外部门控归第二轮 t6，不能继续写“敌人待 R9”。
+  - **D1d**：t3 已接 GUI／MSG／标题／弹出字／符卡数字，t5 接关卡内菜单；0x2b／0x2e 非 legacy，字体与控制器仍有边界，符卡精确接口归 t7。
   - P2（`-shot`）排在 D1a 之后，直接截 Frame。
 
 ### 2.3 ANM 绘制
@@ -256,7 +258,7 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
   - TFACTOR 不进 `gfx`：模式 8 的 stage 0 参数是 TFACTOR 的时间段与 vtype 2 完全重合，`anmdraw` 把设备侧 TFACTOR 写进每个顶点的 `Diffuse`。
   - 精灵指令重设的矩阵缓存（VM+0x27c）用 `anm.VM.Mat` 与 `MatStale` 表达，`draw8` 在读之前补算。
   - 取证的更正见 `m4_r7.md` “R7 审校更正”。
-- `sprite.DrawVM` 迁移期保留，D1 把全部节点迁走后删除。
+- 旧 `sprite.DrawVM` 已无关卡运行时调用；sprite 的静态辅助仍被旧副机／自机子弹使用，不据此删除整个包。剩余迁移归 t6。
 
 ### 2.4 STD 场景
 
@@ -291,9 +293,10 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
   截图失败只打印一行并跳过该帧，结束时列出没截到的帧。GDI 路径只编译过，待用户实测。
 - **原作设置。** 窗口模式（th10.cfg +0x1d = 1）、32 位色（+0x1a = 0），由用户设置并运行。
 
-### 3.2 复刻侧：游戏本体的 `-shot` 模式
+### 3.2 复刻侧：游戏本体的 `-shot` 模式（设计，尚未接 CLI）
 
-Ebiten 没有真正的无头模式。所以截图由游戏本体完成，这样保证用的是同一套绘制代码：
+Ebiten 没有真正的无头模式。拟议截图由游戏本体完成，以保证同一套绘制代码；下列是设计接口，
+当前 cmd 只有 debug-stage／debug-diff／debug-power，不能把这些拟议 flag 当现成命令：
 
 ```
 th10 -replay X -chapter N -shot-frames F1,F2,… -shot-dir D
@@ -314,7 +317,9 @@ th10 -replay X -chapter N -shot-frames F1,F2,… -shot-dir D
   - 差异热图 PNG。
 - 先只报告、不判失败。收敛后再在 `docs/harness.md` 定 L3 阈值。
 
-## 4. 任务拆分与顺序
+## 4. 原 M4 任务拆分与当前进度
+
+此表保留原设计分工，不代表第二轮仍由原代理实施；现行范围为共用规则中的 t6／t7／t8／t9。
 
 | # | 任务 | 执行 | 验证 |
 |---|---|---|---|
@@ -336,8 +341,8 @@ th10 -replay X -chapter N -shot-frames F1,F2,… -shot-dir D
 | S3 | `stddraw`（依赖 R4、G3、A1b）——**已完成**：七面背景全部改用 STD 绘制（节点 0x07、0x0a），手写 `BgDraw` 仅由 `TH10_LEGACY_BG=1` 切回（或无内嵌 STD 时回退），待用户目视对比后删除 | Haiku | 用户目视（`TH10_LEGACY_BG=1` 对比）；`TestSTDSmoke`；L3：各面背景 PSNR（待 P2） |
 | D1a | supervisor 与绘制链（§2.2）：契约与规格测试（我），实现与 `Stage.Draw` 迁移（Haiku）——**已完成**，待用户目视确认 | Haiku | `go test ./supervisor/ ./scene/stage/ ./anm/anmdraw/`；画面与迁移前相同，除了震屏只作用到 0x24 之前的节点 |
 | D1b | World 层改用 `ANM.DrawLayer`（`NewSheet` 已完成）——**已完成** | Haiku | `TestLayersANM`、`TestReplayDrawSmoke`；L3（待 P2） |
-| D1c | 实体节点改用 `anmdraw`（依赖 R6-F、A1b）——道具、激光、子弹**已完成**；敌人、自机待 R9、R10 | Haiku | `TestReplayDrawSmoke`；L3 |
-| D1d | GUI 与 front.anm | Haiku | L3 |
+| D1c | 道具／激光／敌弹与 D1c-2 敌机已完成；t1 本体／判定点／被弹／Rect 已接，副机／自机子弹与矩形门控归 t6，0x16 仍 legacy | 原 M4 分工，后续 t1／t6 | 合并后完整 smoke 通过；L3 与剩余实体接线待验收 |
+| D1d | t3 GUI／MSG／0x23／0x25／0x2b、t5 菜单／0x2e 已接；cdbg／宣言／Extra／震屏与精确符卡接口归 t7 | 原 M4 分工，后续 t3／t5／t7 | 合并后完整 smoke 通过；字体与 L3 不自动升级 |
 
 可以并行的第一批：R1–R5、P1、S1，三者改的文件互不重叠；我同时做 G1。
 

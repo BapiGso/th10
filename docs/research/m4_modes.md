@@ -2,13 +2,16 @@
 
 依据：`anm/vm.go`（`case 65`、`case 67`、`case 74`、`case 84`、`case 88`、`Start`、`Reset`、`readI`、`intPtr`），`anm/anmdraw/anmdraw.go`（`Draw`、`DrawLayer`），`anm/anmdraw/mode46.go`（`corners` 的锚点 3 panic），`docs/research/m4_s3.md`（§1 方法）。调查程序是一次性的 `.tmp/scratch/modesurvey/main.go`（不在仓库包内，`.tmp` 已被 `.gitignore` 忽略），输出保存在 `.tmp/scratch/modesurvey/out.txt`。
 
+> 2026-11-08，t9 按 t4 第 5 阶段审计补正调用图与文件范围。下列静态矩阵仍是 2026-11-01 的 17 文件样本，未重跑或扩展计数；当前第一轮合并树有 28 个原 `.anm`，新增 pl01、front／ascii／text／七面 logo，不能把旧 768 脚本统计冒充全部现行资源。t1／t2／t3／t5 的接入依据分别为 `FUN_004247f0`、`FUN_00409280`、`FUN_00415800`／`FUN_00415e90`、`FUN_00422660`。
+
 ---
 
 ## 0. 结论
 
-调查覆盖嵌入的全部 17 个 .anm 文件，共 768 个脚本，逐脚本扫描，子脚本单独计。
+原调查覆盖当日嵌入的 17 个 .anm 文件，共 768 个脚本，逐脚本扫描，子脚本单独计；这是历史样本范围，不是当前 28 文件的全集。
 
-**一行结论**：嵌入的 .anm 只用到模式 0、1、2、4、6、8、9。模式 5、7 与 10–15 一个脚本都没有。模式 9 只出现在 `bullet.anm`（18 个脚本，全部是 op 88 子脚本）。在会 panic 的模式 5、7、9 中，只有模式 9 实际出现。（2026-11-01 更新：模式 9 已移植，`anm/ring.go`、`anm/anmdraw/mode9.go`；5、7 仍 panic。）
+**一行结论**：该 17 文件样本只用模式 0、1、2、4、6、8、9，5／7／10–15 均无脚本；模式 9 只在 bullet.anm 的 18 个 op 88 子脚本。
+当前模式 9 已由 `anm/ring.go`／`anm/anmdraw/mode9.go` 移植并通过 World 上屏，不能再称“会 panic 但尚不调用”。5／7 未移植，模式 10 粒子也仍 panic；旧零使用统计不自动推广到新增文件。
 
 下表按 (文件, 模式) 列出模式 4、5、6、7、9、10–15 的使用情况。“脚本数”是静态扫描中可设置该模式的脚本个数（默认模式 0 也计入）。
 
@@ -43,12 +46,12 @@
 
 ## 1. 方法
 
-1. **文件清单**：`fs.Glob(assets.Assets, "anm/*.anm")` 列出 17 个文件（bullet、enemy、pl00、stage01–07、stgenm01–07），用 `gamedata.ANM` 解析。不读 th10.dat。
+1. **原文件清单**：当日 `fs.Glob(assets.Assets, "anm/*.anm")` 列出 17 个文件（bullet、enemy、pl00、stage01–07、stgenm01–07），用 `gamedata.ANM` 解析。不读 th10.dat；当前资源已增加，本文不重新生成该矩阵。
 2. **模式**（同 m4_s3.md §1 第 3、4 条）：op 67 设置 `Flags` 的模式位，模式 = `Arg(0) & 0xf`（`case 67`）；op 84 把模式置为 9（`case 84`）。
 3. **默认模式 0**（同 m4_s3.md §1 第 5 条）：`Reset` 后 `Flags = 7`，模式为 0。本次调查的判定规则与 m4_s3 相同。另加一个更保守的规则（把 op 63、69、75、81 也当作控制指令）计算 `default0Ext`。两者在所有脚本上结果一致（§7 限制 3）。
 4. **锚点**：op 65 把 `Flags` 的位 18–19 设为 `Arg(0) & 3`（X 轴），位 20–21 设为 `(Arg(0) >> 16) & 3`（Y 轴）。`anmdraw` 读取 `Flags>>18&3` 与 `Flags>>20&3`，与之一致。
 5. **op 84 参数**：`RingN = readI(in, 0)`，即掩码感知读取。记录原始 `Arg(0)` 与掩码位。
-6. **$10000 / $10001 的写入**：op 5、6、8、10、12、14、16、18、20、22、24、26、40 的目的参数是参数 0，经 `intPtr(in, 0)` 写入。只有掩码位 0 置位且参数值为 10000 或 10001 时，才是对变量的写入（`intPtr` 只在掩码置位时映射到变量）。`$10000` 对应 `vm.I[0]`，`$10001` 对应 `vm.I[1]`（`readI` 中 `v-10000` 的索引）。`docs/research/m4_r6.md` 第 20、306 行把模式 9 的顶点数记为 `2·VM+0x30c`，任务说明据此把 `$10000` 对应 `VM+0x30c`、`$10001` 对应 `VM+0x310`。这两个偏移没有在二进制中核对（`m4_r6.md` 第 309 行称 `VM+0x30c` 的写入者未找到），Go 源码的 `I` 也没有偏移注释。
+6. **$10000／$10001 的写入**：op 5、6、8、10、12、14、16、18、20、22、24、26、40 通过 `intPtr` 写参数 0；掩码置位且编号为 10000／10001 时，分别写 `vm.I[0]`／`I[1]`。R7-E 与 `FUN_0043ee30` 的 `0x44115d–0x44133e` 已核对 VM+0x30c／+0x310；`fillRing` 每帧读取它们，RingN 只决定缓冲大小，不再列“偏移未核对”。
 7. **op 88 子脚本**：字面 id（掩码位 0 清，且值在 0–9999 之间）递归跟进。每个子脚本作为独立 VM 单独计数，`parents` 列出所有父脚本（同一父脚本多次 spawn 同一子脚本时会重复列出）。
 8. **op 74**：参数非零的脚本。`flagScroll` 由 `Flags&^0x2000 | Arg<<13 & 0x2000` 设置，因此只有参数的最低位为 1 时置位；偶数的非零参数会清位。本次调查中没有偶数的非零参数。
 9. **装载方**：在 Go 代码中搜索文件名与 STD 的 `ANM` 字段；ECL 的 ANIM 列表经 `ecl.LoadProgram` 读取（`scene/stage/ecl/loader.go` 的 `AnimNames`）；STD 的 ANM 经 `std.Load` 的 `f.ANM` 读取；ECL 中 ops 259、262、263、264 的字面脚本参数也检查了一遍（§5）。
@@ -92,7 +95,7 @@
 - **模式 6**：stage01.anm 与 stage05.anm 的脚本 3、5 都没有 op 65，锚点同样为 0。
 - **全部文件**：36 条 op 65 的锚点值为 `0x20000`（ay=2，25 条）、`0x2`（ax=2，2 条）、`0x10001`（ax=1、ay=1，9 条）。没有任何 op 65 的锚点为 3。`docs/research/m4_render.md` 第 329 行记录的 “46 个 .anm 中未出现锚点 3” 与此一致（那个 46 文件的结论在此没有复核）。
 
-因此，目前嵌入的脚本不会触发 `corners` 中的锚点 3 panic。
+因此，这 17 个样本不会触发 `corners` 的锚点 3 panic；新增文件没有在此矩阵中重扫，不扩大该统计的范围。
 
 ---
 
@@ -125,21 +128,21 @@
 - `scene/stage/bomb.go:72–79`：灵击的根脚本 `id := 0x190`（灵梦，即 400）、`0x197`（魔理沙，即 407）、`0x1b9`（重型符卡，即 441），经 `c.World.Spawn(bulletFile(), id, …)` 生成。模式 9 的子脚本经 `env.Spawn`（即 `World.Add`）进入世界。
 - `scene/stage/ecl/game_ops.go:752–776`：ECL 的文件索引 0 是 bullet.anm，索引 i（i ≥ 1）是 `AnimNames[i-1]`。`scriptSize` 按此索引加载文件。`deathEffect`（`game_ops.go:874`）选择 0x164、0x167、0x16a、0x16d（即 356、359、362、365，模式 0 的根脚本，子脚本为模式 1）在 `game_ops.go:912` 生成。
 - `entity/bullet/bullet.go:154`、`entity/laser/laser.go:44`、`entity/item/item.go:124`：`File` 字段都是 bullet.anm。
-- 脚本 417（0x1a1）与 427（0x1ab）：`docs/research/systems_gaps.md:63` 记为符卡宣言时创建的名牌与 cut-in 对象（原作 `FUN_00409280`）。Go 代码中没有字面引用，ECL 中 ops 259、262、263、264 的字面脚本参数也没有这两个 id。它们在当前代码中不会被生成，属于尚未移植的部分。
+- 脚本 417（0x1a1）与 427（0x1ab）：t2 已在 `ecl/spell_visual.go` 按 `FUN_00409280` 尾插符卡环与自由闪光；环的 0x19f／0x1a0 子脚本写 Duration，不再属于“不会生成”。它们不是三个尚未生成的宣言牌，也不是按各面 stgenm 文件生成的 cut-in。
 
-**绘制路径**（决定模式 9 是否会在现行代码中命中 `Draw`）：
+**当前绘制路径**（2026-11-08，t9 根据合并代码补正）：
 
-- `anmdraw.Draw` 的现行调用者只有 `std/stddraw/stddraw.go:123`（`Node7` 中的 quad）与 `:325`（`pass` 中的 slot）。`pass` 由 `Node7`（pass 0–7）与 `Node0A`（pass 8–11）调用。`Node7` 由 `scene/stage/chain_legacy.go:49` 在 `s.bg` 为 STD 时调用，`Node0A` 由 `scene/stage/chain.go:71` 调用。这些调用处的对象都是 STD 的（stageNN.anm）。
-- `DrawLayer` 在现行代码中没有调用者，只在 `scene/stage/std_smoke_test.go:47` 中被测试调用。`Node0A` 的 `layer` 回调在 `chain.go:71` 中走的是旧的图层绘制（`layers(l)`），不是 `DrawLayer`。
-- 因此 bullet.anm 的对象（炸弹、子弹、特效、模式 9 的子脚本）现在都不经过 `anmdraw.Draw`。模式 9 目前不会 panic，但一旦 World 图层改为经由 `DrawLayer` 绘制（`std/stddraw/stddraw.go:152` 注释中提到的计划），炸弹与模式 9 子脚本就会命中 `Draw` 中模式 9 的 panic 分支。（2026-11-01 更新：模式 9 已移植，不再 panic。）
-- 模式 9 的对象只有在 `Draw` 的前置条件满足（`Flags&3 == 3` 且 `Alpha != 0`）时才会 panic。这是运行时条件，本次静态调查没有判断。
+- STD quad／槽 VM 经 `std/stddraw` 调 `sv.ANM.Draw`；`chain.go` 的 World 层节点 `layers` 调 `DrawLayer`（`FUN_00448980`），不再只有测试调用。
+- 0x19 道具、0x1b 激光、0x1d 敌弹直接 `ANM.Draw`，bullet.anm 的灵击／符卡环／火花在 World 层上屏；模式 9 走已实现 `FUN_00444ce0`，不是被调用图暂时避开的 panic。
+- t1 自机本体在 0x16 直接 ANM.Draw；t3 的 0x23／0x25／0x2b 与 t5 的 0x2e 均接原路径、非 legacy。整条链仅 0x16 因旧副机／自机子弹仍为 legacy。
+- `Draw` 的 flag／alpha 门控仍是运行时条件；静态模式集合与完整 smoke 无 panic 不等于所有脚本／像素都已覆盖。0x0e cdbg 未接，第二轮 t7 处理中。
 
 **其它文件的加载方**（只作背景，这些文件没有模式 5、7、9）：
 
-- `enemy.anm`：ECL 的 `AnimNames` 第 1 项（`default.ecl` 与所有 `stageNN.ecl`）。绘制经 `sprite/loaders.go:39` 的 `EnemyAnm.ScriptSprite`（`scene/stage/stage.go:485–489`）；`entity/enemy` 只保存 `MainScript` id。
-- `stgenmNN.anm`：各 `stageNN.ecl` 的 `AnimNames` 第 2 项（`stage01.ecl` 为 `stgenm01.anm`，依此类推）。`scene/stage/stage.go:505–509` 与 `sprite/loaders.go:40` 只使用 `stgenm01.anm`。
-- `pl00.anm`：`sprite/loaders.go:36`（`ReimuAnm`），`scene/stage/stage.go:443–464` 的 `ScriptSprite`；`entity/playerbullet/playerbullet.go:22` 的 `ScriptID` 注释。
-- `stageNN.anm`：`stageNN.std` 的 `f.ANM` 字段，由 `scene/stage/stage.go:228–241` 的 `loadSTD` 读取并 `Enable` 给 STD。
+- `enemy.anm`／`stgenmNN.anm`：`ecl/visual.go` 的 `fileAt` 按 ANIM 表加载，槽／自由 VM 经 World 绘制；D1c-2 已删除 MainScript／Hidden／FairyKind 旧精灵回退，不只使用 stgenm01。
+- `pl00.anm`／`pl01.anm`：t1 在 `entity/player/anm.go` 按角色共享并启动嵌入 VM；旧副机／自机子弹静态图仍在 legacy 路径，归 t6，不能把整个自机说成没有 VM。
+- `stageNN.anm`：`loadSTD` 按 STD 的 `f.ANM` 读取并 `Enable`；七面默认使用 STD。
+- `front`／`ascii`／`text`／`stNNlogo`：t3 GUI／MSG／弹出字与 t5 关卡内菜单已加载。text 的负标签保留，并由 OrdinalScripts 提供原顺序索引；字体纹理近似，原几何／时序保留。
 
 ---
 
@@ -160,14 +163,14 @@
 
 ## 7. 限制
 
-1. **只覆盖嵌入的 17 个文件。** `anm/anmdraw/anmdraw.go:109` 的注释称 TH10 有 46 个 .anm。`docs/research/th10c_dat.md` 列出的 `front.anm`、`title.anm`、`staff.anm`、`stXXlogo.anm`、`e07–e09.anm` 等文件都没有嵌入（`assets/anm/front/` 是 PNG 目录，不是 .anm）。未嵌入文件的模式、锚点与子脚本都不在本次结论内。要覆盖它们，需要先用 `tools/th10extract` 嵌入（`gamedata` 的文档注释描述了这一流程）。
+1. **静态矩阵只覆盖原 17 文件。** 当前已嵌入 pl01、front／ascii／text／七面 logo，总计 28 个原 `.anm`；title／staff／e07–e09 等仍不在本矩阵，不据旧统计宣称全部文件的模式已扫完。t3／t5 的新文件已经嵌入，不再列成“没有 front／logo”；t9 未重跑历史 modesurvey，计数保持原样。
 2. **静态扫描不执行，也不建模跳转。** 模式集合是全部 op 67、84 参数的并集，包含死代码与不可达的分支，因此是上界。op 1、2、4、5、28–39 的控制流，以及 op 63、64、69、81 的标签与中断，都没有建模。本次的结论偏保守，不会漏掉模式，但可能多算。
 3. **默认模式 0 的规则。** m4_s3 的规则不把 op 63、69、75、81 当作控制指令。本次另算了加入它们的 `default0Ext`，在所有脚本上与 `default0` 相同（`out.txt` 中 “default0 differences” 为空）。因此这一点不影响本次结论。
 4. **变量参数。** op 67 的参数都是字面量（掩码位 0 全为 0）。op 65 与 op 74 的掩码全为 0。op 84 的参数是变量 $10000（18 个脚本，`VAR-MASK`）。Go 的 `case 67` 直接读 `Arg(0)`（不走 `readI`），但本数据中没有变量参数，所以不影响结论。
 5. **op 88 子脚本。** 所有 op 88 都是字面量（没有非字面量），也没有指向不存在脚本的 id。
 6. **脚本 id 重复。** 每个文件的脚本表都检查过（`rawIDs`，按 anm.Load 的遍历方式），没有重复 id。`anm.Load` 对重复 id 是覆盖，因此这一点很重要，本次确认没有。
 7. **外部写入。** 本次只统计脚本内的写入。没有检查 Go 代码中对 VM 变量 `I`、`Flags` 的外部写入。`anm` 包外对 `Flags` 的写入（如 `entity/bullet/update.go` 的 `b.VM.Flags |= 4`）已经看过，不涉及模式位、锚点位或 flagScroll。
-8. **运行时条件。** 没有判断 `Draw` 的前置条件（`Flags&3 == 3`、`Alpha != 0`），也没有判断脚本是否真的被生成与可见。§5 的结论是“现行代码的调用图”，不是运行时的覆盖率。
+8. **运行时条件。** 原调查没有判断 `Draw` 的 flag／alpha 门控或对象实际生成／可见。第 5 节已更新现行调用图，但不是所有脚本的覆盖率；新增文件不包含在原矩阵与原 op 88／锚点统计中。
 
 ---
 

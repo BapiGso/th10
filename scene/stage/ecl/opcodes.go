@@ -166,6 +166,12 @@ const (
 	opEnemySweep   = 345
 	opLifeMarker   = 347
 	opSpellAlt     = 348
+	opRankSelectF3 = 349 // ffff: output, three rank choices (binary uses params 0/2)
+	opRankSelectF5 = 350 // ffffff: output, five rank choices (binary uses params 0..4)
+	opRankLerpF    = 351 // fff: output, low, high
+	opRankSelectI3 = 352 // SSSS: output, three rank choices (binary uses params 0/2)
+	opRankSelectI5 = 353 // SSSSSS: output, five rank choices (binary uses params 0..4)
+	opRankLerpI    = 354 // SSS: output, low, high (0x411b23..0x411b6b)
 	opRankPickI    = 355
 	opRankPickF    = 356
 	opSpell        = 357 // index + difficulty

@@ -2,10 +2,8 @@ package sprite
 
 import (
 	"sync"
-	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/yohamta/ganim8/v2"
 )
 
 // Global 全局 sprite 资源，Load() 后可安全使用
@@ -13,9 +11,7 @@ var Global *Resources
 
 // Resources 全部 sprite 资源
 type Resources struct {
-	Player   [2]*PlayerSprite // 0=灵梦, 1=魔理沙
-	ReimuAnm *AnmSheet        // original pl00.anm shot/option scripts
-	Bullets  *BulletSprite
+	Bullets *BulletSprite
 }
 
 var loadOnce sync.Once
@@ -24,91 +20,9 @@ var loadOnce sync.Once
 func Load() {
 	loadOnce.Do(func() {
 		Global = &Resources{
-			Player: [2]*PlayerSprite{
-				LoadPlayer("anm/player/pl00/pl00.png"),
-				LoadPlayer("anm/player/pl01/pl01.png"),
-			},
-			ReimuAnm: LoadAnmSheet("anm/pl00.anm"),
-			Bullets:  LoadBullets("anm/bullet/etama.png"),
+			Bullets: LoadBullets("anm/bullet/etama.png"),
 		}
 	})
-}
-
-// ---------- Player ----------
-
-// PlayerSprite 玩家角色 sprite 数据（基于 ganim8）
-type PlayerSprite struct {
-	sheet *Sheet
-	img   *ebiten.Image
-
-	Front   *ganim8.Animation // 正面循环
-	ToLeft  *ganim8.Animation // 向左转身
-	Left    *ganim8.Animation // 左侧身循环
-	ToRight *ganim8.Animation // 向右转身
-	Right   *ganim8.Animation // 右侧身循环
-}
-
-const (
-	playerCellW = 32
-	playerCellH = 48
-	playerCols  = 8
-)
-
-// LoadPlayer 加载玩家 spritesheet (pl00=灵梦, pl01=魔理沙)
-// 布局: 8列x3行, 32x48 单元格。Row0=正面, Row1=左, Row2=右。
-func LoadPlayer(path string) *PlayerSprite {
-	sheet := LoadSheet(path)
-	img := sheet.img
-	bounds := img.Bounds()
-	gridW := bounds.Dx()
-	if gridW < playerCellW {
-		gridW = playerCellW * playerCols
-	}
-	gridH := bounds.Dy()
-	if gridH < playerCellH {
-		gridH = playerCellH * 3
-	}
-
-	g := ganim8.NewGrid(playerCellW, playerCellH, gridW, gridH)
-	frontD := 100 * time.Millisecond
-	transD := 70 * time.Millisecond
-
-	return &PlayerSprite{
-		sheet:   sheet,
-		img:     img,
-		Front:   ganim8.New(img, g.Frames("1-4", 1), frontD),
-		ToLeft:  ganim8.New(img, g.Frames("1-4", 2), transD, ganim8.PauseAtEnd),
-		Left:    ganim8.New(img, g.Frames("5-8", 2), frontD),
-		ToRight: ganim8.New(img, g.Frames("1-4", 3), transD, ganim8.PauseAtEnd),
-		Right:   ganim8.New(img, g.Frames("5-8", 3), frontD),
-	}
-}
-
-// AnimKind 玩家动画段。
-type AnimKind int
-
-const (
-	AnimFront AnimKind = iota
-	AnimToLeft
-	AnimLeft
-	AnimToRight
-	AnimRight
-)
-
-// Anim 取对应方向/姿态的 ganim8 动画指针。
-func (ps *PlayerSprite) Anim(kind AnimKind) *ganim8.Animation {
-	switch kind {
-	case AnimToLeft:
-		return ps.ToLeft
-	case AnimLeft:
-		return ps.Left
-	case AnimToRight:
-		return ps.ToRight
-	case AnimRight:
-		return ps.Right
-	default:
-		return ps.Front
-	}
 }
 
 // ---------- Bullet ----------

@@ -143,3 +143,21 @@ func (f *File) ValidateReimuA() error {
 	}
 	return nil
 }
+
+// ValidateTH10 checks the six shipped SHTs against FUN_00426520's tables:
+// init 0/1 at 0x47476c, update 0/1/2 at 0x474778. The two later tables
+// (0x491bf4/0x491bf8) are single zero entries in .bss, have no writer in
+// exe.asm, and every shipped record uses their index 0. Do not invent a
+// straight-shot fallback for unknown callback indices or kinds.
+func (f *File) ValidateTH10() error {
+	for g, shots := range f.Groups {
+		for _, s := range shots {
+			if (s.Kind != 0 && s.Kind != 2 && s.Kind != 3) || s.Callbacks[0] > 1 || s.Callbacks[1] > 2 ||
+				s.Callbacks[2] != 0 || s.Callbacks[3] != 0 || s.Source > g%5 ||
+				(s.Callbacks[1] == 2 && s.Source == 0) {
+				return fmt.Errorf("unsupported TH10 shot semantics in group %d", g)
+			}
+		}
+	}
+	return nil
+}

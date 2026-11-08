@@ -37,7 +37,7 @@ var drawChain = []node{
 	{prio: 0x0a, fn: 0x403070, draw: (*Stage).nodeSTDFront},   // layers 17, 18 and STD passes 8-11
 	{prio: 0x0b, fn: 0x448600, draw: layers(1)},               // layer 1
 	{prio: 0x0d, fn: 0x448610, draw: layers(2)},               // layer 2
-	{prio: 0x0e, fn: 0x409230},
+	{prio: 0x0e, fn: 0x409230, draw: (*Stage).nodeSpellBackground},
 	{prio: 0x0f, fn: 0x448620, enter: (*supervisor.Supervisor).EnterField, draw: layers(3)}, // layer 3
 	{prio: 0x10, fn: 0x4486a0, draw: layers(4)},                                             // layer 4
 	{prio: 0x11, fn: 0x4486b0, draw: layers(5)},                                             // layer 5
@@ -45,7 +45,7 @@ var drawChain = []node{
 	{prio: 0x13, fn: 0x4486d0, draw: layers(7)},                                             // layer 7
 	{prio: 0x14, fn: 0x40d820},                                                              // enemies: a stub (MOV EAX,1; RET); their sprites are world objects
 	{prio: 0x15, fn: 0x4486e0, draw: layers(8)},                                             // layer 8
-	{prio: 0x16, fn: 0x426510, draw: (*Stage).nodePlayer, legacy: true},                     // player
+	{prio: 0x16, fn: 0x426510, draw: (*Stage).nodePlayer},                                   // embedded player VM and faith rectangles
 	{prio: 0x17, fn: 0x4486f0, draw: layers(9)},                                             // layer 9
 	{prio: 0x18, fn: 0x448700, draw: layers(10)},                                            // layer 10
 	{prio: 0x19, fn: 0x41ba30, draw: (*Stage).nodeItems},                                    // items
@@ -56,19 +56,45 @@ var drawChain = []node{
 	{prio: 0x20, fn: 0x40b060},
 	{prio: 0x21, fn: 0x448730, draw: layers(13)}, // layer 13
 	{prio: 0x22, fn: 0x405850},
-	{prio: 0x23, fn: 0x42b9b0},
+	{prio: 0x23, fn: 0x42b9b0, draw: (*Stage).nodeScorePopups},                            // DAT_00477840
 	{prio: 0x24, fn: 0x448740, enter: (*supervisor.Supervisor).Unshake, draw: layers(14)}, // layer 14
-	{prio: 0x25, fn: 0x409270},
+	{prio: 0x25, fn: 0x409270, draw: (*Stage).nodeSpellHUD},                               // spell bonus/history, FUN_004091c0
 	{prio: 0x26, fn: 0x401520},
-	{prio: 0x28, fn: 0x4200c0},                                                            // returns 1, nothing else
-	{prio: 0x29, fn: 0x448770, enter: (*supervisor.Supervisor).Enter2D, draw: layers(15)}, // layer 15
-	{prio: 0x2a, fn: 0x4487c0, enter: (*supervisor.Supervisor).Enter2D, draw: layers(16)}, // layer 16
-	{prio: 0x2b, fn: 0x415af0, draw: (*Stage).nodeGUI, legacy: true},                      // GUI
+	{prio: 0x28, fn: 0x4200c0},                                                                       // returns 1, nothing else
+	{prio: 0x29, fn: 0x448770, enter: (*supervisor.Supervisor).Enter2D, draw: (*Stage).nodeScreen15}, // layer 15 and queued menu capture
+	{prio: 0x2a, fn: 0x4487c0, enter: (*supervisor.Supervisor).Enter2D, draw: (*Stage).nodeScreen16}, // layer 16, including menu objects
+	{prio: 0x2b, fn: 0x415af0, draw: (*Stage).nodeGUI},                                               // GUI
 	{prio: 0x2c, fn: 0x4198b0},
 	{prio: 0x2d, fn: 0x448810, enter: (*supervisor.Supervisor).Enter2D}, // the layer-19 list
-	{prio: 0x2e, fn: 0x422aa0, draw: (*Stage).nodePause, legacy: true},
+	{prio: 0x2e, fn: 0x422aa0, draw: (*Stage).nodeMenu},                 // DAT_00477830 ranking/replay menu, not pause
 	{prio: 0x30, fn: 0x401510},
 	{prio: 0x32, fn: 0x4200d0, enter: (*supervisor.Supervisor).Finish},
+}
+
+// nodePlayer is FUN_00426360 (draw 0x16). Options and shots are World VMs
+// in layer 8, drawn by node 0x15, not by this direct-VM node (R10-B/C).
+func (s *Stage) nodePlayer(sv *supervisor.Supervisor) {
+	if s.ctx.Player == nil {
+		return
+	}
+	s.ctx.Player.Draw(sv.ANM.Draw, sv.ANM.Rect, int32(s.ctx.State.FaithHold), s.playerFaithBarGate())
+}
+
+// playerFaithBarGate is FUN_00426360, 0x4263d7-0x42642e. Boss0 is installed
+// by the enemy manager, so nil also represents DAT_00477704 == 0. This is
+// not faithGate: there is no 90-frame threshold or host pause test here.
+func (s *Stage) playerFaithBarGate() bool {
+	c := s.ctx
+	if c.State == nil || c.State.ConfigFlags&0x80 == 0 { // cfg+0x30 -> stage+0x54, FUN_00417870 0x417a60
+		return false
+	}
+	if c.Boss0 == nil || c.GUI == nil || c.DialogActive() { // 0x4263ef-0x42641d
+		return false
+	}
+	if _, busy := c.Boss0(); busy {
+		return false
+	}
+	return c.Menu != nil && c.Menu.State == 0 // DAT_00477830+4, not State.Paused (R11)
 }
 
 // layers returns a node that draws World layers ls in order, each with
@@ -118,6 +144,16 @@ func (s *Stage) nodeSTDFront(sv *supervisor.Supervisor) {
 		return
 	}
 	layers(17, 18)(s, sv)
+}
+
+// nodeSpellBackground is FUN_00409230: helper bit 0 gates the two
+// inline cdbg VMs at +0x10/+0x3bc, drawn in that order at node 0x0e.
+func (s *Stage) nodeSpellBackground(sv *supervisor.Supervisor) {
+	if c := s.ctx.Spell; c != nil && c.Active {
+		for i := range c.Background {
+			sv.ANM.Draw(&c.Background[i])
+		}
+	}
 }
 
 // drawFrame is one frame's drawing on sv, FUN_00439390's draw section:

@@ -11,6 +11,9 @@
 - 反编译里 `unaff_` / `extraout_` 等变量是寄存器传参的残留，凡涉及寄存器传参的结论都以 `.asm` 为准。
 - 标注 **（推测）** 的是从代码结构推出、未逐条核实的内容；列在 §7 的开放问题里。
 
+> 2026-11-08，t9 按第一轮合并补正节点内容与 GUI 状态：t1 已实现 `FUN_0043bda0` 的 Rect，t3 已接 `FUN_00415800`／`FUN_0042b780`／`FUN_004091c0`，t5 已接 `FUN_00422660`。t4 已落地的矩形函数名、纹理／混合／flush／缓存勘误原样保留；原设备取证不重做，不以完整 smoke 代替 L3。
+> 同地址旧 render 引用中的 `FUN_004451c0`／`FUN_00443290`／`FUN_00443080`／`FUN_00442fe0`／`FUN_004423c0` 已改指现成 render3 文件，`FUN_004452f0` 改指 render4；仅修正目录引用，没有重新 dump。
+
 ## 0. 结论速览
 
 | 问题 | 结论 |
@@ -83,13 +86,13 @@
 | **0xa** | `FUN_00402230`（STD） | `0x403070` → `FUN_00402ca0` | STD | 先画层 17、18（`FUN_00448980`，EAX = 0x11、0x12），再画背景 pass 8–11（§4.4.2） |
 | 0xb | `FUN_00445900` | `0x448600`（层 1） | 游戏 | |
 | 0xd | `FUN_00445900` | `0x448610`（层 2） | 游戏 | |
-| 0xe | `FUN_004089c0` | `0x409230` | | |
+| 0xe | `FUN_004089c0` | `0x409230` | 符卡 | 两个内联 cdbg VM，`FUN_00409230`；当前初始化／draw 未接，归 t7，不是 World |
 | **0xf** | `FUN_00445900` | `0x448620`（设相机矩阵，层 3） | 游戏 | 之后的层用相机（§3.4） |
 | 0x10 | `FUN_00445900` | `0x4486a0`（层 4） | 游戏 | |
 | 0x11 | `FUN_00445900` | `0x4486b0`（层 5） | 游戏 | |
 | 0x12 | `FUN_00445900` | `0x4486c0`（层 6） | 游戏 | |
 | 0x13 | `FUN_00445900` | `0x4486d0`（层 7） | 游戏 | |
-| 0x14 | `FUN_0040d280` | `0x40d820` | 敌人 | |
+| 0x14 | `FUN_0040d280` | `0x40d820` | 敌人 | 空桩；D1c-2 的敌机槽经 World 层，不在此额外画 |
 | 0x15 | `FUN_00445900` | `0x4486e0`（层 8） | 游戏 | |
 | 0x16 | `FUN_004247f0` | `0x426510` | 自机 | |
 | 0x17 | `FUN_00445900` | `0x4486f0`（层 9） | 游戏 | |
@@ -102,9 +105,9 @@
 | 0x20 | `FUN_0040ae70` | `0x40b060` | | |
 | 0x21 | `FUN_00445900` | `0x448730`（层 13） | 游戏 | |
 | 0x22 | `FUN_004055c0` | `0x405850` | | |
-| 0x23 | `FUN_0042b4d0` | `0x42b9b0` | | |
+| 0x23 | `FUN_0042b4d0` | `0x42b9b0` | 弹出字 | t3 已接独立 `DAT_00477840`，非 legacy，已加入 TestChainDraws |
 | 0x24 | `FUN_00445900` | `0x448740`（层 14） | 游戏 | 层 14 之前把场地相机位移与 ANM 位移清零（不 flush），之后不再震动 |
-| 0x25 | `FUN_004089c0` | `0x409270` | | |
+| 0x25 | `FUN_004089c0` | `0x409270` | 符卡 | `FUN_004091c0` 八奖励／五历史数字，t3 已接；真实计数／结果调用归 t7 |
 | 0x26 | `FUN_00401110` | `0x401520` | | |
 | 0x28 | `FUN_00420470` | `0x4200c0` | | 只返回 1 |
 | **0x29** | `FUN_00445900` | `0x448770`（2D，层 15） | 游戏 | 切到 2D 帧 `0x491e94` |
@@ -112,7 +115,7 @@
 | 0x2b | `FUN_00413980`（GUI） | `0x415af0` | GUI | `front.anm` 相关（§5.4） |
 | 0x2c | `FUN_00418e30` | `0x4198b0` | | |
 | **0x2d** | `FUN_00445900` | `0x448810`（2D，层 0x13 = 19） | 游戏 | 第 19 层表 |
-| 0x2e | `FUN_00422150` | `0x422aa0` | | |
+| 0x2e | `FUN_00422150` | `0x422aa0` | 菜单 | `DAT_00477830` 排行／名字／回放，t5 已接且非 legacy；非暂停 |
 | 0x30 | `FUN_00401110` | `0x401510` | | |
 | 0x32 | `FUN_00420470` | `0x4200d0` | | flush、场地相机位移清零 |
 
@@ -259,25 +262,25 @@
 
 ### 3.1 VM 结构（0x3ac 字节）
 
-证据：`anmvm/func_43ee30.c`、`render/func_4451c0.c`、`render/func_442670.c`、`render/func_444760.c`、`render4/func_448860.c`。
+证据：`anmvm/func_43ee30.c`、`render3/func_4451c0.c`、`render/func_442670.c`、`render/func_444760.c`、`render4/func_448860.c`。
 
 | 偏移 | 内容 | 证据 |
 |---|---|---|
 | `+0x20` | 图层（byte），由 ins_68（case 0x44）写入 | `anmvm/func_43ee30.c` `case 0x44` |
 | `+0x24/+0x28/+0x2c` | 旋转角 X/Y/Z（用于 mode 8 的 WORLD，`D3DXMatrixRotationX/Y/Z`） | `render/func_444760.c` |
-| `+0x2c` | 旋转角（mode 1/3 的 2D 旋转） | `render/func_4451c0.c` |
+| `+0x2c` | 旋转角（mode 1/3 的 2D 旋转） | `render3/func_4451c0.c` |
 | `+0x2fc / +0x300` | 颜色 ARGB（`+0x300` 在 flags bit15 = 0x8000 时使用） | `render/func_442670.c` |
-| `+0x2ff` | `+0x2fc` 颜色的 alpha 字节（小端 ARGB 的最高字节）；为 0 则不绘制，即使 0x8000 选了 `+0x300` 也看这个字节 | `render/func_4451c0.c` |
-| `+0x334/338/33c` | 位置分量 A（x/y/z） | `render/func_443290.c`、`render/func_443080.c` |
+| `+0x2ff` | `+0x2fc` 颜色的 alpha 字节（小端 ARGB 的最高字节）；为 0 则不绘制，即使 0x8000 选了 `+0x300` 也看这个字节 | `render3/func_4451c0.c` |
+| `+0x334/338/33c` | 位置分量 A（x/y/z） | `render3/func_443290.c`、`render3/func_443080.c` |
 | `+0x340/344/348` | 位置分量 B（STD：quad 位置 + face 位置，§4.5） | `render/func_403a30.c` |
-| `+0x34c/350/354` | 位置分量 C | `render/func_443290.c` |
-| `+0x35c` | flags：bit0 = 活动（ins_3 置位），bit1 = 允许绘制（写入者未追踪），bit26 (0x4000000) = 隐藏（跳过），bits 4–5 = 混合模式（ins_66），bits 22–25 = render mode（ins_67），bit15 (0x8000) = 颜色取 `+0x300`，bit31 = 点采样，bit11 (0x800) 由 ins_73 写入（取操作数最低位，§3.8） | `anmvm/func_43ee30.c`、`render/func_4451c0.c`、`render/func_4423e0.c` |
+| `+0x34c/350/354` | 位置分量 C | `render3/func_443290.c` |
+| `+0x35c` | flags：bit0 = 活动（ins_3 置位），bit1 = 允许绘制（写入者未追踪），bit26 (0x4000000) = 隐藏（跳过），bits 4–5 = 混合模式（ins_66），bits 22–25 = render mode（ins_67），bit15 (0x8000) = 颜色取 `+0x300`，bit31 = 点采样，bit11 (0x800) 由 ins_73 写入（取操作数最低位，§3.8） | `anmvm/func_43ee30.c`、`render3/func_4451c0.c`、`render/func_4423e0.c` |
 | `+0x390` | 当前指令指针（0 = 结束） | `anmvm/func_43ee30.c` |
 | `+0x394` | 运行时精灵指针（0x44 字节，`FUN_0043e5a0` 设置）：`+4` 纹理；`+0x20/+0x24/+0x28/+0x2c` UV 矩形 u0/v0/u1/v1（浮点）；`+0x30` 高、`+0x34` 宽；`+0x18/+0x1c`、`+0x38/+0x3c` 未知（R6-A） | `render/func_442670.c`、`render/func_444760.c` |
-| `+0x398` | 每步更新回调（`FUN_00445620`，由 `FUN_004452f0` 设置） | `render/func_4452f0.c` |
-| `+0x39c` | 绘制前回调（`LAB_00445880`，由 `FUN_004452f0` 设置） | `render/func_4452f0.c` |
+| `+0x398` | 每步更新回调（`FUN_00445620`，由 `FUN_004452f0` 设置） | `render4/func_4452f0.c` |
+| `+0x39c` | 绘制前回调（`LAB_00445880`，由 `FUN_004452f0` 设置） | `render4/func_4452f0.c` |
 | `+0x3c/+0x40` | 缩放 x/y（STD 按 quad 尺寸除精灵尺寸设置） | `render/func_403a30.c` |
-| `+0x4c/+0x50` | 基础宽/高（与缩放 `+0x3c/+0x40` 相乘得绘制尺寸）；精灵指令从精灵 `+0x34/+0x30` 复制，其它写入者待查（R6-C） | `render/func_443080.c`、`render/func_443290.c` |
+| `+0x4c/+0x50` | 基础宽/高（与缩放 `+0x3c/+0x40` 相乘得绘制尺寸）；精灵指令从精灵 `+0x34/+0x30` 复制，其它写入者待查（R6-C） | `render3/func_443080.c`、`render3/func_443290.c` |
 | `+0x54/+0x58` | UV 滚动（加到 UV 上） | `render/func_442670.c`、`render/func_444760.c` |
 
 游戏对象 `DAT_00491c10`（`FUN_00445900`，0x732460 字节）：
@@ -290,7 +293,7 @@
 
 ### 3.2 render mode 分支（`FUN_004451c0`）
 
-证据：`render/func_4451c0.c`、`render/func_4451c0.asm`。
+证据：`render3/func_4451c0.c`、`render3/func_4451c0.asm`。
 
 前置条件：`VM.flags & 1` 且 `VM.flags & 2` 且 `VM+0x2ff != 0`，否则返回 −1。
 
@@ -310,18 +313,18 @@ mode = `(flags >> 22) & 0xf`：
 | 9 | `FUN_00444ce0` | `DrawPrimitiveUP(TRIANGLESTRIP, n−2, 局部顶点, stride 0x1c)` | 不进批处理；`n` 是调用方给出的顶点数 |
 | 10–15 | `default` | 不绘制（返回 0） | ins_67(10) 另外调用 `FUN_004452f0` |
 
-ins_67(10)（`anmvm/func_43ee30.c` `case 0x43`）：当 `(flags & 0x3c00000) == 0x2800000` 时调用 `FUN_004452f0`。这个函数分配 0x4b0 字节，写入 `+0x398`/`+0x39c`，随机生成 31 个粒子（`render/func_4452f0.c`；由 `FUN_0044bb90` RNG 决定）。**（推测）** 它是粒子/爆发类效果的初始化，不直接绘制。
+ins_67(10)（`anmvm/func_43ee30.c` `case 0x43`）：当 `(flags & 0x3c00000) == 0x2800000` 时调用 `FUN_004452f0`。这个函数分配 0x4b0 字节，写入 `+0x398`/`+0x39c`，随机生成 31 个粒子（`render4/func_4452f0.c`；由 `FUN_0044bb90` RNG 决定）。**（推测）** 它是粒子/爆发类效果的初始化，不直接绘制。
 
 #### 3.2.1 旋转路径（mode 1 / 3）
 
 - 角度 `+0x2c`；若为 0 则走 `FUN_00443290`。
-- 否则 `fcos/fsin(+0x2c)`，四角 = 中心 + R(θ)·(±w/2, ±h/2)。锚点分别由 `flags>>18 & 3`（x）和 `flags>>20 & 3`（y）决定，取 0/1/2 对应中心、左/上、右/下（`render/func_4451c0.c` 中的 `uVar8`）。
+- 否则 `fcos/fsin(+0x2c)`，四角 = 中心 + R(θ)·(±w/2, ±h/2)。锚点分别由 `flags>>18 & 3`（x）和 `flags>>20 & 3`（y）决定，取 0/1/2 对应中心、左/上、右/下（`render3/func_4451c0.c` 中的 `uVar8`）。
 - 四角写入 `DAT_00497914..`（同 §3.3），然后调用 `FUN_00442670(this, 0)`。
 - z = `+0x354 + +0x348 + +0x33c`。
 
 ### 3.3 2D 四角发射 `FUN_00442670(this=游戏对象, param)`
 
-证据：`render/func_442670.c`、`render/func_442fe0.c`。
+证据：`render/func_442670.c`、`render3/func_442fe0.c`。
 
 1. 四角：P0 = (x0, y0)、P1 = (x1, y0)、P2 = (x0, y1)、P3 = (x1, y1)。`x0 = DAT_004978c0`、`x1 = DAT_004978dc`、`y0 = DAT_004978c4`、`y1 = DAT_004978fc`（mode 0/2 由调用方填入，角点加上 `this+0x5c/0x60`，即游戏对象的全局偏移）。
 2. **半像素**：`param & 1` 时 `x = round(x) − 0.5`、`y = round(y) − 0.5`（常量 `0x4700ec` = 0.5，`pe_read` 读出）。`param & 1 == 0` 时不加偏移。原作 XYZRHW 顶点直接用设备坐标，D3D9 的像素中心在整数坐标 +0.5 处（**（推测）** 与 Ebiten 的 +0.5 约定不同，见 `m4_render.md` §2.1）。
@@ -329,17 +332,17 @@ ins_67(10)（`anmvm/func_43ee30.c` `case 0x43`）：当 `(flags & 0x3c00000) == 
 4. **纹理**：`VM+0x394` 的纹理（`+4`）；若与游戏对象缓存 `+0x3ada64` 不同则 `SetTexture(0, tex)`（0x104）。
 5. **UV**：`u0 = 精灵+0x20 + VM+0x54`，`u1 = 精灵+0x28 + VM+0x54`，`v0 = 精灵+0x24 + VM+0x58`，`v1 = 精灵+0x2c + VM+0x58`（`render/func_442670.c` 中的 `DAT_004978d4/f0/d8/10`）。
    - P0 = (u0, v0)、P1 = (u1, v0)、P2 = (u0, v1)、P3 = (u1, v1)。
-6. **颜色**：`VM.flags & 0x8000 ? +0x300 : +0x2fc`（ARGB）。若 `game+0x73245c` 非零，逐通道 `c·tint >> 7` 夹到 255（`FUN_004423c0`，`render/func_4423c0.c`）。
+6. **颜色**：`VM.flags & 0x8000 ? +0x300 : +0x2fc`（ARGB）。若 `game+0x73245c` 非零，逐通道 `c·tint >> 7` 夹到 255（`FUN_004423c0`，`render3/func_4423c0.c`）。
 7. **z** = `+0x354 + +0x348 + +0x33c`（mode 0/1/3）或 `+0x350 + +0x348 + +0x33c`（mode 2，见 §7）；`rhw = 1.0`（`0x4978cc` 等，`render/func_445900.c` 初始化）。
 8. 状态：`FUN_004425a0`（混合、点采样，§3.5）。
-9. `FUN_00442fe0(this, corners)`：把 4 角展开成 6 个顶点（P0,P1,P2,P1,P2,P3），每个 28 字节（x, y, z, rhw, diffuse, u, v），写入批处理 `game+0x72dacc`，`+0x3adac8 += 1`（`render/func_442fe0.c`）。
+9. `FUN_00442fe0(this, corners)`：把 4 角展开成 6 个顶点（P0,P1,P2,P1,P2,P3），每个 28 字节（x, y, z, rhw, diffuse, u, v），写入批处理 `game+0x72dacc`，`+0x3adac8 += 1`（`render3/func_442fe0.c`）。
 
 #### 3.3.1 顶点格式
 
 - 2D 批处理：`FVF = 0x144` = XYZRHW(0x4) | DIFFUSE(0x40) | TEX1(0x100)，stride 0x1c（28 字节）；图元 TRIANGLELIST，每四角 6 顶点、2 个三角形。
 - mode 9：同 FVF，TRIANGLESTRIP，stride 0x1c（`render/func_444ce0.c`）。
 - mode 8：`FVF = 0x102` = XYZ(0x2) | TEX1(0x100)，stride 0x14，经 `SetStreamSource(0, VB, 0, 0x14)`（vtbl `0x190`）（`render/func_444760.c`）。
-- 无纹理叠加（`FUN_00443bda0`、`FUN_0043bfa0`）：`FVF = 0x44` = XYZRHW | DIFFUSE，stride 0x14，TRIANGLESTRIP 2 图元（`render/func_43bda0.c`、`render/func_43bfa0.c`）。
+- 有效忽略纹理的叠加（`FUN_0043bda0`、`FUN_0043bfa0`）：`FVF = 0x44` = XYZRHW | DIFFUSE，stride 0x14，TRIANGLESTRIP 2 图元（`render/func_43bda0.c`、`render/func_43bfa0.c`）。`FUN_0043bda0` 设置 DESTBLEND = INVSRCALPHA；不绑定或解绑纹理，而用 SELECTARG1／DIFFUSE 的阶段状态忽略已绑定的纹理，绘制后缓存失效（t4 补正，依据 `r8/func_43bda0.asm` 的 `0x43be8e–0x43bec5`、`0x43bed7`、`0x43bf06–0x43bf30`，并与 `r6/func_43bda0.asm`、`anm/anmdraw/rect.go` 交叉核对；同时修正函数名多写一个 4 的笔误）。
 
 ### 3.3.2 批处理与 flush `FUN_00442f50`
 
@@ -385,7 +388,7 @@ ins_67(10)（`anmvm/func_43ee30.c` `case 0x43`）：当 `(flags & 0x3c00000) == 
 
 ### 3.5 混合、采样与 TFACTOR
 
-证据：`render/func_4423e0.c`（3D 路径，被 mode 8 调用）、`render/func_4425a0.c`（2D 路径，被 `FUN_00442670` 调用）、`render/func_4423c0.c`。
+证据：`render/func_4423e0.c`（3D 路径，被 mode 8 调用）、`render/func_4425a0.c`（2D 路径，被 `FUN_00442670` 调用）、`render3/func_4423c0.c`。
 
 - **混合模式** `b = (flags >> 4) & 3`（由 ins_66 写入，`anmvm/func_43ee30.c` `case 0x42`）。缓存 `+0x3ada68`，只在变化时设置。SRCBLEND 固定 SRCALPHA（§2.4，无其它写入）。
 
@@ -446,8 +449,7 @@ ins_67(10)（`anmvm/func_43ee30.c` `case 0x43`）：当 `(flags & 0x3c00000) == 
   `FUN_00442f50` 每次非空提交 `+0x58` 加 1（`0x442fb7..0x442fd1`）。渲染转储中没有读取者。
 - **缓存初值**（`FUN_00445900`）：纹理 NULL、混合 0、顶点类型 0、点采样 0；暂存 quad 的 rhw = 1，UV 为 (0,0)、(1,0)、(0,1)、(1,1)，其余为 0。
   混合缓存初值为 0 意味着第一次 b = 0 的绘制不设 DESTBLEND，依赖 `FUN_00439d20` 的初始 DESTBLEND = INVSRCALPHA。
-- **缓存失效**：`FUN_0043bda0`（无纹理叠加）与 `FUN_00439d20`（初始渲染状态）把纹理缓存设为 NULL、混合缓存设为 3、顶点类型设为 0xff，
-  不 flush，也不动点采样缓存 `+0x3ada6e`。混合 3 不对应任何会设置 DESTBLEND 的值，所以之后第一个 b = 0/1 的对象会重新设置。
+- **缓存失效**：`FUN_0043bda0` 入口先 flush（`0x43bdaa`），绘制后把纹理缓存设为 NULL、混合缓存设为 3、顶点类型设为 0xff；`FUN_00439d20`（初始渲染状态）也重置这些缓存。缓存失效步骤本身不再 flush，也不动点采样缓存 `+0x3ada6e`。混合 3 不对应任何会设置 DESTBLEND 的值，所以之后第一个 b = 0/1 的对象会重新设置（t4 补正，依据 `r8/func_43bda0.asm` 的 `0x43bdaa`、`0x43bf06–0x43bf30` 与 `anm/anmdraw/rect.go`）。
 - **绘制前回调**：`FUN_00448980` 对每个对象先调 `VM+0x39c`（若非空）再 `FUN_004451c0`。写入者与语义待查（R6-G）。
 
 ---
@@ -536,7 +538,7 @@ STD 脚本指令对绘制的影响（`render/func_403c80.c`）：
 | 5 | `Clear(0 矩形, ZBUFFER, 颜色 0, z 1.0, stencil 0)`（0x40299c） | 清深度 |
 | 6 | `Clear(1 矩形 = 场地 {32,16,416,464}, TARGET, 颜色, z 1.0, stencil 0)`：0x4029ec 与 0x402a38 是 if/else 两个分支，每帧只执行一次 | 颜色见 §5.2 |
 | 8 | `FUN_0043c8b0(3, 0x1e, 0, 0, 0)`（0x402a55 起，**（推测）** 淡入）当 `this+0x2a18 & 4` 且 `this+0x2a20 < 0x1e` | |
-| 9 | `flags |= 1`（`this+0x2a18`），`FUN_00405410(1)` | |
+| 9 | `flags \|= 1`（`this+0x2a18`），`FUN_00405410(1)` | |
 | 10 | 若 `this+0x514 != 0`：`ZWRITEENABLE = 0`（0x402b16）；`FUN_004451c0` ×8（STD 槽 VM `this+0x180 + i·0x3ac`，`+0x394 != 0` 才绘制，0x402b25–0x402b42）；flush；**`ZWRITEENABLE = 1`（0x402b62）**；`DAT_00491fac = 相机`、`FUN_004215a0()`（相机 VIEW/PROJ） | |
 | 11 | `DAT_00492378 != 1` 时 `FOGENABLE = 1`（缓存 `DAT_00492378`） | |
 | 12 | `FUN_00403a30(this, pass)` ×8，pass = `EBX`(0)、`EDI`(1)、2、3、4、5、6、7（地址 `0x402bd4..0x402c0d`） | 背景面（§4.5） |
@@ -714,7 +716,8 @@ for entry in entries (表顺序):
 ### 5.4 `front.anm` 与 HUD
 
 - GUI 构造 `FUN_00413980`（`render6/func_413980.c`）：`FUN_00447280(6, 游戏对象, "front.anm")` → 存入 `GUI+0x9ec8`；随后注册 calc 节点 `0x415ae0`（优先级 0x18）和 draw 节点 `0x415af0`（优先级 0x2b，`render6/func_413980.asm`）。
-- 因此 `front.anm` 在 draw 节点 0x2b 绘制（在层 15、16 之后、层 19 之前）。**（推测）** 具体绘制内容（边框、HUD）由 `FUN_00415af0` 决定，未追踪。
+- 不能把所有 front.anm 对象统称在 0x2b 绘制：`FUN_00415af0`→`FUN_00415800` 直接画 GUI 内嵌数字／箭头数组与矩形，框／标签／标题／MSG／提示等自由 VM 在 World 层；符卡 helper 的八奖励／五历史数字在 0x25。
+- t3 已按原数组／调用顺序接 GUI、Boss 血条／星数／倒计时／箭头、Power／信仰／滚动得分与 MSG 演出；t5 的 0x2e 菜单另属 `DAT_00477830`。字体为 CPU 的 GDI／D3DX 近似，完整符卡接口与 cdbg 仍归 t7，不再列整个 GUI 内容未追踪。
 - ANM 槽 6：游戏对象 `+0x3ad06c + 6·4`（与 `FUN_00402440` 的 `DAT_00491c10 + 0x3ad06c + uVar4*4` 一致，`render3/func_402440.c`）。
 
 ### 5.5 窗口与全屏
@@ -739,19 +742,19 @@ for entry in entries (表顺序):
 
 ## 7. 开放问题
 
-1. ~~mode 2 的 z 分量~~：已确认是 bug，照搬（§3.9）。原文：`FUN_00443290`（mode 2）用 `+0x350 + +0x348 + +0x33c` 作 z，其它路径（mode 0、1、3）用 `+0x354`。疑似偏移错误，需核实（`render/func_443290.c` 与 `render/func_443080.c`）。
+1. ~~mode 2 的 z 分量~~：已确认是 bug，照搬（§3.9）。原文：`FUN_00443290`（mode 2）用 `+0x350 + +0x348 + +0x33c` 作 z，其它路径（mode 0、1、3）用 `+0x354`。疑似偏移错误，需核实（`render3/func_443290.c` 与 `render3/func_443080.c`）。
 2. **混合模式 b=2 不一致**：`FUN_00442670` 的 2D 路径（`FUN_004425a0`）对 b=2 不改 DESTBLEND，3D 路径（`FUN_004423e0`）改为 ONE。需确认 b=2 的预期效果。
 3. **mode 4–7 的角点构造**：`FUN_00443b60`、`FUN_00444240` 只看了开头，未逐行核对。`render5/func_443b60.c`、`render5/func_444240.c` 已导出，但未完整阅读。
-4. **STD 面位置的世界坐标来源**：`+0x334/338/33c` 的写入者未追踪（`render/func_443290.c`、`render/func_443080.c` 直接读取）。`FUN_00403a30` 只对 render mode ≥ 4 写 `pos_B`（+0x340..0x348），因此 mode 0–3 的 STD quad 位置从哪里来（ANM 脚本、还是其它函数）未确认。mode 8 的 3D 投影由 WORLD 矩阵承担（§3.3.3），而 `FUN_00403090` 只用于剔除。
+4. **STD 面位置的世界坐标来源**：`+0x334/338/33c` 的写入者未追踪（`render3/func_443290.c`、`render3/func_443080.c` 直接读取）。`FUN_00403a30` 只对 render mode ≥ 4 写 `pos_B`（+0x340..0x348），因此 mode 0–3 的 STD quad 位置从哪里来（ANM 脚本、还是其它函数）未确认。mode 8 的 3D 投影由 WORLD 矩阵承担（§3.3.3），而 `FUN_00403090` 只用于剔除。
 5. **第 19 层表**：`FUN_00448900` 构造的列表的语义，哪些 VM 进入这里，未确认。
 6. **`DAT_00491d66`（跳帧）**：渲染转储中没有写入者。配置来源未找到。
-7. **`DAT_00491d62` 与 `th10.cfg +0x1a`**：`FUN_00439890` 把初值 −1 规范为 0，配置读取的位置未追踪。
+7. **cfg 读取位置已定位**：`FUN_00420870` 的 `0x4208a4–0x4208aa` 拷贝 13 个 dword 到 `DAT_00491d48`，故 `DAT_00491d62` 为 cfg＋0x1a；R11 已给地址，t5 保留原 52 字节。当前后端不因此自动具备原 16 位色像素，视觉仍待 L3。
 8. ~~`+0x2ff` 的写入者~~：它是 `+0x2fc` 颜色的 alpha 字节，由设置颜色与 alpha 的 ANM 指令写入（§3.9）。
 9. **0x800 标志的消费者**：ins_73 翻转 0x800，但渲染转储中的 2D/3D 路径没有读取它。可能在 STD 相关函数或尚未导出的函数里。
 10. **bit1 的读取者**：`FUN_00403a30` 对 entry 置 `|= 2`，渲染转储中无人读取。
 11. ~~STD 深度~~：已解决（§4.7）。深度只由 pass 0–7 写，被 pass 0–7、层 18、pass 8–11 读。待查的是层 17、18 里放的是什么（哪些 ANM 脚本用 ins_68 设层 17/18）。
 12. **玩家和子弹的节点启用**：自机（`FUN_004247f0`）的绘制节点在构造时被清 bit1，未追踪它何时被启用；只核对了 STD 和游戏对象。
-13. **`front.anm` 的绘制内容**：`FUN_00415af0`（draw 0x2b）未追踪。
+13. **GUI 内容已由 t3 接入**：`FUN_00415af0`→`FUN_00415800` 的数组与 World 自由对象已区分，见第 5．4 节；真实历史／符卡结果接口归 t7，字体与像素仍待验证，不再列整段未追踪。
 14. **`FUN_00404f30` 的 AX 与 ESI**：由调用方寄存器传入（`render4/func_404450.asm` 的 `MOVSX EAX,word ptr [EDI+4]` 与 `ESI = 槽地址`），与 op 14 中的调用方式是否一致未核对。
 15. **2D 投影常量的最终核对**：`π/20`（`0x470ba0`，double）已读出，但 `FUN_00421480` 的 `fVar4 / fVar5` 与 `D3DXMatrixLookAtLH` 的 eye 参数顺序是否与代码完全一致，仅由公式推出。
 16. **gamma 与 MSAA**：仅做了渲染相关转储的扫描，未在整个 exe 中扫描 `SetGammaRamp`。

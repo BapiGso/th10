@@ -5,7 +5,6 @@ go 1.26.4
 require (
 	github.com/ebitenui/ebitenui v0.7.3
 	github.com/hajimehoshi/ebiten/v2 v2.10.5
-	github.com/yohamta/ganim8/v2 v2.2.1
 	golang.org/x/image v0.47.0 // indirect
 )
 

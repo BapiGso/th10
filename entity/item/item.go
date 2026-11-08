@@ -119,14 +119,18 @@ func NewPlayer(char int, x, y float32, state int32, focused, bombing bool) Playe
 
 // Env is what the manager reads and calls outside itself.
 type Env struct {
-	State  *game.GameState
-	Anm    *anm.Env
-	File   *anm.File // bullet.anm (+0x3e0b50)
-	Player Player
-	// PlaySE plays a sound effect by original id (FUN_0043dd10).
-	PlaySE func(id int32)
+	State   *game.GameState
+	Anm     *anm.Env
+	File    *anm.File  // bullet.anm (+0x3e0b50)
+	Effects *anm.World // free-standing 0x189 effects, FUN_0041bb00/FUN_0041ba50
+	Player  Player
+	// PlaySE is a centred sound (FUN_0043dc90); PlaySEAt is FUN_0043dd10.
+	PlaySE   func(id int32)
+	PlaySEAt func(id int32, x float32)
 	// Options is FUN_00426f70: the player's options after a power level.
 	Options func()
+	// Popup is FUN_0042b9c0: game position, integer value, original ARGB.
+	Popup func(pos [3]float32, value int32, color uint32)
 }
 
 func (e *Env) gameSpeed() float32 {
@@ -139,6 +143,30 @@ func (e *Env) gameSpeed() float32 {
 func (e *Env) playSE(id int32) {
 	if e.PlaySE != nil {
 		e.PlaySE(id)
+	}
+}
+
+func (e *Env) playSEAt(id int32, x float32) {
+	if e.PlaySEAt != nil {
+		e.PlaySEAt(id, x)
+	} else {
+		e.playSE(id)
+	}
+}
+
+func (e *Env) popup(it *Item, value int32, color uint32) {
+	if e.Popup != nil {
+		e.Popup(it.Pos, value, color)
+	}
+}
+
+// faithEffect is FUN_00448db0 at 0x41bc42/0x41badd. EDI supplies the item
+// position; the caller's stack argument is an output handle, not a vector.
+// Script 0x189 selects layer 11 and uses no RNG, despite Spawn's reset
+// clearing the initially selected AltRNG flag.
+func (e *Env) faithEffect(pos [3]float32) {
+	if e.Effects != nil && e.Anm != nil && e.File != nil {
+		e.Effects.Spawn(e.File, 0x189, pos, e.Anm)
 	}
 }
 
@@ -159,8 +187,8 @@ func (it *Item) start(env *Env, id int32) {
 // longer the more have spawned since the last update; any other kind takes
 // the first free dropped slot, x held to the playfield. At full power the
 // power items come out as faith items, the boss's as full point items. The
-// binary also stores -1 at +0x2fc from every caller, and spawns effect 0x189
-// when the slot last held kind 3; neither is ported.
+// binary also stores the caller's colour at +0x2fc (not ported). Effect
+// 0x189 depends on the slot's previous kind, not the new kind (0x41bc23).
 func (m *Manager) Spawn(env *Env, pos [3]float32, kind int32, angle, speed float32) {
 	if kind == KindCancel {
 		m.spawned++
@@ -212,6 +240,9 @@ func (m *Manager) Spawn(env *Env, pos [3]float32, kind int32, angle, speed float
 		case KindBossPower, KindBossBigPower:
 			kind = KindFullPoint
 		}
+	}
+	if it.Kind == KindBigFaith { // FUN_0041bb00, 0x41bc23-0x41bc42, before overwriting +0x3e0
+		env.faithEffect(it.Pos)
 	}
 	it.Kind, it.Display = kind, kind
 	script := kind + 0x176
@@ -323,7 +354,7 @@ func (m *Manager) Update(env *Env) {
 					full = true
 				}
 				it.State = StateFree
-				env.playSE(seItem)
+				env.playSEAt(seItem, it.Pos[0]) // FUN_0041afd0, 0x41b718..0x41b72d.
 				continue
 			}
 			if it.State != StateAttract && it.State != StateAuto {
@@ -350,30 +381,38 @@ func (m *Manager) Update(env *Env) {
 // collect is the reward for collecting it, reporting whether it brought the
 // power to full. Each kind also adds to the faith gauge's hold timer through
 // FUN_00412ff0 (AddFaithHold), as FUN_0041afd0 does at the same branch.
-// Not ported: the score popups (FUN_0042b9c0) and the power gauge (FUN_004054b0).
+// Score popups are presentation-only hooks; the GUI observes Power for
+// FUN_004054b0 without changing these collection/resource rules.
 func (m *Manager) collect(env *Env, it *Item) (full bool) {
 	st := env.State
 	faith := int32(st.Faith / 10) // DAT_00474c4c; GameState keeps it x10
 	switch it.Kind {
 	case KindPower, KindBossPower:
 		if st.GainPower(1) {
-			m.levelUp(env)
+			m.levelUp(env, it.Pos[0])
 			full = st.Power/5 > 99
 			st.AddRank(0xc)
+			env.popup(it, -1, 0xffffff40) // FUN_0041afd0 0x41b433: power level
+		} else {
+			env.popup(it, int32(st.Power/10), 0xffff4040) // 0x41b494: stored Power/2
 		}
 		st.AddFaithHold(60) // FUN_00412ff0(0x3c), both branches (0x41b473, 0x41b4a0)
 	case KindBigPower, KindBossBigPower:
 		if st.GainPower(20) {
-			m.levelUp(env)
+			m.levelUp(env, it.Pos[0])
 			st.AddRank(0x18)
 			full = st.Power/5 > 99
+			env.popup(it, -1, 0xffffff40) // 0x41b69f
+		} else {
+			env.popup(it, int32(st.Power/10), 0xffff4040) // 0x41b6ea
 		}
 		st.AddFaithHold(20) // FUN_00412ff0(0x14) (0x41b6cc, 0x41b6f6)
 	case KindPoint:
 		if env.Player.Pos[1] < 144 {
 			st.AddRank(8)
 			st.AddPoints(int64(faith * 10))
-			st.AddFaithHold(100) // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
+			st.AddFaithHold(100)                // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
+			env.popup(it, faith*10, 0xffffff00) // 0x41b54f
 			break
 		}
 		// Below the line it is half the value, less (y-144)/304 of
@@ -383,7 +422,8 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 		v -= v % 10
 		st.AddRank(1)
 		st.AddPoints(int64(v))
-		st.AddFaithHold(100) // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
+		st.AddFaithHold(100)         // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
+		env.popup(it, v, 0xffffffff) // 0x41b52b, below the line
 	case KindBigFaith:
 		n := int64(5000)
 		switch st.Difficulty {
@@ -393,11 +433,13 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 			n = 10000
 		}
 		st.GainFaith(n)
-		st.AddFaithHold(120) // FUN_00412ff0(0x78) (0x41b5cc)
+		env.popup(it, int32(n), 0xff00ff00) // 0x41b5b5
+		st.AddFaithHold(120)                // FUN_00412ff0(0x78) (0x41b5cc)
 	case KindFullPoint:
 		st.AddRank(8)
 		st.AddPoints(int64(faith * 10))
-		st.AddFaithHold(100) // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
+		st.AddFaithHold(100)                // FUN_00412ff0(100) at LAB_0041b559 (0x41b575)
+		env.popup(it, faith*10, 0xffffff00) // 0x41b54f
 	case KindLife: // FUN_004188a0
 		st.Life++
 		if st.Life < 10 {
@@ -412,28 +454,31 @@ func (m *Manager) collect(env *Env, it *Item) (full bool) {
 		st.AddFaithHold(3) // FUN_00412ff0(3) (0x41b5e9)
 	case KindFaith:
 		st.GainFaith(100)
-		st.AddFaithHold(60) // FUN_00412ff0(0x3c) (0x41b624)
+		env.popup(it, 100, 0xff00ff00) // 0x41b60c
+		st.AddFaithHold(60)            // FUN_00412ff0(0x3c) (0x41b624)
 	}
 	return full
 }
 
 // levelUp is a power level gained: the options (FUN_00426f70) and its sound.
-func (m *Manager) levelUp(env *Env) {
+func (m *Manager) levelUp(env *Env, x float32) {
 	if env.Options != nil {
 		env.Options()
 	}
-	env.playSE(seLevel)
+	env.playSEAt(seLevel, x) // FUN_0041afd0, 0x41b446/0x41b68c: the item's x.
 }
 
 // fullPower is FUN_0041ba50: every dropped power item still out (kinds 1 and
 // 4; the boss's are spared) turns into a faith item tossed up from where it
-// is. Not ported: the effect 0x189 at each.
+// is, then spawns one script 0x189 at that item's position.
 func (m *Manager) fullPower(env *Env) {
 	for i := range NormalSlots {
 		it := &m.Items[i]
 		if it.State != StateFree && (it.Kind == KindPower || it.Kind == KindBigPower) {
+			pos := it.Pos
 			it.State = StateFree
-			m.Spawn(env, it.Pos, KindFaith, -zun.HalfPi, 2.2)
+			m.Spawn(env, pos, KindFaith, -zun.HalfPi, 2.2)
+			env.faithEffect(pos) // FUN_0041ba50, 0x41bad2-0x41badd, after FUN_0041bb00
 		}
 	}
 }

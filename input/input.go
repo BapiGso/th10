@@ -1,6 +1,10 @@
 package input
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"th10/replay"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 // Key 抽象游戏按键
 type Key int
@@ -37,9 +41,11 @@ var defaultKeyMap = map[Key][]ebiten.Key{
 
 // State 每帧输入状态快照，用于 Update 阶段读取
 type State struct {
-	pressed [keyCount]bool // 当前帧是否按住
-	prev    [keyCount]bool // 上一帧是否按住
-	hold    [keyCount]int  // 连续按住帧数
+	pressed      [keyCount]bool // 当前帧是否按住
+	prev         [keyCount]bool // 上一帧是否按住
+	hold         [keyCount]int  // 连续按住帧数
+	replayRecord replay.Record
+	fromReplay   bool
 }
 
 // 全局单例
@@ -47,6 +53,7 @@ var Global State
 
 // Update 在 Game.Update 最开头调用，采集本帧输入
 func (s *State) Update() {
+	s.fromReplay = false
 	copy(s.prev[:], s.pressed[:])
 	for k := Key(0); k < keyCount; k++ {
 		s.pressed[k] = false
@@ -86,6 +93,7 @@ func (s *State) Snapshot() uint16 {
 
 // Restore 从快照恢复按键状态，用于 Replay 回放
 func (s *State) Restore(bits uint16) {
+	s.fromReplay = false
 	copy(s.prev[:], s.pressed[:])
 	for k := Key(0); k < keyCount; k++ {
 		s.pressed[k] = bits&(1<<k) != 0

@@ -6,9 +6,9 @@ package assets
 
 import "embed"
 
-// DFYuGaSo TTC 因为简中缺字（"灵丽红选关开" 等都是 .notdef）已经不再嵌入；
-// 仍保留磁盘文件以便日后查阅，仓库 .gitignore 没碰它们。
-// HUD 数字字体走 Bimini Bold（嵌入）；菜单/对话用 OS 黑体（运行时加载）。
+// GUI/MSG text uses the existing DFYuGaSo fonts with th10c.dat's traditional
+// Chinese text. Menus keep their current font policy; numeric GUI sprites
+// come from front.anm/ascii.anm rather than a font.
 //
-//go:embed anm ecl msg sht std "font/Bimini Bold.ttf" wav/se/*.wav wav/bgm/*.ogg wav/bgm/thbgm.fmt
+//go:embed anm ecl msg sht std "font/Bimini Bold.ttf" font/DFYuGaSo-W3.ttc font/DFYuGaSo-W7.ttc misc/musiccmtt.txt wav/se/*.wav wav/bgm/*.ogg wav/bgm/thbgm.fmt
 var Assets embed.FS

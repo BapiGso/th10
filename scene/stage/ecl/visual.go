@@ -325,7 +325,8 @@ func (vm *VM) updateVisual(a *eclActor) {
 		}
 		a.flash = hitFlash
 		if ctx != nil {
-			ctx.PlaySEID(hitSE(e.ECLFlags&0x8000 != 0, vm.card.Active, vm.card.Survival, a.phaseHP))
+			ctx.PlaySEIDAt(hitSE(e.ECLFlags&0x8000 != 0, vm.card.Active, vm.card.Survival, a.phaseHP),
+				a.mv.final.pos[0]) // FUN_0040dc80, 0x40e4f4/0x40e509.
 		}
 	}
 }

@@ -56,10 +56,10 @@ type VM struct {
 	// through stage.Context.RNG.
 	rng *zun.RNG
 
-	// Dynamic rank (DAT_00474c98, -1024..1024): +1 every 60 frames of the
-	// player's state timer while enemies are on screen and no dialog is open
-	// (player update FUN_00425730). Consumed by the rank-tier ET opcodes
-	// 422-427.
+	// Dynamic rank (DAT_00474c98, -1024..1024), snapshotted from the game
+	// state. FUN_00425730 adds 1 after ticking the player's state timer if
+	// Cur%60 == 0, GUI+0x9eb8 is zero and manager+0x60 is nonzero (including
+	// the hidden main, not just onscreen enemies). Read by 349-354/422-427.
 	rank int
 
 	// The game speed (DAT_00476f78, set by ins_367): every context clock,
@@ -81,11 +81,15 @@ type VM struct {
 	// hudTimer is the boss timer readout (DAT_0047770c+0x9ec0), rewritten by
 	// FUN_004127a0 whenever it checks an armed slot with a time limit.
 	hudTimer int
+	// GUI+0x9e94 and +0x9e90. Keep these when no GUI is attached (unit
+	// tests); a real stage writes the GUI records directly from 347/360.
+	hudMarkers   [4]stage.HPMarker
+	hudStars     int32
+	displayNames map[string]string // original spell text -> th10c.dat text
 
-	// screen shake (ins_337): magnitude decays linearly over the duration.
-	shakeFrames int
-	shakeTotal  int
-	shakeMag    float64
+	// FUN_0043c970 kind 1 objects run at calc 0x0e, before this manager.
+	shakes     []*screenShake
+	shakeShift [2]float32 // DAT_00491e64/68, copied to Field.Shift by Draw
 
 	// card is the spell card state (DAT_004776f4) the bomb reads through
 	// Context.Spell, driven by the declarations (342/348/357-359) and 343;
@@ -164,6 +168,7 @@ func NewStageVM(eclPath string) *VM {
 	if data, err := gamedata.ReadFile(eclPath); err == nil {
 		if prog, perr := LoadProgram(data); perr == nil {
 			vm.prog = prog
+			vm.displayNames = spellDisplayNames(eclPath, prog)
 			// The ECLI list ("default.ecl": the Ecl_EtBreak bullet-clearing
 			// enemies, et_ofs_r) shares the stage's sub namespace; th10.exe
 			// looks every name up in one table (FUN_00450470).
@@ -230,8 +235,17 @@ func (vm *VM) BossHUD() stage.BossHUDInfo {
 			frac = 1
 		}
 	}
-	info := stage.BossHUDInfo{Active: true, HPFrac: frac}
+	info := stage.BossHUDInfo{
+		Active: true, HPFrac: frac, HP: int32(boss.HP), MaxHP: int32(boss.MaxHP),
+		Flags: uint32(boss.ECLFlags), Midboss: vm.ctx == nil || vm.ctx.BossSection < 0x18,
+		Stars: vm.hudStars, Markers: vm.hudMarkers,
+	}
+	if vm.ctx != nil && vm.ctx.GUI != nil {
+		info.Stars, info.Markers = vm.ctx.GUI.BossStars, vm.ctx.GUI.HPMarkers
+	}
 	if a := vm.actors[boss]; a != nil {
+		info.Position = [2]float32(a.mv.final.pos[:2])
+		info.PhaseHP = a.phaseHP
 		if boss.MaxHP > 0 {
 			for _, m := range a.markers {
 				mf := m.hp / float64(boss.MaxHP)
@@ -243,11 +257,13 @@ func (vm *VM) BossHUD() stage.BossHUDInfo {
 		}
 		if a.timed() {
 			info.TimeLeft = vm.hudTimer
+			info.HasTimer = true
 		}
 	}
 	if vm.card.Active && vm.spell.owner == boss {
 		info.Spell = true
 		info.Name = vm.spell.name
+		info.DisplayName = vm.displayNames[vm.spell.name]
 		info.Bonus = vm.card.Bonus
 	}
 	return info
@@ -271,43 +287,25 @@ func (vm *VM) sweepEnemies() {
 	}
 }
 
-// ShakeOffset returns the current screen-shake displacement (dx, dy) in pixels,
-// driven by ins_337. Magnitude decays linearly to 0 over the requested
-// duration; the direction varies per frame. Returns (0,0) when not shaking.
-func (vm *VM) ShakeOffset() (float64, float64) {
-	if vm.shakeFrames <= 0 || vm.shakeTotal <= 0 {
-		return 0, 0
-	}
-	mag := vm.shakeMag * float64(vm.shakeFrames) / float64(vm.shakeTotal)
-	// Deterministic alternating direction (no Math.random in VM): drive the
-	// offset from the frame counter, scaled by the decaying magnitude.
-	phase := float64(vm.frame)
-	dx := math.Cos(phase*2.3) * mag
-	dy := math.Sin(phase*2.9) * mag
-	return dx, dy
-}
-
 // Update runs the enemy manager (FUN_0040d750) for one frame.
 func (vm *VM) Update(ctx *stage.Context) {
 	vm.frame++
-	if vm.shakeFrames > 0 {
-		vm.shakeFrames--
-	}
 	vm.ctx = ctx
 	vm.prune()
 	if ctx != nil {
 		ctx.ManagerOrder = vm.ManagerOrder
 		ctx.Boss0 = vm.boss0Pos
 		ctx.Spell = &vm.card
+		ctx.CalcShake = vm.CalcShake // FUN_0043c970 registers independently at priority 0x0e
 		if ctx.Anm != nil {
 			vm.gameSpeed = ctx.Anm.GameSpeed // the player's respawn resets it
 		}
 	}
 
-	// Dynamic rank (FUN_00425730): +1 when the player's state timer lands on
-	// a multiple of 60 while enemies are on screen and no dialog is open,
-	// clamped to [-1024, 1024]. It lives in the game state, where a death
-	// also takes from it, and carries over between stages.
+	// FUN_00425730, 0x426256..0x4262b4: inspect the post-Tick state timer
+	// (+0x478), GUI's MSG pointer and manager's live count (+0x60). There is
+	// no Cur!=Prev test: slow frames held at a multiple of 60 each add 1.
+	// This is after Player.tail and before any ECL reads of DAT_00474c98.
 	if ctx != nil && ctx.State != nil {
 		vm.rank = ctx.State.Rank
 	}
@@ -316,12 +314,12 @@ func (vm *VM) Update(ctx *stage.Context) {
 		clock = ctx.Player.StateTimer.Cur
 	}
 	if len(vm.actors) > 0 && (ctx == nil || !ctx.DialogActive()) && clock%60 == 0 {
-		if vm.rank++; vm.rank > 1024 {
-			vm.rank = 1024
+		if ctx != nil && ctx.State != nil {
+			ctx.State.AddRank(1)
+			vm.rank = ctx.State.Rank
+		} else {
+			vm.rank = min(max(vm.rank+1, -0x400), 0x400)
 		}
-	}
-	if ctx != nil && ctx.State != nil {
-		ctx.State.Rank = vm.rank
 	}
 
 	// Drop the spell HUD when the card's owner dies.

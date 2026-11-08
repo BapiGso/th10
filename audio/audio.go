@@ -94,11 +94,18 @@ type Manager struct {
 	seVolume  float64
 	seCache   map[string][]byte
 	sePlayers []*audio.Player
-	seQueue   []int // the sound ids PlaySEID started this frame
+	seQueue   []seRequest // FUN_0043dd10's per-id pan requests for this frame
+	seByID    [len(seTable)]*audio.Player
+	// seAux is the unused +6 attribute copied to manager+0x408 (0x43dd8b).
+	seAux [len(seTable)]int16
 }
 
 func NewManager(ctx *audio.Context) *Manager {
-	return &Manager{ctx: ctx, bgmVolume: 1, seVolume: 1, seCache: map[string][]byte{}}
+	m := &Manager{ctx: ctx, bgmVolume: 1, seVolume: 1, seCache: map[string][]byte{}}
+	for i := range m.seAux {
+		m.seAux[i] = -1 // FUN_004659a0 / FUN_0043e580 initialize the attribute array.
+	}
+	return m
 }
 
 // PlaySE 播放音效
@@ -107,19 +114,27 @@ func (m *Manager) PlaySE(name string) {
 }
 
 func (m *Manager) playSE(name string, gain float64) {
+	m.playSEPan(name, gain, 0)
+}
+
+func (m *Manager) playSEPan(name string, gain float64, pan int32) *audio.Player {
 	m.cleanupSE()
-	if m.seVolume <= 0 {
-		return
+	if m.ctx == nil || m.seVolume <= 0 {
+		return nil
 	}
 	pcm, err := m.loadSEPCM(name)
 	if err != nil {
-		return
+		return nil
 	}
 	m.trimSEPlayers()
-	p := m.ctx.NewPlayerFromBytes(pcm)
-	p.SetVolume(m.seVolume * gain)
+	p, err := m.ctx.NewPlayer(newPanStream(bytes.NewReader(pcm), gain, pan))
+	if err != nil {
+		return nil
+	}
+	p.SetVolume(m.seVolume)
 	p.Play()
 	m.sePlayers = append(m.sePlayers, p)
+	return p
 }
 
 func (m *Manager) loadSEPCM(name string) ([]byte, error) {
@@ -143,11 +158,11 @@ func (m *Manager) loadSEPCM(name string) ([]byte, error) {
 	return pcm, nil
 }
 
-// Update releases finished short-lived SE players and starts a new frame of
-// the PlaySEID queue. Call once per game frame.
+// Update flushes FUN_0043dd10's sound queue and releases finished voices.
+// Call once at the end of the game frame (FUN_00439390, 0x43943b).
 func (m *Manager) Update() {
+	m.flushSE()
 	m.cleanupSE()
-	m.seQueue = m.seQueue[:0]
 	if m.fadeLeft > 0 {
 		if m.fadeLeft--; m.fadeLeft == 0 {
 			m.StopBGM()
@@ -168,7 +183,8 @@ func (m *Manager) cleanupSE() {
 			n++
 			continue
 		}
-		_ = p.Close()
+		p.PauseAndStopReading()
+		m.clearSEID(p)
 	}
 	for i := n; i < len(m.sePlayers); i++ {
 		m.sePlayers[i] = nil
@@ -183,7 +199,8 @@ func (m *Manager) trimSEPlayers() {
 	excess := len(m.sePlayers) - maxActiveSEPlayers + 1
 	for _, p := range m.sePlayers[:excess] {
 		if p != nil {
-			_ = p.Close()
+			p.PauseAndStopReading()
+			m.clearSEID(p)
 		}
 	}
 	copy(m.sePlayers, m.sePlayers[excess:])
@@ -191,6 +208,14 @@ func (m *Manager) trimSEPlayers() {
 		m.sePlayers[i] = nil
 	}
 	m.sePlayers = m.sePlayers[:len(m.sePlayers)-excess]
+}
+
+func (m *Manager) clearSEID(p *audio.Player) {
+	for id, voice := range m.seByID {
+		if voice == p {
+			m.seByID[id] = nil
+		}
+	}
 }
 
 // PlayBGM 播放 BGM：[0, Size) 先播一遍，之后循环 [Intro, Size)（thbgm.fmt）。

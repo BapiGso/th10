@@ -4,6 +4,8 @@ package game
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -34,37 +36,17 @@ func dataDir() string {
 }
 
 func configPath() string { return filepath.Join(dataDir(), "config.json") }
-func savePath() string   { return filepath.Join(dataDir(), "save.json") }
-
-// SaveData 持久化的全局进度数据。
-type SaveData struct {
-	HighScore        int64 `json:"high_score"`
-	ExtraUnlocked    bool  `json:"extra_unlocked"`
-	TotalRuns        int   `json:"total_runs"`
-	TotalClears      int   `json:"total_clears"`
-	TotalExtraClears int   `json:"total_extra_clears"`
-	TotalGameOvers   int   `json:"total_game_overs"`
-	LastCharacter    int   `json:"last_character"`
-	LastShotType     int   `json:"last_shot_type"`
-	LastDifficulty   int   `json:"last_difficulty"`
-}
-
-func DefaultSaveData() *SaveData {
-	return &SaveData{
-		LastDifficulty: DiffNormal,
-	}
-}
 
 func LoadConfig() *Config {
 	cfg := DefaultConfig()
 	loadJSON(configPath(), cfg)
+	if data, err := os.ReadFile(filepath.Join(dataDir(), "th10.cfg")); err == nil {
+		if native, err := DecodeNativeConfig(data); err == nil {
+			cfg.Native = native
+			cfg.BGMVolume, cfg.SEVolume = float64(native.Raw[0x20])/100, float64(native.Raw[0x21])/100
+		}
+	}
 	return cfg
-}
-
-func LoadSaveData() *SaveData {
-	save := DefaultSaveData()
-	loadJSON(savePath(), save)
-	return save
 }
 
 func loadJSON(path string, dst any) {
@@ -90,76 +72,71 @@ func (g *Game) SaveConfig() error {
 	if g.Config == nil {
 		return nil
 	}
-	return writeJSON(configPath(), g.Config)
+	if err := writeJSON(configPath(), g.Config); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dataDir(), "th10.cfg"), g.Config.NativeBytes(), 0o644)
 }
 
-func (g *Game) SaveProgress() error {
-	if g.Save == nil {
-		return nil
+type fileScoreStore struct{ dir string }
+
+func newScoreStore() ScoreStore { return &fileScoreStore{dir: dataDir()} }
+
+func readScoreUserFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
 	}
-	return writeJSON(savePath(), g.Save)
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxScoreBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxScoreBytes {
+		return nil, fmt.Errorf("game: score exceeds %d bytes", maxScoreBytes)
+	}
+	return data, nil
 }
 
-func (g *Game) syncHighScore(state *GameState) {
-	if g.Save == nil || state == nil {
-		return
-	}
-	if state.HiScore < g.Save.HighScore {
-		state.HiScore = g.Save.HighScore
-	}
-	if state.Score > g.Save.HighScore {
-		g.Save.HighScore = state.Score
-		state.HiScore = state.Score
-	}
+func (s *fileScoreStore) Read() ([]byte, error) {
+	return readScoreUserFile(filepath.Join(s.dir, "score.dat"))
 }
 
-func (g *Game) BeginRun(state *GameState) {
-	if g.Save == nil {
-		g.Save = DefaultSaveData()
-	}
-	if state == nil {
-		return
-	}
-	g.syncHighScore(state)
-	state.ExtraUnlocked = g.Save.ExtraUnlocked
-	if state.DebugMode {
-		state.ExtraUnlocked = true
-		return
-	}
-	g.Save.TotalRuns++
-	g.Save.LastCharacter = state.Character
-	g.Save.LastShotType = state.ShotType
-	g.Save.LastDifficulty = state.Difficulty
-	_ = g.SaveProgress()
+func (s *fileScoreStore) LegacyJSON() ([]byte, error) {
+	return readScoreUserFile(filepath.Join(s.dir, "save.json"))
 }
 
-func (g *Game) MarkGameOver(state *GameState) {
-	if g.Save == nil {
-		g.Save = DefaultSaveData()
+// As with replay writes, a failed save never truncates an existing file.
+func (s *fileScoreStore) Write(data []byte) error {
+	if len(data) > maxScoreBytes {
+		return fmt.Errorf("game: score exceeds %d bytes", maxScoreBytes)
 	}
-	g.syncHighScore(state)
-	if state != nil {
-		state.ExtraUnlocked = g.Save.ExtraUnlocked
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return err
 	}
-	g.Save.TotalGameOvers++
-	_ = g.SaveProgress()
-}
-
-func (g *Game) MarkClear(state *GameState) {
-	if g.Save == nil {
-		g.Save = DefaultSaveData()
+	f, err := os.CreateTemp(s.dir, ".th10-score-*.tmp")
+	if err != nil {
+		return err
 	}
-	g.syncHighScore(state)
-	if state != nil && state.Stage == StageExtra {
-		g.Save.TotalExtraClears++
-	} else {
-		g.Save.TotalClears++
-		if state != nil && state.Difficulty >= DiffNormal {
-			g.Save.ExtraUnlocked = true
+	tmp, saved := f.Name(), false
+	defer func() {
+		_ = f.Close()
+		if !saved {
+			_ = os.Remove(tmp)
 		}
+	}()
+	if _, err := f.Write(data); err != nil {
+		return err
 	}
-	if state != nil {
-		state.ExtraUnlocked = g.Save.ExtraUnlocked
+	if err := f.Sync(); err != nil {
+		return err
 	}
-	_ = g.SaveProgress()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, filepath.Join(s.dir, "score.dat")); err != nil {
+		return err
+	}
+	saved = true
+	return nil
 }

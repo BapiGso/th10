@@ -814,6 +814,21 @@ func (vm *VM) spawnChild(id int) {
 	root.chain = append(root.chain, c)
 }
 
+// Child is FUN_00409280's script lookup in a root's flattened child chain
+// (0x4097c5 and 0x409844). Removed children no longer have a world, as the
+// original's destructors unlink them. It does not search another root.
+func (vm *VM) Child(id int) *VM {
+	if vm == nil {
+		return nil
+	}
+	for _, c := range vm.chain {
+		if c.ScriptID == id && c.world != nil && c.world == vm.world {
+			return c
+		}
+	}
+	return nil
+}
+
 func intOp(k int, a, b int32) int32 {
 	switch k {
 	case 0:

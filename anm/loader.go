@@ -97,6 +97,21 @@ type File struct {
 	Entries []Entry
 	Sprites map[int]Sprite
 	Scripts map[int]*Script
+	// ScriptOrder is the file-order pointer table FUN_00447470 builds at
+	// +0x11c (0x4476b8..0x4476eb). Text.anm's stored IDs are negative;
+	// its callers use these ordinals, not those labels.
+	ScriptOrder []*Script
+}
+
+// OrdinalScripts returns a shallow copy addressed by runtime script ordinal.
+// The labeled table remains available on the parsed file for inspection.
+func (f *File) OrdinalScripts() *File {
+	g := *f
+	g.Scripts = make(map[int]*Script, len(f.ScriptOrder))
+	for i, sc := range f.ScriptOrder {
+		g.Scripts[i] = sc
+	}
+	return &g
 }
 
 var errTooShort = errors.New("anm: truncated")
@@ -190,7 +205,9 @@ func (f *File) parseEntry(data []byte, base int) (next int, err error) {
 		if perr != nil {
 			return 0, fmt.Errorf("anm script %d: %w", id, perr)
 		}
-		f.Scripts[id] = newScript(id, instrs)
+		sc := newScript(id, instrs)
+		f.Scripts[id] = sc
+		f.ScriptOrder = append(f.ScriptOrder, sc)
 	}
 	return nextOff, nil
 }

@@ -95,6 +95,9 @@ func (vm *VM) checkInterrupt(e *enemy.Enemy, a *eclActor) (string, bool) {
 			continue
 		}
 		vm.hudTimer = min(99, int((s.time-a.phase.cur+59)/60))
+		if vm.ctx != nil && vm.ctx.GUI != nil {
+			vm.ctx.GUI.SetBossTimer(vm.hudTimer) // FUN_004127a0 0x4128b0
+		}
 		if a.phase.cur < s.time {
 			return "", false
 		}
@@ -106,12 +109,10 @@ func (vm *VM) checkInterrupt(e *enemy.Enemy, a *eclActor) (string, bool) {
 		if vm.ctx != nil && vm.ctx.State != nil {
 			vm.ctx.State.Faith = max(vm.ctx.State.Faith-30000, 50000)
 		}
-		// A timeout (FUN_004127a0) loses the capture unless the card is a
-		// survival card (+0x378c bit 3). The binary also clears bit 1 of the
-		// seven spell block VMs (+0xad4 … +0x2488); not ported (M6).
+		// FUN_004127a0: the same bonus/capture/seven-VM writes as
+		// FUN_00405500, but a survival timeout keeps the capture.
 		if !vm.card.Survival && vm.card.Timer.Cur > 59 {
-			vm.card.Bonus = 0
-			vm.card.Capture = false
+			vm.card.Bombed()
 		}
 		return s.timeoutSub, true
 	}
@@ -191,9 +192,7 @@ func (vm *VM) damaged(e *enemy.Enemy, dmg int) bool {
 // this frame are forgotten.
 func (vm *VM) LateUpdate(ctx *stage.Context) {
 	vm.ctx = ctx
-	if vm.card.Active {
-		vm.card.Timer.Tick(vm.gameSpeed)
-	}
+	vm.updateSpell(ctx)
 	vm.prune()
 }
 

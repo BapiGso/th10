@@ -28,6 +28,8 @@ const (
 	msgBossName      = 19 // the boss's name plate
 	msgStageClear    = 20
 	msgFadeBGM       = 21
+	msgAnimatePlayer = 22 // FUN_00449470(player handle, label 7)
+	msgAnimateBoss   = 23 // FUN_00449470(boss handle, label 7)
 )
 
 // Instr is one .msg instruction. It runs once the entry's clock reaches
@@ -37,6 +39,9 @@ type Instr struct {
 	Op   uint8
 	Arg  int32
 	Text string
+	// DisplayText is th10c.dat's text overlay. Text and all timing/arguments
+	// remain the original .msg, keeping the existing logic tests unchanged.
+	DisplayText string
 }
 
 // Hooks are the MSG's effects outside the dialog. Nil hooks do nothing.
@@ -78,13 +83,21 @@ type MSG struct {
 	lines  int  // +0x80: lines op 16 has put in the box
 	hooks  Hooks
 
-	View View
+	View   View
+	visual *Presentation
 }
 
 // NewMSG starts entry id's code with clock 0.
 func NewMSG(id int32, code []Instr, hooks Hooks) *MSG {
 	return &MSG{ID: id, code: code, hooks: hooks}
 }
+
+// SetPresentation attaches the ANM-side MSG effects without advancing its
+// clock. NewPresentation constructs the text VMs (FUN_00415b00).
+func (m *MSG) SetPresentation(p *Presentation) { m.visual = p }
+
+// Presentation returns the MSG's ANM objects, nil in logic-only tests.
+func (m *MSG) Presentation() *Presentation { return m.visual }
 
 // Pos reports where the MSG is, for traces: its clock, op 10's timer and the
 // time and opcode of the instruction it is at.
@@ -112,6 +125,9 @@ func (m *MSG) Update(advance, skip bool) bool {
 		in := &m.code[m.pc]
 		switch in.Op {
 		case msgEnd:
+			if m.visual != nil {
+				m.visual.Close() // FUN_004136c0, called when GUI destroys MSG
+			}
 			return false
 		case msgShowPlayer:
 			v.Player = true
@@ -180,9 +196,15 @@ func (m *MSG) Update(advance, skip bool) bool {
 				m.hooks.FadeBGM()
 			}
 		}
+		if m.visual != nil {
+			m.visual.Apply(m, *in)
+		}
 		m.pc++
 	}
 	if m.pc >= len(m.code) {
+		if m.visual != nil {
+			m.visual.Close()
+		}
 		return false // every entry ends in op 0; a cut one ends here
 	}
 	m.clock++

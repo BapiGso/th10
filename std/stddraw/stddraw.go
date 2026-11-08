@@ -17,9 +17,8 @@
 //     timer (+0x2a20) is positive.
 //
 // The constructor (FUN_00402230) sets bit 0 alone, and no writer of the
-// other bits or of the timer is traced. Bit 0 is cleared only by the
-// bit-0x4 transition, so it stays set and both nodes always draw their
-// passes.
+// other bits or of the timer is traced here. Bit 0 is BackgroundVisible:
+// the spell calc clears it at timer >= 60, and the spell end sets it.
 //
 // Evidence: .tmp/ecl_dump/render/func_402850.asm, func_402ca0.asm,
 // func_403a30.asm, render3/func_403090.asm, s2b_aux/func_405300.asm.
@@ -110,33 +109,36 @@ func (d *Drawer) Node7(sv *supervisor.Supervisor) {
 	// FUN_00402850 step 4.
 	d.Faces, d.Culled, d.Quads = 0, 0, 0
 
-	// FUN_00402850 step 5: the slots are drawn under Field's flat matrices.
-	if d.STD.Slots[0].Sprite >= 0 {
-		sv.Use(&sv.Field)
-		sv.Is2D = false
-		sv.Fog(false)
-		sv.ANM.Flush()
-		sv.ANM.Flush()
-		sv.Dev.SetZWrite(false)
-		for i := range d.STD.Slots {
-			if s := &d.STD.Slots[i]; s.Sprite >= 0 {
-				sv.ANM.Draw(s)
+	// FUN_00402850 0x402aba-0x402ad3: bit 0 gates slots and passes together.
+	if d.STD.BackgroundVisible {
+		// FUN_00402850 step 5: the slots are drawn under Field's flat matrices.
+		if d.STD.Slots[0].Sprite >= 0 {
+			sv.Use(&sv.Field)
+			sv.Is2D = false
+			sv.Fog(false)
+			sv.ANM.Flush()
+			sv.ANM.Flush()
+			sv.Dev.SetZWrite(false)
+			for i := range d.STD.Slots {
+				if s := &d.STD.Slots[i]; s.Sprite >= 0 {
+					sv.ANM.Draw(s)
+				}
 			}
+			sv.ANM.Flush()
+			sv.Dev.SetZWrite(true)
+			sv.Select(&sv.Field)
+			sv.Perspective(&sv.Field)
+			sv.Dev.SetViewport(sv.Field.Viewport)
+			sv.Is2D = false
+		}
+
+		// FUN_00402850 step 6.
+		sv.Fog(true)
+		for p := range 8 {
+			d.pass(sv, p)
 		}
 		sv.ANM.Flush()
-		sv.Dev.SetZWrite(true)
-		sv.Select(&sv.Field)
-		sv.Perspective(&sv.Field)
-		sv.Dev.SetViewport(sv.Field.Viewport)
-		sv.Is2D = false
 	}
-
-	// FUN_00402850 step 6.
-	sv.Fog(true)
-	for p := range 8 {
-		d.pass(sv, p)
-	}
-	sv.ANM.Flush()
 
 	// FUN_00402850 step 7.
 	d.tint(sv)
@@ -192,13 +194,16 @@ func (d *Drawer) Node0A(sv *supervisor.Supervisor, layer func(l int)) {
 	sv.ANM.Flush()
 	sv.Dev.SetFog(gfx.Fog{Mode: gfx.FogVertexLinear, Color: d.STD.Cam.FogColor,
 		Start: d.STD.Cam.FogNear, End: d.STD.Cam.FogFar})
-	sv.ANM.Flush()
-	sv.Dev.SetZWrite(false)
-	sv.Fog(true)
-	for p := 8; p < 12; p++ {
-		d.pass(sv, p)
+	// FUN_00402ca0: bit 0 gates only passes 8-11, not layers 17/18.
+	if d.STD.BackgroundVisible {
+		sv.ANM.Flush()
+		sv.Dev.SetZWrite(false)
+		sv.Fog(true)
+		for p := 8; p < 12; p++ {
+			d.pass(sv, p)
+		}
+		sv.ANM.Flush()
 	}
-	sv.ANM.Flush()
 	d.tint(sv)
 	sv.ANM.Flush()
 	sv.Dev.SetZWrite(false)

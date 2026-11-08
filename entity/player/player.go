@@ -3,21 +3,13 @@ package player
 import (
 	"fmt"
 	"math"
+	"th10/anm"
 	"th10/entity/playerbullet"
 	"th10/game"
 	"th10/gamedata"
 	"th10/input"
 	"th10/sht"
 	"th10/zun"
-)
-
-// AnimState 行走图动画状态
-type AnimState int
-
-const (
-	AnimFront  AnimState = iota // 正面
-	AnimToSide                  // 转身过渡
-	AnimSide                    // 侧身
 )
 
 // State is the player's state (+0x458), numbered as FUN_00425730 switches on
@@ -34,6 +26,14 @@ const (
 
 // Player 玩家实体
 type Player struct {
+	VM        anm.VM    // +0x14: embedded player animation, not a world object
+	Anm       *anm.File // +0x10: pl00.anm or pl01.anm (FUN_004247f0)
+	world     *anm.World
+	env       *anm.Env
+	bulletAnm *anm.File
+	hitbox    *anm.VM // +0x329c: focus hitbox's world handle
+	xStep     int32   // +0x44c: previous raw horizontal step
+
 	X, Y float64 // 屏幕坐标，由 IX/IY 导出（player +0x3c0/+0x3c4 加上场地原点）
 	// IX, IY 是以百分之一像素计、相对场地顶边中点的整数位置
 	// （player +0x3cc/+0x3d0）。移动只改它们，X/Y 每次按
@@ -58,22 +58,26 @@ type Player struct {
 	// initTimer is +0x488, restarted only at init (FUN_00424d90): focus is
 	// forced off while it is under 4.
 	initTimer zun.Timer
-	// Flash is the invulnerability blink, ANM flag 0x8000 with colour
-	// 0xff0000ff.
-	Flash bool
 	// DeathPos is +0x440, where the player died, in game coordinates. The
 	// respawn's clears are centred on it.
 	DeathPos [2]float32
 	// Bomb is the bomb object (DAT_004776ec); nil leaves the player unable
 	// to bomb.
-	Bomb       Bomber
-	ShootTimer int // 射击间隔计时（尚未移植的机体）
+	Bomb Bomber
 	// NoAttack 由关卡在对话期间置位：射击（FUN_004281d0）和灵击都要求没有
 	// MSG，决死灵击不受限。
 	NoAttack bool
 	// focus is +0x4474, latched by the movement (FUN_004250b0).
 	focus bool
 	areas [32]damageArea // +0x350c
+	// FUN_00426f70/FUN_004250b0: all six layouts share four option slots
+	// and 33 fixed-point position samples (+0x436c).
+	shotFile        *sht.File
+	options         [4]option
+	optionCount     int
+	optionView      [4]Option
+	positionHistory [33][2]int32
+	optionEase      int32 // +0x4308, held at 30 except Marisa C's focus lock
 
 	// Hooks into the rest of the stage.
 	SetGameSpeed func(float32) // writes DAT_00476f78
@@ -85,19 +89,16 @@ type Player struct {
 	CancelAll func()
 	// SpawnItem is FUN_0041bb00: an item of kind thrown at angle and speed.
 	SpawnItem func(x, y float32, kind int32, angle, speed float32)
-
-	// 行走图动画
-	AnimState AnimState
-	AnimFrame int  // 当前动画帧索引
-	AnimTimer int  // 动画计时器
-	FaceRight bool // 面朝方向
+	// PowerChanged calls the existing GUI FUN_004054b0 after the bomb/death
+	// power write (0x425a10/0x425af7/0x425c7f); nil leaves pure player tests usable.
+	PowerChanged func()
 
 	// 游戏区域边界
 	FieldLeft, FieldTop, FieldRight, FieldBottom float64
 
 	// 自机子弹池引用
 	Bullets *playerbullet.Pool
-	reimuA  *reimuAShot
+	reimuA  *shotState // common SHT runtime; retains the original Reimu A inspection name
 }
 
 // Bomber is the bomb object (DAT_004776ec) as the player drives it.
@@ -105,12 +106,6 @@ type Bomber interface {
 	Active() bool // +0x28: a bomb is running
 	Start()       // FUN_00405860
 }
-
-const (
-	shootInterval  = 3 // Legacy shot approximation; SHT firing records not yet executed.
-	frontFrameTime = 8 // 正面/侧身动画帧间隔
-	transFrameTime = 6 // 转身过渡动画帧间隔
-)
 
 func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 	path := fmt.Sprintf("sht/pl%02d%c.sht", gs.Character, 'a'+gs.ShotType)
@@ -122,31 +117,47 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 	if err != nil {
 		panic(fmt.Sprintf("load player movement %s: %v", path, err))
 	}
+	shots, err := sht.Parse(data)
+	if err != nil {
+		panic(fmt.Sprintf("load player SHT %s: %v", path, err))
+	}
+	if err = shots.ValidateTH10(); err != nil {
+		panic(fmt.Sprintf("load player SHT %s: %v", path, err))
+	}
 	p := &Player{
+		Anm: playerFiles[gs.Character](),
 		steps: [4]int32{int32(movement.Fast), int32(movement.Slow),
 			int32(movement.FastDiagonal), int32(movement.SlowDiagonal)},
 		HitboxRadius: 2, GrazeRadius: 16,
-		GS:        gs,
+		GS:       gs,
+		shotFile: shots, optionCount: -1, optionEase: 30,
 		State:     StateNormal, // FUN_00424d90
 		FieldLeft: fieldL, FieldTop: fieldT,
 		FieldRight: fieldR, FieldBottom: fieldB,
-		Bullets: playerbullet.NewPool(256),
+		Bullets: playerbullet.NewPool(128), // FUN_00427e90: P+0x49c, 128 records of 0x5c
+		reimuA:  &shotState{},
 	}
 	p.StateTimer.Reset()
 	p.initTimer.Reset()
-	p.Invinc.Set(120)    // FUN_004247f0
-	p.SetFixed(0, 40000) // FUN_004247f0: (0, 400.0)
-	if gs.Character == game.CharReimu && gs.ShotType == game.ShotA {
-		shots, err := sht.Parse(data)
-		if err != nil {
-			panic(fmt.Sprintf("load Reimu A shots: %v", err))
-		}
-		if err = shots.ValidateReimuA(); err != nil {
-			panic(err)
-		}
-		p.reimuA = &reimuAShot{file: shots, clock: -1, optionCount: -1}
-		p.Bullets = playerbullet.NewPool(128) // original player+0x49c: 128 slots
+	p.Invinc.Set(120)      // FUN_004247f0
+	p.reimuA.timer.Set(-1) // FUN_00424d90, P+0x460
+	p.SetFixed(0, 40000)   // FUN_004247f0: (0, 400.0)
+	for i := range p.positionHistory {
+		p.positionHistory[i] = [2]int32{0, 40000} // FUN_004247f0, 0x42492c-0x424955
 	}
+	p.Bullets.GameSpeed = p.gameSpeed
+	p.Bullets.SourcePosition = func(source int) [3]float32 {
+		if source == 0 {
+			x, y := p.gamePos()
+			return [3]float32{x, y, 0}
+		}
+		o := p.options[source-1].pos // FUN_00427e90/FUN_00428c20: O_(source-1)+0x3c/+0x40
+		return [3]float32{float32(o[0]) * 0.01, float32(o[1]) * 0.01, 0}
+	}
+	p.Bullets.OptionCount = func() int { return max(p.optionCount, 0) }
+	p.Bullets.ShotClock = func() int32 { return p.reimuA.timer.Cur }
+	p.Bullets.NoAttack = func() bool { return p.NoAttack }
+	p.Bullets.HitArea = p.addArea // FUN_00428630, 0x428835-0x428863 -> FUN_00427b50
 	return p
 }
 
@@ -209,9 +220,7 @@ func (p *Player) respawn() bool {
 	t := p.StateTimer.Cur
 	p.IY = 48000 - t*8000/60
 	p.syncPos()
-	if p.reimuA != nil {
-		p.reimuA.snap = true
-	}
+	p.snapOptions() // FUN_00425730 state 0
 	if t < 30 {
 		r := float32(float32(t)*17.066668) + 64
 		if p.ClearRound != nil {
@@ -247,6 +256,13 @@ func (p *Player) bomb() {
 	p.Bomb.Start()
 	p.GS.Power -= game.BombPowerCost
 	p.RefreshOptions()
+	p.refreshPowerGauge() // FUN_00425730, 0x425a10/0x425c7f, before state-1 faith loss
+}
+
+func (p *Player) refreshPowerGauge() {
+	if p.PowerChanged != nil {
+		p.PowerChanged()
+	}
 }
 
 // die is FUN_004269d0, the end of the deathbomb window: a life, a third of
@@ -262,9 +278,7 @@ func (p *Player) die() {
 	p.State = StateDying
 	p.StateTimer.Reset()
 	p.Invinc.Set(180)
-	if p.reimuA != nil {
-		p.reimuA.optionCount = 0
-	}
+	p.clearOptions()
 	p.GS.AddRank(-0x400)
 }
 
@@ -275,6 +289,7 @@ func (p *Player) dying() {
 	t := p.StateTimer.Cur
 	if t == 3 {
 		p.GS.Power = max(p.GS.Power-game.DeathPowerLoss, 0)
+		p.refreshPowerGauge() // FUN_00425730, 0x425af7: before the seven death drops
 		x, y := p.gamePos()
 		base := zun.Aim(x, y, 0, y-224) // FUN_00426610
 		for i := int32(0); i < 7; i++ {
@@ -311,22 +326,26 @@ func (p *Player) dying() {
 func (p *Player) tail(in *input.State) {
 	gs := p.gameSpeed()
 	p.updateAreas(gs)
-	p.Flash = false
+	blink := false
 	if p.Invinc.Cur >= 1 {
 		p.Invinc.Add(-1, gs)
-		p.Flash = p.StateTimer.Cur != p.StateTimer.Prev && p.StateTimer.Cur%3 == 0
+		blink = p.StateTimer.Cur != p.StateTimer.Prev && p.StateTimer.Cur%3 == 0
 	}
-	p.updateAnim(in)
+	// FUN_00425730, 0x425e46-0x425efb: count down first, then select
+	// blue Color2 on the old state clock, then run the embedded VM.
+	if p.anmAttached() {
+		if blink {
+			p.VM.Color2, p.VM.Alpha2 = [3]uint8{0, 0, 255}, 255
+			p.VM.Flags |= 0x8000
+		} else {
+			p.VM.Flags &^= 0x8000
+		}
+		p.VM.Run(p.env)
+	}
+	// 0x42618e and 0x4261f2: both clocks advance after the VM.
 	p.StateTimer.Tick(gs)
 	p.initTimer.Tick(gs)
-	if p.reimuA != nil {
-		p.updateReimuAShot(in)
-		return
-	}
-	if p.State == StateNormal {
-		p.shoot(in)
-	}
-	p.Bullets.Update()
+	p.updateShot(in)
 }
 
 // Hittable reports whether a bullet or laser touching the hitbox counts
@@ -339,8 +358,23 @@ func (p *Player) Hittable() bool {
 // Hittable and the invulnerability.
 func (p *Player) Hit() {
 	p.State = StateDeathbomb
+	// FUN_00426cf0, 0x426d09-0x426e05: tail-insert one burst followed
+	// by 32 sparks, before resetting the state and invulnerability clocks.
+	if p.anmAttached() {
+		x, y := p.gamePos()
+		pos := [3]float32{x + 224, y + 16, 0}
+		v := p.world.SpawnTail(p.bulletAnm, 0x162, 0, p.env)
+		p.world.SetOffset(v, pos)
+		for range 32 {
+			v = p.world.SpawnTail(p.bulletAnm, 0x163, 0, p.env)
+			p.world.SetOffset(v, pos)
+		}
+	}
 	p.StateTimer.Reset()
 	p.Invinc.Set(6)
+	if p.anmAttached() {
+		p.VM.Start(p.Anm, 0, p.env) // 0x426ecb-0x426ed0
+	}
 }
 
 // Bounds of the fixed-point position (FUN_004250b0): X ±184, Y 32..432.
@@ -386,6 +420,26 @@ func (p *Player) syncPos() {
 func (p *Player) move(in *input.State) {
 	// Focus is latched here and held off for the first 4 frames after init.
 	p.focus = in.IsPressed(input.KeyFocus) && p.initTimer.Cur >= 4
+	// FUN_004250b0, 0x4251a0-0x4251d0: Marisa C holds its options in
+	// place until 30 unfocused movement ticks have elapsed.
+	if p.initTimer.Cur < 4 {
+		p.optionEase = 30
+	} else if p.GS.Character == game.CharMarisa && p.GS.ShotType == game.ShotC {
+		if p.focus {
+			p.optionEase = 0
+		} else if p.optionEase < 30 {
+			p.optionEase++
+		}
+	}
+	// FUN_004250b0, 0x4251e0-0x425245 and 0x4252d0-0x4252f8.
+	if p.anmAttached() {
+		if !p.focus {
+			p.world.Interrupt(p.hitbox, 1)
+			p.hitbox = nil
+		} else if p.hitbox == nil {
+			p.hitbox = p.world.SpawnTail(p.bulletAnm, 0x160, 9, p.env)
+		}
+	}
 	up, down := in.IsPressed(input.KeyUp), in.IsPressed(input.KeyDown)
 	left, right := in.IsPressed(input.KeyLeft), in.IsPressed(input.KeyRight)
 	straight, diag := p.steps[0], p.steps[2]
@@ -411,205 +465,36 @@ func (p *Player) move(in *input.State) {
 	case right: // 4
 		vx = straight
 	}
+	// 0x425385-0x4253f8: switch on the raw step's sign, even when
+	// game speed truncates the actual movement to zero or a clamp stops it.
+	id := -1
+	switch {
+	case vx < 0 && p.xStep >= 0:
+		id = 1
+	case vx > 0 && p.xStep <= 0:
+		id = 3
+	case vx == 0 && p.xStep < 0:
+		id = 2
+	case vx == 0 && p.xStep > 0:
+		id = 4
+	}
+	if id >= 0 && p.anmAttached() {
+		p.VM.Start(p.Anm, id, p.env)
+	}
+	p.xStep = vx
 	gs := p.gameSpeed()
 	p.IX = min(max(p.IX+int32(float32(vx)*gs), -fixedMaxX), fixedMaxX)
 	p.IY = min(max(p.IY+int32(float32(vy)*gs), fixedMinY), fixedMaxY)
 	p.syncPos()
-	if p.reimuA != nil {
-		p.reimuA.updateOptions(p.X, p.Y, p.GS.Power, p.focus)
+	// 0x4254c8-0x42551b: follow before the option loop, using a raw
+	// screen offset (FUN_004492f0), not Place's extra (224, 16).
+	if p.anmAttached() && p.world.Contains(p.hitbox) {
+		x, y := p.gamePos()
+		p.world.SetOffset(p.hitbox, [3]float32{x + 224, y + 16, 0})
+	} else {
+		p.hitbox = nil
 	}
-}
-
-func (p *Player) shoot(in *input.State) {
-	if p.reimuA != nil {
-		return
-	}
-	if p.NoAttack || !in.IsPressed(input.KeyShot) {
-		p.ShootTimer = 0
-		return
-	}
-	p.ShootTimer++
-	if p.ShootTimer%shootInterval != 0 {
-		return
-	}
-
-	focused := in.IsPressed(input.KeyFocus)
-	switch p.GS.Character {
-	case game.CharMarisa:
-		switch p.GS.ShotType {
-		case game.ShotA:
-			p.shootMarisaA(focused)
-		case game.ShotB:
-			p.shootMarisaB(focused)
-		default:
-			p.shootMarisaC(focused)
-		}
-	default:
-		switch p.GS.ShotType {
-		case game.ShotB:
-			p.shootReimuB(focused)
-		default:
-			p.shootReimuC(focused)
-		}
-	}
-}
-
-func (p *Player) powerTier() int {
-	tier := p.GS.Power / 100
-	if tier < 0 {
-		return 0
-	}
-	if tier > 5 {
-		return 5
-	}
-	return tier
-}
-
-func (p *Player) fireShot(dx, dy, vx, vy float64, damage int) {
-	p.Bullets.Fire(p.X+dx, p.Y+dy, vx, vy, damage)
-}
-
-func (p *Player) shootReimuB(focused bool) {
-	tier := p.powerTier()
-	spread := 0.8
-	if focused {
-		spread = 0.2
-	}
-	p.fireShot(-6, -16, -spread, -13, 10)
-	p.fireShot(6, -16, spread, -13, 10)
-	if tier >= 1 {
-		p.fireShot(-2, -18, 0, -14, 7)
-		p.fireShot(2, -18, 0, -14, 7)
-	}
-	if tier >= 3 {
-		p.fireShot(-12, -14, -spread*0.5, -13, 8)
-		p.fireShot(12, -14, spread*0.5, -13, 8)
-	}
-	if tier >= 5 {
-		p.fireShot(-1, -22, 0, -15, 12)
-		p.fireShot(1, -22, 0, -15, 12)
-	}
-}
-
-func (p *Player) shootReimuC(focused bool) {
-	tier := p.powerTier()
-	spread := 2.0
-	if focused {
-		spread = 0.9
-	}
-	p.fireShot(-10, -16, -spread, -11.5, 7)
-	p.fireShot(0, -18, 0, -13, 9)
-	p.fireShot(10, -16, spread, -11.5, 7)
-	if tier >= 2 {
-		p.fireShot(-20, -12, -spread*1.2, -10.5, 5)
-		p.fireShot(20, -12, spread*1.2, -10.5, 5)
-	}
-	if tier >= 4 {
-		p.fireShot(-5, -20, -spread*0.4, -13, 7)
-		p.fireShot(5, -20, spread*0.4, -13, 7)
-	}
-}
-
-func (p *Player) shootMarisaA(focused bool) {
-	tier := p.powerTier()
-	spread := 0.5
-	if !focused {
-		spread = 1.0
-	}
-	p.fireShot(-7, -14, -spread, -11, 12)
-	p.fireShot(7, -14, spread, -11, 12)
-	if tier >= 1 {
-		p.fireShot(-15, -10, -spread*1.4, -10, 8)
-		p.fireShot(15, -10, spread*1.4, -10, 8)
-	}
-	if tier >= 3 {
-		p.fireShot(-2, -18, -spread*0.4, -12, 11)
-		p.fireShot(2, -18, spread*0.4, -12, 11)
-	}
-	if tier >= 5 {
-		p.fireShot(-22, -8, -spread*1.7, -9.5, 6)
-		p.fireShot(22, -8, spread*1.7, -9.5, 6)
-	}
-}
-
-func (p *Player) shootMarisaB(focused bool) {
-	tier := p.powerTier()
-	spread := 0.35
-	if !focused {
-		spread = 0.8
-	}
-	p.fireShot(-10, -14, -spread, -14.5, 8)
-	p.fireShot(-3, -16, -spread*0.3, -15, 8)
-	p.fireShot(3, -16, spread*0.3, -15, 8)
-	p.fireShot(10, -14, spread, -14.5, 8)
-	if tier >= 2 {
-		p.fireShot(-16, -10, -spread*0.8, -13.5, 7)
-		p.fireShot(16, -10, spread*0.8, -13.5, 7)
-	}
-	if tier >= 4 {
-		p.fireShot(0, -20, 0, -16, 14)
-	}
-}
-
-func (p *Player) shootMarisaC(focused bool) {
-	tier := p.powerTier()
-	spread := 2.4
-	if focused {
-		spread = 1.1
-	}
-	p.fireShot(-6, -15, -spread*0.7, -12, 8)
-	p.fireShot(0, -18, 0, -13.5, 10)
-	p.fireShot(6, -15, spread*0.7, -12, 8)
-	if tier >= 1 {
-		p.fireShot(-18, -11, -spread, -10.5, 6)
-		p.fireShot(18, -11, spread, -10.5, 6)
-	}
-	if tier >= 3 {
-		p.fireShot(-10, -20, -spread*0.35, -13, 8)
-		p.fireShot(10, -20, spread*0.35, -13, 8)
-	}
-	if tier >= 5 {
-		p.fireShot(-26, -6, -spread*1.1, -9.5, 5)
-		p.fireShot(26, -6, spread*1.1, -9.5, 5)
-	}
-}
-
-func (p *Player) updateAnim(in *input.State) {
-	movingLeft := in.IsPressed(input.KeyLeft)
-	movingRight := in.IsPressed(input.KeyRight)
-
-	var target AnimState
-	switch {
-	case movingLeft || movingRight:
-		p.FaceRight = movingRight
-		target = AnimSide
-	default:
-		target = AnimFront
-	}
-
-	if target == AnimSide && p.AnimState == AnimFront {
-		p.AnimState = AnimToSide
-		p.AnimFrame = 0
-		p.AnimTimer = 0
-	} else if target == AnimFront && p.AnimState == AnimSide {
-		p.AnimState = AnimToSide
-		p.AnimFrame = 0
-		p.AnimTimer = 0
-	}
-
-	frameTime := frontFrameTime
-	if p.AnimState == AnimToSide {
-		frameTime = transFrameTime
-	}
-	p.AnimTimer++
-	if p.AnimTimer >= frameTime {
-		p.AnimTimer = 0
-		p.AnimFrame++
-		if p.AnimState == AnimToSide && p.AnimFrame >= 3 {
-			p.AnimState = target
-			p.AnimFrame = 0
-		}
-	}
+	p.updateOptions(vx != 0 || vy != 0)
 }
 
 // AddPower 增加火力

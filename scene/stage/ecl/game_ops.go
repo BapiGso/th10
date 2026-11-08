@@ -17,6 +17,7 @@ import (
 	"th10/anm"
 	"th10/entity/bullet"
 	"th10/entity/enemy"
+	"th10/game"
 	"th10/gamedata"
 	"th10/scene/stage"
 	"th10/zun"
@@ -243,6 +244,10 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 			hp := int(vm.resolveInt(t, in.Params[0]))
 			t.owner.HP, t.owner.MaxHP = hp, hp
 			vm.actorFor(t.owner).markers = nil
+			clear(vm.hudMarkers[:]) // ECL 331, 0x40ff3c..0x40ff65
+			if ctx != nil && ctx.GUI != nil {
+				ctx.GUI.ClearHPMarkers()
+			}
 		}
 	case opSetBoss: // 332 S: take boss slot idx (flag 0x8000); idx < 0 leaves it
 		if t.owner != nil && len(in.Params) >= 1 {
@@ -307,16 +312,14 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		}
 	case opPlaySound:
 		if len(in.Params) >= 1 {
-			vm.playStageSound(ctx, int(vm.resolveInt(t, in.Params[0])))
+			vm.playStageSound(ctx, t, int(vm.resolveInt(t, in.Params[0])))
 		}
-	case opScreenShake: // 337 SSS: (duration, magnitude, _) — screen shake
+	case opScreenShake: // 337 SSS, 0x410d75-0x410dad: FUN_0043c8b0(kind 1, duration, start, end, 0)
 		if len(in.Params) >= 3 {
-			vm.resolveInt(t, in.Params[2])
-			mag := float64(vm.resolveInt(t, in.Params[1]))
-			dur := int(vm.resolveInt(t, in.Params[0]))
-			if dur > 0 && mag > 0 {
-				vm.shakeFrames, vm.shakeTotal, vm.shakeMag = dur, dur, mag
-			}
+			end := vm.resolveInt(t, in.Params[2])
+			start := vm.resolveInt(t, in.Params[1])
+			duration := vm.resolveInt(t, in.Params[0])
+			vm.queueShake(duration, start, end) // zero/negative amplitudes still construct an object
 		}
 	case opMSGOpen: // 338 S (case 0x152): open .msg entry id (FUN_00415db0),
 		// whose constructor cancels every bullet, then clear the rect and the
@@ -345,10 +348,17 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 				a.slots[i].timeoutSub = in.Params[1].Str
 			}
 		}
-	case opSpellEnd: // case 0x157 (FUN_00409c00) leaves the bullets alone
-		vm.card.Active = false // 符卡结束：撤下 HUD
-	case opSpellBg, opSpellAlt, opSpell, opSpell2, opSpell3: // SSSx: (idx, timeLimit, bonus, name)
-		vm.declareSpell(t, in)
+	case opSpellEnd: // case 0x157: FUN_00409c00; no bullet/laser clear
+		vm.endSpell(ctx)
+	case 344: // case 0x158, 0x41188f-0x41189f: FUN_00412ed0(DAT_00474c40, arg 0)
+		if len(in.Params) >= 1 {
+			n := vm.resolveInt(t, in.Params[0])
+			if ctx != nil {
+				ctx.SetBossSection(n) // +0x44 is DAT_00474c84, not an enemy or GUI field
+			}
+		}
+	case opSpellBg, opSpellAlt, opSpell, opSpell2, opSpell3: // SSSx: (idx, duration, unused, name)
+		vm.declareSpell(ctx, t, in)
 	case opBombSwap: // case 0x16e: (armed, bomb script)
 		if t.owner != nil && len(in.Params) >= 2 {
 			a := vm.actorFor(t.owner)
@@ -365,6 +375,15 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		vm.card.Survival = true
 	case opLifeMarker:
 		vm.addLifeMarker(t, in)
+	case opRankSelectF3, opRankSelectF5, opRankLerpF, opRankSelectI3, opRankSelectI5, opRankLerpI:
+		vm.execRankOp(t, in)
+	case 360: // ECL 0x168, 0x411b84..0x411b99: raw remaining spell stars
+		if len(in.Params) >= 1 {
+			vm.hudStars = vm.resolveInt(t, in.Params[0])
+			if ctx != nil && ctx.GUI != nil {
+				ctx.GUI.SetBossStars(vm.hudStars)
+			}
+		}
 	case opRankPickI:
 		if len(in.Params) >= 5 {
 			vm.storeVar(t, in.Params[0], intVal(vm.rankPickInt(t, in.Params[1:])))
@@ -400,8 +419,8 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 			vm.actorFor(t.owner).fireR = float32(r * r)
 		}
 	default:
-		// Remaining no-ops with known-but-cosmetic binary effects: 344 chapter
-		// bookkeeping, 360 stars, 361 (FUN_00405410), 363 (FUN_0040cea0), 365
+		// Remaining no-ops with known-but-cosmetic binary effects:
+		// 361 (FUN_00405410), 363 (FUN_0040cea0), 365
 		// (FUN_0041c7d0). UI/spell-frame ops likewise.
 	}
 }
@@ -785,7 +804,7 @@ func (vm *VM) kill(a *eclActor) {
 		ctx.State.AddPoints(int64(a.score))
 	}
 	if a.deathSE >= 0 {
-		ctx.PlaySEID(int(a.deathSE))
+		ctx.PlaySEIDAt(int(a.deathSE), a.mv.final.pos[0]) // FUN_0040e5f0, 0x40e60e.
 	}
 	vm.spawnDeathFx(ctx, a)
 	vm.dropItems(ctx, a)
@@ -838,9 +857,13 @@ func (vm *VM) scatterDrops(ctx *stage.Context, d *dropTable, pos [3]float32) {
 }
 
 // playStageSound plays entry id of the sound table (0x4749c8).
-func (vm *VM) playStageSound(ctx *stage.Context, id int) {
+func (vm *VM) playStageSound(ctx *stage.Context, t *eclTask, id int) {
 	if ctx != nil {
-		ctx.PlaySEID(id)
+		var x float32
+		if a := vm.actorOf(t); a != nil {
+			x = a.mv.final.pos[0]
+		}
+		ctx.PlaySEIDAt(id, x) // FUN_0040e770 case 336, 0x410d59.
 	}
 }
 
@@ -870,11 +893,11 @@ func (vm *VM) rankIndex(n int) int {
 var spellSJISDec = japanese.ShiftJIS.NewDecoder()
 
 // declareSpell handles 342/348/357-359 (cases 0x156, 0x15c, 0x165-0x167):
-// (idx, timeLimit, bonus, name). The card's index is idx, plus the difficulty
+// (idx, duration, unused, name). The card's index is idx, plus the difficulty
 // for 357, less one for 358 and two for 359 (FUN_00409280's param); its timer
-// restarts, the capture is open and the survival bit (362) clears. The time
-// limit is the interrupt slot's.
-func (vm *VM) declareSpell(t *eclTask, in *Instr) {
+// restarts, the capture is open and the survival bit (362) clears. The HUD
+// timer is the interrupt slot's, not this duration.
+func (vm *VM) declareSpell(ctx *stage.Context, t *eclTask, in *Instr) {
 	if len(in.Params) < 4 {
 		return
 	}
@@ -887,18 +910,41 @@ func (vm *VM) declareSpell(t *eclTask, in *Instr) {
 	case opSpell3:
 		id += int32(vm.difficulty) - 2
 	}
-	bonus := vm.resolveInt(t, in.Params[2])
-	vm.resolveInt(t, in.Params[1])
+	// FUN_0040e770 0x410f06-0x410f3a still evaluates arg 2 first: it can
+	// pop the ECL stack or consume RNG even though its value is discarded.
+	vm.resolveInt(t, in.Params[2])
+	duration := vm.resolveInt(t, in.Params[1])
 	name := in.Params[3].Str
+	var state *game.GameState
+	if ctx != nil {
+		state = ctx.State
+	}
+	vm.card.Declare(state, id, name, duration)
 	if utf, err := spellSJISDec.String(name); err == nil && utf != "" {
 		name = utf
 	}
-	vm.card.Active, vm.card.Capture = true, true
-	vm.card.Survival = false
-	vm.card.ID = id
-	vm.card.Timer.Reset()
-	vm.card.Bonus = int64(bonus)
 	vm.spell = spellState{name: name, owner: t.owner}
+	if ctx != nil {
+		ctx.Spell = &vm.card
+		if ctx.GUI != nil {
+			ctx.GUI.InitializeSpellPresentation() // thirteen FUN_0043e710 calls, 0x4093d0/0x409400
+		}
+	}
+	vm.spawnSpellEffects(ctx)
+}
+
+// endSpell is ECL 343, FUN_00409c00. The visual end is completed with the
+// declaration's World handles; no bullets, lasers or items are touched.
+func (vm *VM) endSpell(ctx *stage.Context) {
+	if !vm.card.Active {
+		return
+	}
+	if vm.card.Finish(ctx) {
+		if ctx != nil {
+			ctx.PlaySEID(0x2d) // FUN_00409c00 0x409d3c-0x409d48
+		}
+		return
+	}
 }
 
 // addLifeMarker is 347 SfS: (index, hp, colour), read last to first.
@@ -909,6 +955,13 @@ func (vm *VM) addLifeMarker(t *eclTask, in *Instr) {
 	raw := vm.resolveInt(t, in.Params[2])
 	hp := vm.resolveFloat(t, in.Params[1])
 	marker := lifeMarker{index: int(vm.resolveInt(t, in.Params[0])), hp: float64(hp), raw: raw}
+	// FUN_0040e770 0x40fc85..0x40fc96 writes GUI globals, even when
+	// the current enemy is not boss slot 0. Colour stays an ARGB dword.
+	fraction := hp / float32(t.owner.MaxHP)
+	vm.hudMarkers[marker.index] = stage.HPMarker{Fraction: fraction, Color: uint32(raw)}
+	if vm.ctx != nil && vm.ctx.GUI != nil {
+		vm.ctx.GUI.SetHPMarker(marker.index, fraction, uint32(raw))
+	}
 	a := vm.actorFor(t.owner)
 	for i := range a.markers {
 		if a.markers[i].index == marker.index {

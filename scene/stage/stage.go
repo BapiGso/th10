@@ -1,35 +1,28 @@
 package stage
 
 import (
+	"encoding/binary"
 	"fmt"
-	"image/color"
 	"os"
 	"th10/anm"
 	"th10/audio"
 	"th10/datfs"
 	"th10/entity/bullet"
-	"th10/entity/effect"
 	"th10/entity/enemy"
 	"th10/entity/item"
 	"th10/entity/laser"
 	"th10/entity/player"
-	"th10/entity/playerbullet"
 	"th10/game"
 	"th10/gamedata"
 	"th10/input"
-	"th10/render"
 	"th10/scene/dialog"
 	resultscene "th10/scene/result"
-	"th10/sprite"
 	"th10/std"
 	"th10/std/stddraw"
 	"th10/supervisor"
 	"th10/zun"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	ebitext "github.com/hajimehoshi/ebiten/v2/text/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
-	"github.com/yohamta/ganim8/v2"
 )
 
 // Script 关卡脚本接口，每关实现一个
@@ -47,7 +40,6 @@ type Context struct {
 	Bullets *bullet.Pool   // 敌弹管理器（DAT_004776f0）
 	Lasers  *laser.Manager // 激光管理器（DAT_0047781c）
 	Items   *item.Manager  // 道具管理器（DAT_00477818）
-	Effects *effect.Pool
 	Enemies []*enemy.Enemy // 活跃敌人列表
 	Audio   Sound          // 音频管理器；无头模拟（sim 包）保持 nil
 	// World 是 ANM 特效对象（消弹、擦弹火花等），Anm 是它们与子弹脚本共用的
@@ -73,14 +65,31 @@ type Context struct {
 	Spell *SpellCard
 	// Bomb 是灵击对象（DAT_004776ec），见 bomb.go。
 	Bomb *Bomb
+	// FUN_0042a450's live player history/option block. NewContext connects
+	// these to Player; Raw retains only fields outside the capture's range.
+	CaptureReplayPlayer func(header []byte)
+	RestoreReplayPlayer func(header []byte)
+	ReplaySlowSample    byte            // current performance sample, FUN_004297d0
+	Menu                *MenuController // DAT_00477830, whose +4 gates the player's faith rectangles
+	// GUI is DAT_0047770c; its arrays draw through anmdraw at node 0x2b.
+	GUI           *GUI
+	GUIController *GUIController                    // the same GUI control fields, also available to logic-only contexts
+	RequestShake  func(kind, frames, x, y, z int32) // FUN_0043c8b0; t7's runtime shake entry
+	// BossSection is DAT_00474c84: MSG entry id+1 while a message is up,
+	// reset by MSG op 0, or the raw section number written by ECL 344.
+	BossSection int32
+	// CalcShake is FUN_0043c550, installed by the ECL wrapper. It runs
+	// at priority 0x0e, not inside the enemy update or during Draw.
+	CalcShake func()
+	// Popups is the independent DAT_00477840 manager (calc 0x0f, draw 0x23).
+	Popups *ScorePopups
 
 	// msg 是正在播放的对话（nil = 无），msgs 是本关的 .msg，bossBGM 是 op 18
-	// 切换的 Boss 曲，fadeFrames 是 op 21 的淡出帧数。cleared 表示 op 20 已执行。
+	// 切换的 Boss 曲，fadeFrames 是 op 21 的淡出帧数。
 	msg        *dialog.MSG
 	msgs       *dialog.StageMSG
 	bossBGM    int
 	fadeFrames int
-	cleared    bool
 }
 
 // AddEnemy 脚本用：添加敌人
@@ -97,6 +106,17 @@ type BossHUDInfo struct {
 	Name      string
 	TimeLeft  int
 	Bonus     int64
+	// The GUI reads these fields directly in FUN_00414900. HPMarkers above
+	// is the old diagnostic view; Markers preserves all four ordered colours.
+	HP, MaxHP   int32
+	PhaseHP     int32
+	Position    [2]float32
+	Flags       uint32
+	Midboss     bool
+	HasTimer    bool
+	Stars       int32
+	Markers     [4]HPMarker
+	DisplayName string // th10c.dat presentation only; Name keeps the ECL text
 }
 
 // DialogActive 报告是否有对话（MSG 对象存在）：对话期间自机不能射击和放灵击，
@@ -107,6 +127,11 @@ func (c *Context) DialogActive() bool {
 
 // MSG 返回正在播放的对话，nil = 无。
 func (c *Context) MSG() *dialog.MSG { return c.msg }
+
+// SetBossSection is the DAT_00474c84 write in FUN_00412ed0 (ECL 344),
+// FUN_00415db0 (MSG open) and FUN_00415e90 (op 0). DAT_00474c8c's
+// separate section clock belongs to the game/replay controller.
+func (c *Context) SetBossSection(n int32) { c.BossSection = n }
 
 // LoadMSG loads the stage's .msg ("stage4", "extra") for the player's
 // character; op 18 starts bossBGM. Op 21 fades the music out over 2 s, 8 s on
@@ -127,18 +152,22 @@ func (c *Context) OpenMSG(id int32) {
 	m := c.msgs.Open(id, dialog.Hooks{
 		SE:      c.PlaySEID,
 		BossBGM: func() { c.PlayBGM(c.bossBGM) },
-		Clear:   func() { c.cleared = true },
+		Clear:   c.clearStage,
 		FadeBGM: func() { c.FadeBGM(c.fadeFrames) },
 	})
 	if m == nil {
 		return
 	}
+	if c.GUI != nil {
+		c.GUI.attachMSG(m, c.msgs.Stage, c.State.Character&1)
+	}
 	c.msg = m
+	c.SetBossSection(id + 1) // FUN_00415db0, 0x415e01-0x415e0c
 	c.Bullets.CancelAll(c.BulletEnv)
 }
 
 // Cleared reports whether a dialog's op 20 has cleared the stage.
-func (c *Context) Cleared() bool { return c.cleared }
+func (c *Context) Cleared() bool { return c.GUIController != nil && c.GUIController.completed() }
 
 // MSGWaiting is ECL 339's condition: a dialog is up and has not signalled
 // (op 11) this frame.
@@ -150,21 +179,22 @@ func (c *Context) MSGWaiting() bool {
 // the shot key's press edge, skip whether Ctrl is held.
 func (c *Context) UpdateMSG(advance, skip bool) {
 	if c.msg != nil && !c.msg.Update(advance, skip) {
+		c.SetBossSection(0) // FUN_00415e90 op 0, 0x416f3c-0x416f50
 		c.msg = nil
 	}
 }
 
 // Stage 通用关卡场景，驱动一关的全部逻辑
 type Stage struct {
-	ctx          *Context
-	script       Script
-	field        *ebiten.Image // 游戏区域离屏缓冲
-	frontFrame   *ebiten.Image
-	hud          *hud                                                 // 状态栏（ebitenui 排版）
-	bossNameFace ebitext.Face                                         // 符卡名字体（系统黑体，懒加载）
-	bossNumFace  ebitext.Face                                         // 符卡时限数字字体（HUD 字体，懒加载）
-	NextScene    func(g *game.Game, state *game.GameState) game.Scene // 通关后下一场景
-	OnGameOver   func(g *game.Game, state *game.GameState) game.Scene
+	ctx            *Context
+	script         Script
+	field          *ebiten.Image                                        // 游戏区域离屏缓冲
+	NextScene      func(g *game.Game, state *game.GameState) game.Scene // 通关后下一场景
+	OnGameOver     func(g *game.Game, state *game.GameState) game.Scene
+	OnContinue     func(g *game.Game, state *game.GameState) game.Scene // DAT_00491fb8 = 13 dispatcher hook
+	replaySeed     uint16
+	replayTemplate []byte
+	liveGame       *game.Game // nil for sim; original direct menu calls need the existing scene/audio host
 
 	// drawn is set by the first Draw, which sets the clear colour.
 	drawn bool
@@ -187,9 +217,18 @@ const (
 )
 
 func New(g *game.Game, state *game.GameState, script Script) *Stage {
+	g.BindState(state)
+	if state.StageMode == 0 {
+		copy(state.ReplayConfig[:], g.Config.NativeBytes())
+		state.ConfigFlags = binary.LittleEndian.Uint32(state.ReplayConfig[0x30:])
+	}
 	s := newStage(state, script)
-	s.ctx.Audio = g.Audio()
+	s.liveGame = g
+	if a := g.Audio(); a != nil {
+		s.ctx.Audio = a
+	}
 	script.Init(s.ctx)
+	s.beginRecording()
 	return s
 }
 
@@ -202,13 +241,16 @@ func NewHeadless(state *game.GameState, script Script) *Stage {
 }
 
 func newStage(state *game.GameState, script Script) *Stage {
+	state.BindScoreController()
 	s := &Stage{
-		script:     script,
-		field:      ebiten.NewImage(fieldW, fieldH),
-		frontFrame: loadFrontFrame(),
+		script: script,
+		field:  ebiten.NewImage(fieldW, fieldH),
 	}
 	s.ctx = NewContext(state)
 	s.ctx.stage = s
+	s.ctx.Menu = NewMenuController(s)
+	s.replaySeed = s.ctx.RNG.State
+	s.ctx.ReplaySlowSample = 60
 	state.BeginStageFaith() // FUN_00417870 sets the decay rate at stage start
 	s.ctx.STD = loadSTD(state.Stage, s.ctx.Anm)
 	// TH10_LEGACY_BG=1 keeps the legacy background (BgDraw) on every stage,
@@ -218,7 +260,12 @@ func newStage(state *game.GameState, script Script) *Stage {
 		os.Getenv("TH10_LEGACY_BG") != "1" {
 		s.bg = &stddraw.Drawer{STD: s.ctx.STD}
 	}
-	s.hud = newHud(state)
+	s.ctx.GUI = NewGUI(s.ctx)
+	s.ctx.Popups = NewScorePopups()
+	s.ctx.ItemEnv.Popup = s.ctx.AddScorePopup
+	// FUN_00417870 (0x417c34): successful initialization consumes the
+	// manager/replay reuse and continue flags, after their setup effects.
+	state.RunFlags &^= game.RunFlagReuseManagers | game.RunFlagKeepReplay | game.RunFlagContinued
 	return s
 }
 
@@ -241,14 +288,10 @@ func loadSTD(n int, env *anm.Env) *std.VM {
 	return v
 }
 
-func loadFrontFrame() *ebiten.Image {
-	return render.LoadImage("anm/front/front00s.png")
-}
-
-// UpdateHeadless 用调用方提供的输入快照推进一帧，不读全局键盘、不刷新 HUD。
+// UpdateHeadless 用调用方提供的输入快照推进一帧，不读全局键盘。
 // 供 sim 包的逐帧差分模拟使用；真实游戏走 Update。
 func (s *Stage) UpdateHeadless(in *input.State) {
-	s.update(in)
+	_ = s.update(in)
 }
 
 // FinishedHeadless 报告关卡是否已结束（无头模拟的终止条件）。
@@ -258,17 +301,41 @@ func (s *Stage) FinishedHeadless() bool { return s.finished() }
 // condition once no dialog is up. Stages 4-6 and Extra loop in their main sub
 // forever after the boss, so only op 20 ends them.
 func (s *Stage) finished() bool {
-	return s.ctx.cleared || (s.ctx.msg == nil && s.script.Finished())
+	return s.ctx.Cleared() || (s.ctx.msg == nil && s.script.Finished())
 }
 
 // ExportContext 暴露内部 Context 给 sim 包（无头模拟需要直接读写实体池）。
 func ExportContext(s *Stage) *Context { return s.ctx }
 
 func (s *Stage) Update(g *game.Game) error {
+	s.liveGame = g
 	in := &input.Global
+	s.ctx.ReplaySlowSample = g.ReplaySample()
 
-	// HUD 每帧同步（含 paused/dialog 时也保持，避免暂停画面 HUD 卡在切换瞬间）
-	s.hud.refresh()
+	if s.ctx.Menu.Active() {
+		action := s.ctx.Menu.Calc(g, in)
+		s.ctx.Menu.world.Run(s.ctx.Menu.env)
+		switch action {
+		case MenuNext:
+			if s.NextScene != nil {
+				g.GoTo(s.NextScene(g, s.ctx.State))
+			} else {
+				s.goGameOver(g)
+			}
+		case MenuContinue:
+			if s.OnContinue != nil {
+				g.GoTo(s.OnContinue(g, s.ctx.State))
+			} else {
+				// FUN_004236f0 dispatches mode 13. Its global scene restart
+				// handler is not yet ported; do not silently treat it as Quit.
+				s.ctx.Menu.OpenGameOver(g)
+				s.ctx.Menu.Error = "Continue dispatcher (mode 13) is not ported"
+			}
+		case MenuTitle:
+			s.goGameOver(g)
+		}
+		return nil
+	}
 
 	// 暂停切换
 	if in.JustPressed(input.KeyPause) {
@@ -278,6 +345,7 @@ func (s *Stage) Update(g *game.Game) error {
 	if s.ctx.State.Paused {
 		return nil
 	}
+	in.ApplyReplayOptions(s.ctx.State.ConfigFlags)
 
 	if err := s.update(in); err != nil {
 		return err
@@ -285,17 +353,36 @@ func (s *Stage) Update(g *game.Game) error {
 
 	// 关卡结束/Game Over 时切换场景
 	ctx := s.ctx
+	if ctx.Menu.Active() { // MSG may have opened FUN_00423370 in this very calc chain
+		return nil
+	}
+	if ctx.GUIController.SceneRequest != 0 {
+		s.deliverSceneRequest(g)
+		return nil
+	}
+	if ctx.Cleared() { // normal final clear waits for GUI+0x9ecc, not script completion
+		return nil
+	}
 	if ctx.State.Life < 0 {
-		g.MarkGameOver(ctx.State)
-		if s.OnGameOver != nil {
-			g.GoTo(s.OnGameOver(g, ctx.State))
-		} else {
-			g.GoTo(resultscene.New(ctx.State, resultscene.ModeGameOver, nil))
+		// FUN_00425730 calls FUN_004231d0 in state 2 at timer >= 30.
+		// The player tail has already incremented it in update, so use > 30.
+		if ctx.Player.State == player.StateDying && ctx.Player.StateTimer.Cur > 30 {
+			s.finishReplayMetadata(false)
+			if !ctx.State.DebugMode {
+				g.MarkGameOver(ctx.State)
+			}
+			ctx.Menu.OpenGameOver(g)
 		}
 		return nil
 	}
-	if s.finished() {
-		if s.NextScene != nil {
+	if s.finished() { // legacy scripts without MSG retain their explicit completion API
+		s.finishReplayMetadata(ctx.State.Stage >= game.StageCount)
+		if ctx.State.SingleStage || ctx.State.Stage == game.StageExtra {
+			if !ctx.State.DebugMode {
+				g.MarkClear(ctx.State)
+			}
+			ctx.Menu.OpenClear(g) // MSG 0x14 -> FUN_00423370 (practice / Extra)
+		} else if s.NextScene != nil {
 			g.GoTo(s.NextScene(g, ctx.State))
 		} else {
 			g.GoTo(resultscene.New(ctx.State, resultscene.ModeStageClear, nil))
@@ -304,15 +391,40 @@ func (s *Stage) Update(g *game.Game) error {
 	return nil
 }
 
+// OpenCompletion connects the post-ending flow to the same ranking/replay
+// controller. The ending/staff visuals remain with their existing scene.
+func (s *Stage) OpenCompletion(g *game.Game) { s.ctx.Menu.OpenClear(g) }
+
+func (s *Stage) goGameOver(g *game.Game) {
+	if s.OnGameOver != nil {
+		g.GoTo(s.OnGameOver(g, s.ctx.State))
+	} else {
+		mode := resultscene.ModeGameOver
+		if s.ctx.Menu.Cleared {
+			mode = resultscene.ModeStageClear
+		}
+		g.GoTo(resultscene.New(s.ctx.State, mode, nil))
+	}
+}
+
 // update 推进一帧世界状态。不涉及场景切换，供 Update 与无头模拟共用。
 func (s *Stage) update(in *input.State) error {
 	ctx := s.ctx
+	if ctx.State.Recording != nil {
+		ctx.State.Recording.Append(in.ReplayRecord(), ctx.ReplaySlowSample)
+	}
 
 	ctx.State.Frame++
 
 	// 0. STD 相机脚本（FUN_00402720），先于敌人管理器
 	if ctx.STD != nil {
 		ctx.STD.Update(ctx.Anm.GameSpeed)
+	}
+	if ctx.CalcShake != nil {
+		ctx.CalcShake() // FUN_0043c970: calc 0x0e, before 0x0f/0x10
+	}
+	if ctx.Popups != nil {
+		ctx.Popups.Calc(ctx.Anm.GameSpeed) // FUN_0042b9a0, calc priority 0x0f
 	}
 
 	// 1. 玩家（对话期间不能射击和放灵击，FUN_004281d0 与灵击检查都要求没有 MSG）
@@ -337,17 +449,28 @@ func (s *Stage) update(in *input.State) error {
 	// 5. 道具（移动与拾取都在 FUN_0041afd0 里）
 	ctx.UpdateItems(in.IsPressed(input.KeyFocus))
 
-	// 6. 特效
-	ctx.Effects.Update()
-	ctx.UpdateWorld()
-
-	// 7. 脚本的伤害后处理：ECL 的阶段中断（超时）与计时器，见 FUN_0040dc80
+	// 6. 符卡状态（calc 0x16），先于 GUI（0x18）和 World（0x1a）。
 	if lu, ok := s.script.(interface{ LateUpdate(*Context) }); ok {
 		lu.LateUpdate(ctx)
 	}
-
-	// 8. 对话（calc chain 末尾的 GUI/MSG）
+	if ctx.GUI != nil {
+		ctx.GUI.Calc()
+	}
+	// FUN_00414900 runs MSG before its timer/arrow tail. New MSG World
+	// objects then get the same frame's 0x1a step, as in the original chain.
 	ctx.UpdateMSG(in.JustPressed(input.KeyOk), in.IsPressed(input.KeySkip))
+	if ctx.GUI != nil {
+		ctx.GUI.AfterMSG()
+	}
+	ctx.UpdateWorld()
+	s.updateScoreController() // FUN_00418190 -> FUN_00417040 after the calc chain
+	// FUN_00418190 returns after Numbers when stage+0x58 has the menu's
+	// 0x10 freeze bit. The play-time counter and faith tail are skipped.
+	if ctx.Menu != nil && ctx.Menu.Active() {
+		s.cleanEnemies()
+		return nil
+	}
+	ctx.State.RecordPlayFrame() // FUN_00418190, original score-object play-time counter
 
 	// 8b. 信仰保持计时与衰减：FUN_00418190 在 calc chain 之后、帧计数之前调用
 	// FUN_00418a00（见 faithGate）
@@ -414,7 +537,8 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 		sv.ClearColor = 0xff000000
 		s.drawn = true
 	}
-	// Stand-in for FUN_0043c5ca, which writes Field.Shift during calc.
+	// FUN_0043c5ca sampled these offsets at calc 0x0e. No logical
+	// coordinates or viewport positions move; ANM's emit adds Field.Shift.
 	sx, sy := 0.0, 0.0
 	if sh, ok := s.script.(interface{ ShakeOffset() (float64, float64) }); ok {
 		sx, sy = sh.ShakeOffset()
@@ -422,156 +546,7 @@ func (s *Stage) Draw(screen *ebiten.Image) {
 	sv.Field.Shift = [2]float32{float32(sx), float32(sy)}
 	s.drawFrame(sv)
 	screen.DrawImage(sv.Frame, nil)
-}
-
-// The entity helpers draw in back-buffer (screen) coordinates, which their
-// positions already are, plus (dx, dy): the offset an ANM quad would get
-// (legacy). Their dst is the camera's viewport, so drawing outside the field
-// is clipped as in the original.
-
-func (s *Stage) drawPlayerBullets(dst *ebiten.Image, dx, dy float64) {
-	s.ctx.Player.Bullets.Each(func(b *playerbullet.Bullet) {
-		x := float32(b.X + dx)
-		y := float32(b.Y + dy)
-		if b.ScriptID >= 0 && sprite.Global != nil && sprite.Global.ReimuAnm != nil {
-			if img := sprite.Global.ReimuAnm.ScriptSprite(b.ScriptID, max(b.Age-1, 0)); img != nil {
-				op := &ebiten.DrawImageOptions{}
-				op.GeoM.Translate(-float64(img.Bounds().Dx())/2, -float64(img.Bounds().Dy())/2)
-				op.GeoM.Rotate(b.Angle)
-				op.GeoM.Translate(float64(x), float64(y))
-				op.ColorScale.ScaleAlpha(128.0 / 255) // pl00.anm scripts 5/7
-				dst.DrawImage(img, op)
-				return
-			}
-		}
-		vector.FillRect(dst, x-3, y-6, 6, 12, color.RGBA{255, 255, 255, 230}, false)
-	})
-}
-
-func (s *Stage) drawPlayerOptions(dst *ebiten.Image, dx, dy float64) {
-	for _, option := range s.ctx.Player.Options() {
-		x, y := option.X+dx, option.Y+dy
-		if sprite.Global != nil && sprite.Global.ReimuAnm != nil {
-			// Script 17's sprite; its spawn/interrupt transforms await the ANM VM.
-			if img := sprite.Global.ReimuAnm.ScriptSprite(17, 0); img != nil {
-				op := &ebiten.DrawImageOptions{}
-				op.GeoM.Translate(x-float64(img.Bounds().Dx())/2, y-float64(img.Bounds().Dy())/2)
-				dst.DrawImage(img, op)
-				continue
-			}
-		}
-		vector.FillCircle(dst, float32(x), float32(y), 5, color.RGBA{255, 128, 160, 255}, false)
-	}
-}
-
-func (s *Stage) drawPlayer(dst *ebiten.Image, dx, dy float64) {
-	p := s.ctx.Player
-	if p.State == player.StateDying {
-		return
-	}
-	px := p.X + dx
-	py := p.Y + dy
-
-	// 无敌闪烁：原作是 ANM 标志 0x8000 配颜色 0xff0000ff，这里先用半透明代替。
-	alpha := float32(1.0)
-	if p.Flash {
-		alpha = 0.3
-	}
-
-	res := sprite.Global
-	if res != nil {
-		ps := res.Player[s.ctx.State.Character]
-		var kind sprite.AnimKind
-		switch p.AnimState {
-		case player.AnimFront:
-			kind = sprite.AnimFront
-		case player.AnimToSide:
-			if p.FaceRight {
-				kind = sprite.AnimToRight
-			} else {
-				kind = sprite.AnimToLeft
-			}
-		case player.AnimSide:
-			if p.FaceRight {
-				kind = sprite.AnimRight
-			} else {
-				kind = sprite.AnimLeft
-			}
-		}
-		anim := ps.Anim(kind)
-		if anim != nil {
-			anim.Update()
-			opts := ganim8.DrawOpts(px, py, 0, 1, 1, 0.5, 0.5)
-			opts.ColorM.Scale(1, 1, 1, float64(alpha))
-			anim.Draw(dst, opts)
-			vector.FillCircle(dst, float32(px), float32(py), 3, color.RGBA{255, 255, 255, uint8(alpha * 255)}, false)
-			return
-		}
-	}
-
-	// fallback: 几何占位
-	vector.FillRect(dst, float32(px)-8, float32(py)-12, 16, 24, color.RGBA{0, 220, 0, uint8(alpha * 255)}, false)
-	vector.FillCircle(dst, float32(px), float32(py), 3, color.RGBA{255, 255, 255, 255}, false)
-}
-
-// drawBossHUD 在 Field 顶部画 Boss 血条（横条）+ 符卡名 + 时限倒数。
-// 数据来自脚本可选实现的 BossHUD()（ECL VM 的 331/347/357/359 解析结果）。
-func (s *Stage) drawBossHUD(field *ebiten.Image) {
-	bh, ok := s.script.(interface{ BossHUD() BossHUDInfo })
-	if !ok {
-		return
-	}
-	info := bh.BossHUD()
-	if !info.Active {
-		return
-	}
-	w := float32(field.Bounds().Dx())
-
-	// 血条：顶部内嵌 12px 处一条横条，红色底 + 黄色当前血量。
-	const barY, barH, barPad = 10, 4, 24
-	barW := w - barPad*2
-	vector.FillRect(field, barPad, barY, barW, barH, color.RGBA{60, 12, 12, 200}, false)
-	vector.FillRect(field, barPad, barY, barW*float32(info.HPFrac), barH,
-		color.RGBA{255, 210, 90, 230}, false)
-	for _, marker := range info.HPMarkers {
-		if marker <= 0 || marker >= 1 {
-			continue
-		}
-		x := barPad + barW*float32(marker)
-		vector.FillRect(field, x-1, barY-2, 2, barH+4, color.RGBA{255, 255, 255, 210}, false)
-	}
-
-	nameY := int(barY) + barH + 4
-	if info.Spell {
-		if s.bossNameFace == nil {
-			s.bossNameFace = render.LoadSystemFace(15)
-		}
-		// 符卡名（右对齐于条下方），描边提升可读性。
-		nameW, _ := render.MeasureText(s.bossNameFace, info.Name)
-		render.DrawTextShadow(field, info.Name, s.bossNameFace,
-			int(w)-int(barPad)-nameW, nameY,
-			color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 200}, 1, 1)
-	}
-
-	// 时限倒数（左上角大号数字）：非符阶段同样有时限（ECL 334 的时间槽）。
-	if info.TimeLeft > 0 {
-		if s.bossNumFace == nil {
-			s.bossNumFace = render.LoadHUDFace(18)
-		}
-		render.DrawTextShadow(field, fmt.Sprintf("%d", info.TimeLeft), s.bossNumFace,
-			int(barPad), nameY-2,
-			color.RGBA{255, 255, 255, 255}, color.RGBA{0, 0, 0, 200}, 1, 1)
-	}
-}
-
-func (s *Stage) drawEffects(dst *ebiten.Image, dx, dy float64) {
-	s.ctx.Effects.Each(func(e *effect.Effect) {
-		x := float32(e.X + dx)
-		y := float32(e.Y + dy)
-		r := float32(e.Scale * 8)
-		a := uint8(e.Alpha * 255)
-		vector.FillCircle(dst, x, y, r, color.RGBA{255, 200, 100, a}, false)
-	})
+	s.drawLegacyPause(screen)
 }
 
 // 确保 Stage 实现 game.Scene

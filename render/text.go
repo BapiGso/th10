@@ -56,6 +56,17 @@ func LoadHUDFace(size float64) ebitext.Face {
 	return LoadTextFace(FontHUD, size)
 }
 
+// LoadGameFace is the embedded-font approximation of the GUI's GDI text
+// textures (FUN_004479d0). It never probes or reads an OS font, including
+// on WASM. W3 is dialogue text; W7 is the bold spell-name face.
+func LoadGameFace(size float64, bold bool) ebitext.Face {
+	name := "font/DFYuGaSo-W3.ttc"
+	if bold {
+		name = "font/DFYuGaSo-W7.ttc"
+	}
+	return LoadTextFace(name, size)
+}
+
 // LoadSystemFace 返回操作系统自带的中日文黑体。失败时回退到 HUD 字体。
 // 路径解析只做一次；解析后的 Source 也按路径缓存。
 func LoadSystemFace(size float64) ebitext.Face {

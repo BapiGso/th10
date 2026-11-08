@@ -17,11 +17,12 @@ var seWav = [...]string{
 }
 
 // seEntry is one sound of the table at 0x4749c8 (8 bytes): its wav and its
-// volume in hundredths of a decibel. The third field (+6) is not traced yet.
+// volume in hundredths of a decibel. aux (+6) is copied to manager+0x408
+// by FUN_0043dc90/0043dd10; this executable has no runtime reader of it.
 type seEntry struct {
-	wav  int8
-	vol  int16
-	unk6 int16
+	wav int8
+	vol int16
+	aux int16
 }
 
 // seTable is the table at 0x4749c8, indexed by the sound id the game and the
@@ -44,6 +45,18 @@ var seTable = [...]seEntry{
 // seQueueMax is how many distinct sounds one frame can start.
 const seQueueMax = 12
 
+// FUN_0043dd10 (0x43dd50) collects at most 128 pans for one sound per frame.
+const sePanMax = 128
+
+type seRequest struct {
+	id    int
+	count int32
+	sum   int32
+}
+
+// pan is the signed sum / count in FUN_0043ddf0 (0x43e28d), toward zero.
+func (r seRequest) pan() int32 { return r.sum / r.count }
+
 // SEName returns the wav sound id plays, if the id is in the table.
 func SEName(id int) (string, bool) {
 	if id < 0 || id >= len(seTable) {
@@ -57,22 +70,50 @@ func seGain(id int) float64 {
 	return math.Pow(10, float64(seTable[id].vol)/2000)
 }
 
-// PlaySEID plays sound id at its table volume. Like the game's sound queue
-// it starts each id once a frame and at most 12 ids a frame; Update starts
-// the next frame. Panning by x (FUN_0043dd10) is not reproduced.
+// PlaySEID is FUN_0043dc90 with pan 0. Update starts each queued id once,
+// after all its requests for this frame have been collected.
 func (m *Manager) PlaySEID(id int) {
-	name, ok := SEName(id)
-	if !ok {
+	m.queueSE(id, 0)
+}
+
+// PlaySEIDAt is FUN_0043dd10: x is relative to the playfield's top-centre.
+func (m *Manager) PlaySEIDAt(id int, x float32) {
+	m.queueSE(id, SEPan(x))
+}
+
+// queueSE is FUN_0043dc90/0043dd10: first appearance copies aux, subsequent
+// appearances only append pans, and a thirteenth distinct id is dropped.
+func (m *Manager) queueSE(id int, pan int32) {
+	if _, ok := SEName(id); !ok {
 		return
 	}
-	for _, q := range m.seQueue {
-		if q == id {
+	for i := range m.seQueue {
+		q := &m.seQueue[i]
+		if q.id == id {
+			if q.count < sePanMax {
+				q.sum += pan
+				q.count++
+			}
 			return
 		}
 	}
 	if len(m.seQueue) >= seQueueMax {
 		return
 	}
-	m.seQueue = append(m.seQueue, id)
-	m.playSE(name, seGain(id))
+	m.seQueue = append(m.seQueue, seRequest{id: id, count: 1, sum: pan})
+	m.seAux[id] = seTable[id].aux // 0x43dd8b, deliberately not a cooldown/priority.
+}
+
+// flushSE is FUN_0043ddf0 (0x43e22b..0x43e345): one voice per table id,
+// stopped and rewound on each queued play, with the average pan. Different
+// ids have separate voices even when they refer to the same wav.
+func (m *Manager) flushSE() {
+	for _, q := range m.seQueue {
+		if p := m.seByID[q.id]; p != nil {
+			p.PauseAndStopReading()
+		}
+		name, _ := SEName(q.id)
+		m.seByID[q.id] = m.playSEPan(name, seGain(q.id), q.pan())
+	}
+	m.seQueue = m.seQueue[:0]
 }

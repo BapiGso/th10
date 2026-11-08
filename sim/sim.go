@@ -8,6 +8,7 @@
 package sim
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -28,19 +29,7 @@ import (
 )
 
 // Config selects what to simulate.
-type Config struct {
-	Stage      int // 1..6, 7=Extra
-	Character  int // game.CharReimu / game.CharMarisa
-	ShotType   int // game.ShotA/B/C
-	Difficulty int // game.DiffEasy..DiffExtra
-	Power      int // starting power in hundredths
-	Lives      int // lives in stock at the chapter's start
-	Seed       uint16
-	Rank       int // dynamic rank at the chapter's start
-	// PlayerX, PlayerY are the player's fixed-point start position from the
-	// chapter header (FUN_00428e10).
-	PlayerX, PlayerY int32
-}
+type Config = replay.RunConfig
 
 // ScriptFactory builds the stage script for a stage number. Wired by the
 // caller (usually cmd) so this package does not import every stage package.
@@ -54,6 +43,9 @@ type Runner struct {
 	// OnFrame, if set, is called after each simulated frame (after the step,
 	// before the frame's trace is written) with the headless stage.
 	OnFrame func(st *stage.Stage)
+	// Recorder observes the same input cursor, including transition input
+	// after MSG op 20. Those tail records do not advance or lengthen trace.
+	Recorder *replay.Recorder
 }
 
 // New builds a runner. factory must return the same script type the real game
@@ -65,37 +57,7 @@ func New(cfg Config, factory ScriptFactory) *Runner {
 // ConfigFor builds the Config that replays chapter chapter (0-based) of rp,
 // with the character, shot, difficulty and start state the original ran with.
 func ConfigFor(rp *replay.Replay, chapter int) (Config, error) {
-	if chapter < 0 || chapter >= len(rp.Chapters) {
-		return Config{}, fmt.Errorf("chapter %d out of range (replay has %d)", chapter, len(rp.Chapters))
-	}
-	ch := rp.Chapters[chapter]
-	// The global header's stage is where the run ended (8 = all clear); each
-	// chapter records its own stage.
-	stageNum := int(ch.Index)
-	if stageNum < 1 || stageNum > 7 {
-		stageNum = int(rp.Global.Stage)
-	}
-	if stageNum < 1 || stageNum > 7 {
-		return Config{}, fmt.Errorf("stage %d not simulatable (1..7)", stageNum)
-	}
-	cfg := Config{
-		Stage:      stageNum,
-		Character:  int(rp.Global.Character),
-		ShotType:   int(rp.Global.ShotType),
-		Difficulty: int(rp.Global.Difficulty),
-		Power:      int(ch.Power) * 5, // 0.05 units to hundredths
-		Lives:      int(ch.Lives),
-		Seed:       ch.Seed,
-		Rank:       int(ch.Rank),
-		PlayerX:    ch.PlayerX,
-		PlayerY:    ch.PlayerY,
-	}
-	// Extra (stage 7) runs at game.DiffExtra, which is above Luna but valid.
-	// Any other difficulty above Luna is out of range and runs as Normal.
-	if cfg.Difficulty > game.DiffLuna && !(stageNum == 7 && cfg.Difficulty == game.DiffExtra) {
-		cfg.Difficulty = game.DiffNormal
-	}
-	return cfg, nil
+	return replay.ConfigFor(rp, chapter)
 }
 
 // Run plays the replay chapter's input records frame by frame and writes a
@@ -106,26 +68,20 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 	if err != nil {
 		return err
 	}
-	// FUN_00428f60 restores the chapter's score (DAT_00474c44, from +0x0c) and
-	// faith (DAT_00474c4c, from +0x14 through FUN_00418b80, which stores a tenth
-	// of its argument). GameState keeps both times ten.
-	h.state.Score = int64(ch.Score) * 10
-	h.state.Faith = int64(ch.Faith) * 10
-	// FUN_0042a6a0 then takes the chapter's +0x18 as the faith hold timer
-	// (DAT_00474c58) and its accumulator.
-	h.state.RestoreFaithHold(int(ch.Hold))
+	r.sim = h
+	h.st.RestoreReplayChapter(ch)
+	if r.Recorder != nil {
+		if err := h.st.StartRecording(r.Recorder); err != nil {
+			return err
+		}
+	}
 	tw := trace.NewWriter(out)
 	limit := len(ch.Records)
 	if maxFrames > 0 && maxFrames < limit {
 		limit = maxFrames
 	}
-	if limit > 0 {
-		// The chapter can start with keys held from before it: Aux1 is the
-		// press edge (DAT_00474e62), so seed the previous frame with the
-		// held keys that do not newly go down on frame 1.
-		r0 := ch.Records[0]
-		h.in.Restore(restoreBits(replay.Record{Keys: r0.Keys &^ r0.Aux1}))
-	}
+	stream := replay.NewStream(ch)
+	h.in.RestoreReplay(stream.Prime())
 	// TH10SIM_BDUMP=frame or first-last dumps bullets to stderr.
 	dump0, dump1 := frameRange(os.Getenv("TH10SIM_BDUMP"))
 	// TH10SIM_ETRACE=first-last logs every ECL instruction run in those
@@ -180,7 +136,14 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 	}
 	for i := 0; i < limit; i++ {
 		frame = i + 1
-		rec := ch.Records[i]
+		rec, rate, _ := stream.Next()
+		h.ctx.ReplaySlowSample = rate
+		if h.finished {
+			// FUN_004297d0 still consumes the transition/menu tail. The
+			// headless world and its trace end at the original clear event.
+			r.Recorder.Append(rec, rate)
+			continue
+		}
 		h.step(rec)
 		if r.OnFrame != nil {
 			r.OnFrame(h.st)
@@ -189,7 +152,7 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 		if i+1 >= dump0 && i+1 <= dump1 {
 			h.dumpBullets(os.Stderr, i+1)
 		}
-		if h.finished {
+		if h.finished && r.Recorder == nil {
 			break
 		}
 	}
@@ -207,21 +170,31 @@ type headless struct {
 }
 
 func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
+	return newHeadlessWithAlternateSeed(cfg, factory, 0)
+}
+
+// Inject before STD/ANM initialization; replay seeds only restore the main
+// generator (FUN_00428f60 / FUN_0042a6a0), never DAT_004918a8.
+func newHeadlessWithAlternateSeed(cfg Config, factory ScriptFactory, seed uint16) (*headless, error) {
 	if factory == nil {
 		return nil, fmt.Errorf("sim: no script factory")
 	}
-	state := game.NewState(cfg.Character, cfg.ShotType, cfg.Difficulty)
+	g := &game.Game{}
+	g.AlternateRNG().State = seed
+	state := g.NewState(cfg.Character, cfg.ShotType, cfg.Difficulty)
 	state.Stage = cfg.Stage
 	state.SingleStage = true
 	state.DebugMode = true
+	state.StageMode, state.ReplayMode, state.FreshRun = 1, 1, cfg.FreshRun
 	state.Power = cfg.Power
 	state.Life = cfg.Lives
 	state.RNGSeed, state.HasSeed = cfg.Seed, true
+	state.ReplayConfig = cfg.Config
+	state.ConfigFlags = binary.LittleEndian.Uint32(cfg.Config[0x30:])
 	state.Rank = cfg.Rank
 	if cfg.Difficulty == game.DiffExtra {
 		state.Difficulty = game.DiffExtra
 	}
-	g := &game.Game{}
 	st := stage.NewHeadless(state, factory(cfg.Stage))
 	ctx := stage.ExportContext(st)
 	if ctx == nil {
@@ -233,7 +206,7 @@ func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
 
 // step advances one frame with the given recorded input.
 func (h *headless) step(rec replay.Record) {
-	h.in.Restore(restoreBits(rec))
+	h.in.RestoreReplay(rec)
 	h.st.UpdateHeadless(&h.in)
 	h.finished = h.st.FinishedHeadless()
 }
@@ -338,27 +311,4 @@ func liveEnemies(ctx *stage.Context) []*enemy.Enemy {
 		}
 	}
 	return out
-}
-
-// restoreBits maps a replay record onto the input.State bit layout.
-// input.Key order: Up, Down, Left, Right, Shot, Bomb, Focus, Pause, Ok, Cancel, Skip.
-func restoreBits(rec replay.Record) uint16 {
-	var bits uint16
-	set := func(k input.Key, on bool) {
-		if on {
-			bits |= 1 << uint(k)
-		}
-	}
-	set(input.KeyUp, rec.Up())
-	set(input.KeyDown, rec.Down())
-	set(input.KeyLeft, rec.Left())
-	set(input.KeyRight, rec.Right())
-	set(input.KeyShot, rec.Keys&replay.KeyShot != 0)
-	set(input.KeyBomb, rec.Keys&replay.KeyBomb != 0)
-	set(input.KeyFocus, rec.Keys&replay.KeyFocus != 0)
-	// KeyOk doubles as Z for menus/dialog; the original advances dialog with the
-	// shot key, so mirror it.
-	set(input.KeyOk, rec.Keys&replay.KeyShot != 0)
-	set(input.KeySkip, rec.Keys&replay.KeySkip != 0)
-	return bits
 }

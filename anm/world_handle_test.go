@@ -106,7 +106,7 @@ func chained(w *World) (root, c1, c2 *VM) {
 }
 
 // The handle helpers (FUN_004492a0, FUN_004495e0, FUN_00449590,
-// FUN_00449350, FUN_004492f0) act on the object and, on a root, on the
+// FUN_00449350, FUN_004492f0, FUN_00449210) act on the object and, on a root, on the
 // children still in the world; on a child only on the child; on an object
 // no longer in the world (or nil) not at all.
 func TestHandleHelpers(t *testing.T) {
@@ -153,6 +153,18 @@ func TestHandleHelpers(t *testing.T) {
 	w.SetOffset(nil, [3]float32{9, 9, 9})
 	if c2.Offset != [3]float32{} {
 		t.Errorf("Place on an object out of the world moved it to %v", c2.Offset)
+	}
+
+	// Interrupt (FUN_00449210, FUN_00449470) sets the pending label alike.
+	w.Interrupt(root, 3)
+	if root.pending != 3 || c1.pending != 3 || c2.pending != 0 {
+		t.Errorf("Interrupt(root): pending %d %d %d, want 3 3 0", root.pending, c1.pending, c2.pending)
+	}
+	w.Interrupt(c1, 6)
+	w.Interrupt(c2, 6)
+	w.Interrupt(nil, 6)
+	if root.pending != 3 || c1.pending != 6 || c2.pending != 0 {
+		t.Errorf("Interrupt(c1), Interrupt(c2): pending %d %d %d, want 3 6 0", root.pending, c1.pending, c2.pending)
 	}
 
 	w.Delete(c2)

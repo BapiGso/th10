@@ -23,6 +23,9 @@ type Ending struct {
 	bgmStarted bool
 	pages      []string
 	back       game.Scene
+	// After connects the post-ending ranking/replay flow without changing
+	// the ending's visuals. The end-menu controller belongs to stage.
+	After func(g *game.Game) game.Scene
 
 	bodyText  *widget.Text
 	pageLabel *widget.Text
@@ -103,6 +106,10 @@ func (e *Ending) Update(g *game.Game) error {
 		nextPage := e.page + 1
 		e.frame = 0
 		if nextPage >= len(e.pages) {
+			if e.After != nil {
+				g.GoTo(e.After(g))
+				return nil
+			}
 			mode := result.ModeStageClear
 			if e.extra {
 				mode = result.ModeExtraClear

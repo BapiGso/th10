@@ -68,24 +68,29 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
 
 - **L1 位精确**：整数状态（分数/火力/残机/信仰/计时器/帧号）、RNG 序列、生成/删除决策、
   碰撞判定结果、输入采样。任何偏差 = bug。
-- **L2 有界漂移**：浮点路径。原作是 x87 80 位中间精度 + float32 存储；复刻以 float32 存储、
-  float64 中间运算近似 x87。验收：短窗口 epsilon ≤ 1e-3 px，且**不允许随帧数累积发散**——
+- **L2 有界漂移**：浮点路径。`FUN_00439890` 不设 FPU_PRESERVE，原作游戏路径的 x87 精度控制为 24 位；
+  复刻对普通算术按 float32 分步取整，三角函数／D3DX 仍有实现差异（见 `docs/research/m2_motion.md` 第 2 节）。
+  验收：短窗口 epsilon ≤ 1e-3 px，且**不允许随帧数累积发散**——
   若发散说明是逻辑分歧而非精度问题，必须定位到具体帧。
 - **L3 视觉一致**：M2 之后接入 ANM/STD 再按像素 diff 收敛。
 
 ## 已确认的回放格式事实
 
-来源：th10.exe 反编译（`FUN_00428f60` 写入、`FUN_0042a200` 加载、`FUN_0042a8a0` 记录追加、
+来源：th10.exe 反编译（`FUN_00428f60` 管理器创建／加载／章头初始化、`FUN_00429b60` 文件写出、`FUN_0042a200` 加载、`FUN_0042a8a0` 记录追加、
 `FUN_004297d0` 逐帧消费、`FUN_0044b0d0` XOR 变换、`FUN_00435dc0` LZSS 解压）。
 证据 dump 在 `.tmp/replay_truth/`。
+
+2026-11-08，t9 按 t5 的编码器取证补正：USER／trailer 长度可变，不能固定为 200 字节；
+th10_05 为 208 字节。9 个用户槽位＋4 个 demo 已在第一轮做全文件 Decode→Encode 逐字节互通，
+实时自机不透明状态仍待 t6；本次文档整合未运行这些测试。
 
 ```
 文件头 36 B:
   +0x00 char[4] "t10r"        +0x04 u32 版本(=5)
-  +0x0c u32 尾部偏移(文件大小-200)
+  +0x0c u32 USER 尾部偏移（按文件头定位，不固定为文件大小-200）
   +0x1c u32 压缩长度          +0x20 u32 解压后长度
   +0x24 压缩数据
-  尾部 200 B 明文元数据（USER 名 / Version / Date / Chara / Rank / Stage / Score / Slow Rate）
+  变长 USER 明文元数据（USER 名 / Version / Date / Chara / Rank / Stage / Score / Slow Rate）
 
 解密: FUN_0044b0d0(data, len, keyInc, modulus, limit)，初始密钥在 AL
   第一次 keyInc=0xe1 modulus=0x400 initKey=0xaa
@@ -101,7 +106,7 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
     章节头 +0x00 章节索引 / +0x02 RNG 种子 / +0x04 帧数（回放读取上限）
            +0x08 本块正文字节数（下一块 = 记录起点 + 该值）/ +0x14 信仰（存储值）/ +0x18 信仰保持计时（帧）/ +0x20 动态 rank
     记录 = {u16 keys, u16 aux1, u16 aux2}
-  +0x04 可能大于实际存储的记录数（Royalflare ud0043 每章都是 2 倍），
+  +0x04 可能大于实际存储的记录数（Royalflare ud0043 每章都是 2 倍；FUN_00429b60 重复保存累加），
   所以下一块的位置必须用 +0x08，记录数取两者较小值
 
 输入位（keys，消费端用 0x01f7 掩码）:

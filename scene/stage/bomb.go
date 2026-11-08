@@ -16,7 +16,7 @@ import (
 // card is no card.
 type SpellCard struct {
 	Active  bool // +0x378c bit 0: from the declaration to its end
-	Capture bool // +0x378c bit 1: not yet lost to a bomb
+	Capture bool // +0x378c bit 1: not lost to a hit, bomb or non-survival timeout
 	// Survival is +0x378c bit 3, set by ECL 362 and cleared by the
 	// declaration: a card that is survived, not shot down. Its timeout keeps
 	// the capture, and its hits sound the same throughout.
@@ -24,6 +24,26 @@ type SpellCard struct {
 	ID       int32     // +0x3788: the card's index, kept after it ends
 	Timer    zun.Timer // +0x3734: reset at the declaration, ticked by FUN_00408d60
 	Bonus    int64     // +0x3790
+	// InitialBonus is +0x3794, capped at 99999999 at declaration; Bonus
+	// receives the uncapped int32 result. Duration is +0x3798, ECL arg 1,
+	// also written to I[2] of the two bullet.anm ring children.
+	InitialBonus int32
+	Duration     int32
+	Name         string // +0x3748: raw Shift-JIS; the ECL VM decodes it for the GUI
+	// Faded is +0x378c bit 2: the placards are dimmed while the player is
+	// near the top. Declaration clears bits 3/4, not this bit.
+	Faded bool
+	// Placards are World handles +0x768/76c/770, Ring is +0x774, and
+	// Position (+0x379c) is the ring's smoothed boss position.
+	Placards [3]*anm.VM
+	Ring     *anm.VM
+	Position [3]float32
+	// Background are the two owned cdbg VMs at +0x10/+0x3bc. They are
+	// stepped by calc 0x16, not by the effect World (calc 0x1a).
+	Background [2]anm.VM
+	// HUD is the helper's thirteen inline VMs (+0x778/+0x24d8). GUI
+	// supplies their front.anm file; spell calc/draw and failure writes own them.
+	HUD *SpellHUD
 }
 
 // Bombed is FUN_00405500: a bomb from a second into the card on loses its
@@ -32,6 +52,7 @@ func (s *SpellCard) Bombed() {
 	if s != nil && s.Timer.Cur > 59 {
 		s.Bonus = 0
 		s.Capture = false
+		s.HUD.loseCapture() // FUN_00405500 / FUN_00426cf0: seven flag-bit-1 writes
 	}
 }
 
@@ -81,8 +102,10 @@ func (b *Bomb) Start() {
 		id = 0x197
 	}
 	b.vm = c.World.Spawn(bulletFile(), id, b.Pos, c.Anm)
-	c.PlaySEID(0x26)
-	// FUN_004054b0 redraws the power gauge.
+	c.PlaySEIDAt(0x26, b.Pos[0]) // FUN_00405860, 0x405942.
+	if c.GUI != nil {
+		c.GUI.SetPower(powerDigits(c.State.Power)) // FUN_00405860, 0x405947-0x405975, before the caller's power subtraction
+	}
 	c.Spell.Bombed()
 	c.State.AddRank(-0x80)
 	b.strong = c.Spell.active() && c.Spell.Timer.Cur >= 60

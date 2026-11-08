@@ -1,7 +1,8 @@
-// Package replay parses TH10 replay files (".rpy", magic "t10r"), the official
+// Package replay reads and writes TH10 replay files (".rpy", magic "t10r"), the official
 // deterministic input streams that drive the differential harness.
 //
-// Format, reverse-engineered from th10.exe (FUN_00428f60 writer, FUN_0042a200
+// Format, reverse-engineered from th10.exe (FUN_00429b60 writer, FUN_00428f60
+// manager initialization, FUN_0042a200
 // loader, FUN_0042a8a0 record append, FUN_004297d0 per-frame consumer):
 //
 //	header (36 B):
@@ -11,7 +12,7 @@
 //	  +0x1c u32      compressed payload length
 //	  +0x20 u32      decompressed payload length
 //	  +0x24 ...      compressed payload (2x XOR transform + ZUN LZSS)
-//	  tail 200 B     plaintext metadata (player name, version, date, chara, rank, score)
+//	  trailer       plaintext USER blocks (name, version, date, chara, rank, score)
 //
 // The decompressed payload starts with a 100-byte global header, then the
 // chapter blocks: a 0x1c4-byte header, N 6-byte input records and ceil(N/30)
@@ -20,9 +21,11 @@
 package replay
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"golang.org/x/text/encoding/japanese"
@@ -33,9 +36,6 @@ const Magic = "t10r"
 
 // Version is the only replay format version TH10 writes.
 const Version = 5
-
-// trailerSize is the plaintext metadata block at the end of every .rpy.
-const trailerSize = 200
 
 // globalHeaderSize is the fixed prefix of the decompressed payload.
 const globalHeaderSize = 100
@@ -117,18 +117,28 @@ func (r Record) Right() bool { d := r.Direction(); return d == 4 || d == 6 || d 
 type Chapter struct {
 	Index uint16 // +0x00: chapter/stage index (1..7)
 	Seed  uint16 // +0x02: RNG seed captured at chapter start (DAT_004918b0)
-	Score int32  // +0x0c: score (DAT_00474c44) as stored; the game shows it times ten
-	Power int16  // +0x10: power (DAT_00474c48) in units of 0.05
-	Faith int32  // +0x14: faith (DAT_00474c4c) as stored; the game keeps it times ten
-	Hold  int32  // +0x18: faith hold timer (DAT_00474c58) in frames; 0 for a fresh chapter
-	Lives int32  // +0x1c: lives in stock (DAT_00474c70)
-	Rank  int32  // +0x20: dynamic rank (DAT_00474c98) at chapter start
+	// FrameCount is +0x04, the playback limit. FUN_00429b60 adds to it on
+	// every save without clearing it; a twice-saved file has twice as many
+	// declared frames as records (e.g. th10_05). Keep it for lossless writing.
+	FrameCount uint32
+	Score      int32 // +0x0c: score (DAT_00474c44) as stored; the game shows it times ten
+	Power      int16 // +0x10: power (DAT_00474c48) in units of 0.05
+	Faith      int32 // +0x14: faith (DAT_00474c4c) as stored; the game keeps it times ten
+	Hold       int32 // +0x18: faith hold timer (DAT_00474c58) in frames; 0 for a fresh chapter
+	Lives      int32 // +0x1c: lives in stock (DAT_00474c70)
+	Rank       int32 // +0x20: dynamic rank (DAT_00474c98) at chapter start
 	// PlayerX, PlayerY are the player's fixed-point position (player
 	// +0x3cc/+0x3d0, hundredths of a pixel from the playfield's top-centre),
 	// which FUN_00428e10 restores. The 33-entry position history that follows
 	// (+0x2c, player +0x436c) and the option state are not decoded.
 	PlayerX, PlayerY int32
+	State90          int32  // +0x1b4: DAT_00474c90 (semantics not established)
+	State9C          int32  // +0x1b8: DAT_00474c9c
+	Focus            int32  // +0x1bc: player +0x4474
+	Flags            uint32 // +0x1c0: bit 0 from DAT_00491fc4
 	Records          []Record
+	SlowRates        []byte // FUN_004297d0: one sample before each group of 30 records
+	Padding          []byte // bytes beyond the declared records and slow-rate samples
 	Raw              []byte // full 0x1c4-byte header, for fields not yet decoded
 }
 
@@ -159,6 +169,10 @@ type Replay struct {
 	Global   GlobalHeader
 	Chapters []Chapter
 	Trailer  Trailer
+	// Preserve unparsed bytes rather than retaining the original compressed
+	// stream: Encode always runs the original compressor on the payload.
+	PayloadTail   []byte
+	BeforeTrailer []byte
 }
 
 // Header mirrors the on-disk 36-byte file header.
@@ -167,23 +181,28 @@ type Header struct {
 	TrailerOff   uint32 // file offset of the 200-byte trailer
 	Compressed   uint32 // compressed payload length
 	Decompressed uint32 // decompressed payload length
+	Raw          []byte // all 36 bytes, including reserved words
 }
 
 // GlobalHeader is the 100-byte payload prefix. Field offsets are pinned by
 // correlating all four official demos against their trailer text
 // (Chara/Rank/Stage/Score); see replay_test.go.
 type GlobalHeader struct {
-	Chapters   uint32 // +0x4c: number of chapter blocks (FUN_0042a200)
-	Character  uint32 // +0x50: 0=Reimu 1=Marisa
-	ShotType   uint32 // +0x54: 0=A 1=B 2=C
-	Difficulty uint32 // +0x58: 0=E 1=N 2=H 3=L 4=X
-	Stage      uint32 // +0x5c: 1..6, 7=Extra
+	User       string  // +0x00: eight-byte name, padded with spaces
+	Timestamp  int32   // +0x0c: time32, set by FUN_004236f0 on entering name input
+	Score      int32   // +0x10: final stored score (displayed times ten)
+	SlowRate   float32 // +0x48: overall slow rate in percent
+	Chapters   uint32  // +0x4c: number of chapter blocks (FUN_0042a200)
+	Character  uint32  // +0x50: 0=Reimu 1=Marisa
+	ShotType   uint32  // +0x54: 0=A 1=B 2=C
+	Difficulty uint32  // +0x58: 0=E 1=N 2=H 3=L 4=X
+	Stage      uint32  // +0x5c: 1..6, 7=Extra
 	Raw        []byte
 }
 
 // Parse decodes a .rpy file.
 func Parse(data []byte) (*Replay, error) {
-	if len(data) < 36+trailerSize {
+	if len(data) < 36 {
 		return nil, fmt.Errorf("replay: file too short (%d bytes)", len(data))
 	}
 	if string(data[0:4]) != Magic {
@@ -194,12 +213,22 @@ func Parse(data []byte) (*Replay, error) {
 		TrailerOff:   binary.LittleEndian.Uint32(data[0x0c:]),
 		Compressed:   binary.LittleEndian.Uint32(data[0x1c:]),
 		Decompressed: binary.LittleEndian.Uint32(data[0x20:]),
+		Raw:          append([]byte(nil), data[:0x24]...),
 	}
 	if h.Version != Version {
 		return nil, fmt.Errorf("replay: unsupported version %d", h.Version)
 	}
-	if int(h.TrailerOff) > len(data) || int(h.Compressed) > len(data)-0x24 {
+	if h.TrailerOff < 0x24 || uint64(h.TrailerOff) > uint64(len(data)) ||
+		uint64(h.Compressed)+0x24 > uint64(h.TrailerOff) {
 		return nil, errors.New("replay: header lengths exceed file size")
+	}
+	// A user replay is untrusted data. Bound allocation before decoding;
+	// this project limit is well above the supplied full-game replays.
+	if h.Decompressed > 64<<20 {
+		return nil, errors.New("replay: payload exceeds 64 MiB")
+	}
+	if h.Compressed > 64<<20 {
+		return nil, errors.New("replay: compressed payload exceeds 64 MiB")
 	}
 
 	payload := make([]byte, h.Compressed)
@@ -208,19 +237,36 @@ func Parse(data []byte) (*Replay, error) {
 	xorTransform(payload, 0xe1, 0x400, 0xaa)
 	xorTransform(payload, 0x7a, 0x80, 0x3d)
 	raw := lzssDecompress(payload, int(h.Decompressed))
+	if len(raw) != int(h.Decompressed) {
+		return nil, fmt.Errorf("replay: decompressed %d bytes, want %d", len(raw), h.Decompressed)
+	}
 	if len(raw) < globalHeaderSize {
 		return nil, fmt.Errorf("replay: payload too short (%d bytes)", len(raw))
 	}
 
 	r := &Replay{Header: h}
 	r.Global = parseGlobalHeader(raw[:globalHeaderSize])
-	r.Chapters = parseChapters(raw[globalHeaderSize:], int(r.Global.Chapters))
-	r.Trailer = parseTrailer(data[len(data)-trailerSize:])
+	var used int
+	n := 6
+	if r.Global.Chapters <= 7 {
+		n = int(r.Global.Chapters)
+	}
+	r.Chapters, used = parseChapterBlocks(raw[globalHeaderSize:], n)
+	r.PayloadTail = append([]byte(nil), raw[globalHeaderSize+used:]...)
+	r.BeforeTrailer = append([]byte(nil), data[0x24+h.Compressed:h.TrailerOff]...)
+	r.Trailer = parseTrailer(data[h.TrailerOff:])
 	return r, nil
 }
 
+// Decode is Parse under the name paired with Encode.
+func Decode(data []byte) (*Replay, error) { return Parse(data) }
+
 func parseGlobalHeader(b []byte) GlobalHeader {
 	g := GlobalHeader{Raw: append([]byte(nil), b...)}
+	g.User = strings.TrimRight(string(b[:8]), " \x00")
+	g.Timestamp = int32(binary.LittleEndian.Uint32(b[0x0c:]))
+	g.Score = int32(binary.LittleEndian.Uint32(b[0x10:]))
+	g.SlowRate = math.Float32frombits(binary.LittleEndian.Uint32(b[0x48:]))
 	g.Chapters = binary.LittleEndian.Uint32(b[0x4c:])
 	g.Character = binary.LittleEndian.Uint32(b[0x50:])
 	g.ShotType = binary.LittleEndian.Uint32(b[0x54:])
@@ -236,6 +282,11 @@ func parseGlobalHeader(b []byte) GlobalHeader {
 // original never notices because the stage ends first), so it is capped by
 // the +8 length.
 func parseChapters(b []byte, n int) []Chapter {
+	out, _ := parseChapterBlocks(b, n)
+	return out
+}
+
+func parseChapterBlocks(b []byte, n int) ([]Chapter, int) {
 	if n > 7 {
 		n = 6
 	}
@@ -247,32 +298,46 @@ func parseChapters(b []byte, n int) []Chapter {
 		}
 		idx := binary.LittleEndian.Uint16(b[pos:])
 		seed := binary.LittleEndian.Uint16(b[pos+2:])
-		count := int(binary.LittleEndian.Uint32(b[pos+4:]))
-		size := int(binary.LittleEndian.Uint32(b[pos+8:]))
-		if idx == 0 || count == 0 {
+		declaredCount := binary.LittleEndian.Uint32(b[pos+4:])
+		declaredSize := binary.LittleEndian.Uint32(b[pos+8:])
+		count, size := 0, 0
+		if idx == 0 || declaredCount == 0 {
 			break
 		}
 		recStart := pos + chapterHeaderSize
-		if size > len(b)-recStart {
+		if uint64(declaredSize) > uint64(len(b)-recStart) {
 			size = len(b) - recStart
+		} else {
+			size = int(declaredSize)
 		}
-		if stored := storedRecords(size); count > stored {
+		if stored := storedRecords(size); uint64(declaredCount) > uint64(stored) {
 			count = stored
+		} else {
+			count = int(declaredCount)
 		}
 		ch := Chapter{
-			Index:   idx,
-			Seed:    seed,
-			Score:   int32(binary.LittleEndian.Uint32(b[pos+0x0c:])),
-			Power:   int16(binary.LittleEndian.Uint16(b[pos+0x10:])),
-			Faith:   int32(binary.LittleEndian.Uint32(b[pos+0x14:])),
-			Hold:    int32(binary.LittleEndian.Uint32(b[pos+0x18:])),
-			Lives:   int32(binary.LittleEndian.Uint32(b[pos+0x1c:])),
-			Rank:    int32(binary.LittleEndian.Uint32(b[pos+0x20:])),
-			PlayerX: int32(binary.LittleEndian.Uint32(b[pos+0x24:])),
-			PlayerY: int32(binary.LittleEndian.Uint32(b[pos+0x28:])),
-			Records: make([]Record, count),
-			Raw:     append([]byte(nil), b[pos:pos+chapterHeaderSize]...),
+			Index:      idx,
+			Seed:       seed,
+			FrameCount: binary.LittleEndian.Uint32(b[pos+4:]),
+			Score:      int32(binary.LittleEndian.Uint32(b[pos+0x0c:])),
+			Power:      int16(binary.LittleEndian.Uint16(b[pos+0x10:])),
+			Faith:      int32(binary.LittleEndian.Uint32(b[pos+0x14:])),
+			Hold:       int32(binary.LittleEndian.Uint32(b[pos+0x18:])),
+			Lives:      int32(binary.LittleEndian.Uint32(b[pos+0x1c:])),
+			Rank:       int32(binary.LittleEndian.Uint32(b[pos+0x20:])),
+			PlayerX:    int32(binary.LittleEndian.Uint32(b[pos+0x24:])),
+			PlayerY:    int32(binary.LittleEndian.Uint32(b[pos+0x28:])),
+			State90:    int32(binary.LittleEndian.Uint32(b[pos+0x1b4:])),
+			State9C:    int32(binary.LittleEndian.Uint32(b[pos+0x1b8:])),
+			Focus:      int32(binary.LittleEndian.Uint32(b[pos+0x1bc:])),
+			Flags:      binary.LittleEndian.Uint32(b[pos+0x1c0:]),
+			Records:    make([]Record, count),
+			Raw:        append([]byte(nil), b[pos:pos+chapterHeaderSize]...),
 		}
+		slowStart := recStart + count*recordSize
+		slowEnd := min(slowStart+slowRateSamples(count), recStart+size)
+		ch.SlowRates = append([]byte(nil), b[slowStart:slowEnd]...)
+		ch.Padding = append([]byte(nil), b[slowEnd:recStart+size]...)
 		for j := 0; j < count; j++ {
 			q := recStart + j*recordSize
 			ch.Records[j] = Record{
@@ -284,7 +349,7 @@ func parseChapters(b []byte, n int) []Chapter {
 		out = append(out, ch)
 		pos = recStart + size
 	}
-	return out
+	return out, pos
 }
 
 // storedRecords returns how many records fit in a chapter body of size bytes,
@@ -301,6 +366,23 @@ func parseTrailer(b []byte) Trailer {
 	t := Trailer{Raw: append([]byte(nil), b...)}
 	// The trailer is plain text: "USER <name>\0 ... \r\nName ...\r\nDate ...\r\n..."
 	text := decodeTrailerText(b)
+	for at := 0; at+12 <= len(b) && string(b[at:at+4]) == "USER"; {
+		size := int(binary.LittleEndian.Uint32(b[at+4:]))
+		if size < 12 || size > len(b)-at {
+			break
+		}
+		body := b[at+12 : at+size]
+		if zero := bytes.IndexByte(body, 0); zero >= 0 {
+			body = body[:zero]
+		}
+		switch b[at+8] {
+		case 0:
+			text = decodeTrailerText(body)
+		case 1:
+			t.Name = decodeTrailerText(body)
+		}
+		at += size
+	}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
 		switch {
@@ -318,11 +400,20 @@ func parseTrailer(b []byte) Trailer {
 		case strings.HasPrefix(line, "Rank "):
 			t.Rank = strings.TrimSpace(line[5:])
 		case strings.HasPrefix(line, "Stage "):
-			fmt.Sscanf(line[6:], "%d", &t.Stage)
+			if strings.Contains(line, "All Clear") {
+				t.Stage = 8
+			} else {
+				_, _ = fmt.Sscanf(line[6:], "%d", &t.Stage)
+			}
+		case strings.HasPrefix(line, "Extra Stage"):
+			t.Stage = 7
+			if strings.Contains(line, "Clear") {
+				t.Stage = 8
+			}
 		case strings.HasPrefix(line, "Score "):
-			fmt.Sscanf(line[6:], "%d", &t.Score)
+			_, _ = fmt.Sscanf(line[6:], "%d", &t.Score)
 		case strings.HasPrefix(line, "Slow Rate "):
-			fmt.Sscanf(line[10:], "%f", &t.SlowRate)
+			_, _ = fmt.Sscanf(line[10:], "%f", &t.SlowRate)
 		}
 	}
 	return t
@@ -410,10 +501,8 @@ func lzssDecompress(src []byte, outLen int) []byte {
 				cur = 0
 			}
 		}
-		b := int(cur&bitPos) >> 0
-		if cur&bitPos == 0 {
-			b = 0
-		} else {
+		b := 0
+		if cur&bitPos != 0 {
 			b = 1
 		}
 		bitPos >>= 1

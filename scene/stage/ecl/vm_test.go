@@ -166,6 +166,8 @@ func containsRune(s string, r rune) bool {
 
 func TestVMSpellBgDeclaresHUD(t *testing.T) {
 	ctx := newTestContext()
+	ctx.State.Stage = 2
+	ctx.State.Faith = 50000 // 5000 in the binary
 	vm := newTestVM()
 	owner := enemy.New(100, 100, 1000, enemy.TypeBoss)
 	task := &eclTask{owner: owner}
@@ -186,7 +188,9 @@ func TestVMSpellBgDeclaresHUD(t *testing.T) {
 	if !h.Active || !h.Spell {
 		t.Fatalf("BossHUD active/spell = %v/%v, want true/true", h.Active, h.Spell)
 	}
-	if h.Name != "Test Spell" || h.TimeLeft != 70 || h.Bonus != 1000000 {
+	// FUN_00409280: the bonus is (stage*3+10)*faith*10, not arg 2:
+	// (2*3+10) * 5000 * 10 = 800000.
+	if h.Name != "Test Spell" || h.TimeLeft != 70 || h.Bonus != 800000 {
 		t.Fatalf("BossHUD = name %q time %d bonus %d", h.Name, h.TimeLeft, h.Bonus)
 	}
 }

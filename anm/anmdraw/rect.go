@@ -29,5 +29,15 @@ import "th10/gfx"
 // The corners slice handed to DrawTL must not be kept by the device, as
 // with the batch.
 func (r *Renderer) Rect(v [4]float32, c gfx.Color) {
-	panic("anmdraw: Rect not implemented")
+	r.Flush()
+	vs := [4]gfx.TLVertex{
+		{X: v[0], Y: v[1], RHW: 1, Diffuse: c, Specular: noSpecular},
+		{X: v[2], Y: v[1], RHW: 1, Diffuse: c, Specular: noSpecular},
+		{X: v[0], Y: v[3], RHW: 1, Diffuse: c, Specular: noSpecular},
+		{X: v[2], Y: v[3], RHW: 1, Diffuse: c, Specular: noSpecular},
+	}
+	r.Dev.SetTexture(nil)
+	r.Dev.SetBlend(gfx.BlendAlpha)
+	r.Dev.DrawTL(gfx.TriangleStrip, vs[:])
+	r.Invalidate()
 }

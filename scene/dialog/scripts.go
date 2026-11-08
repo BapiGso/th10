@@ -271,4 +271,3 @@ func BossPre(stage string) []Line { return cloneLines(scripts[stage].bossPre) }
 
 // Post 关底BOSS被击败后对话。
 func Post(stage string) []Line { return cloneLines(scripts[stage].post) }
-

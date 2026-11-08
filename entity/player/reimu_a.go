@@ -1,24 +1,17 @@
 package player
 
 import (
-	"math"
 	"th10/entity/enemy"
 	"th10/entity/playerbullet"
 	"th10/input"
-	"th10/sht"
+	"th10/zun"
 )
 
-type Option struct{ X, Y float64 }
-
-type reimuAShot struct {
-	file        *sht.File
-	clock       int // -1 idle; original 0..15 burst clock
-	optionCount int
-	options     [4]Option
-	target      *enemy.Enemy
-	// snap is +0x332c and its siblings: the next move puts the options
-	// straight on their targets instead of easing them there.
-	snap bool
+// shotState is the common SHT burst state of all six shot types
+// (FUN_004281d0). Player.reimuA retains its pre-existing inspection name.
+type shotState struct {
+	timer  zun.Timer // P+0x460: -1 idle, otherwise the original 0..15 burst
+	target *enemy.Enemy
 }
 
 // SetHomingCandidates bridges the stage's stable enemy order to the original
@@ -41,100 +34,52 @@ func (p *Player) SetHomingCandidates(enemies []*enemy.Enemy) {
 	}
 }
 
-// Options exposes only initialized option state. Draw must not advance it.
-// The options only follow the player in state 1, so they are hidden from
-// the death to the end of the respawn.
-func (p *Player) Options() []Option {
-	if p.reimuA == nil || p.State == StateDying || p.State == StateRespawn || p.reimuA.optionCount <= 0 {
-		return nil
-	}
-	return p.reimuA.options[:p.reimuA.optionCount]
-}
-
-// updateReimuAShot is FUN_004281d0 and the shot update after it. Outside
+// updateShot is FUN_004281d0 and the shot update after it. Outside
 // state 1 the target is dropped and the burst clock holds.
-func (p *Player) updateReimuAShot(in *input.State) {
+func (p *Player) updateShot(in *input.State) {
 	s := p.reimuA
 	held := in.IsPressed(input.KeyShot)
 	switch {
 	case p.NoAttack:
-		s.clock, s.target = -1, nil // FUN_004281d0 is skipped and its timer reset
+		s.timer.Set(-1) // FUN_00425730 skips FUN_004281d0 and resets its clock
+		s.target = nil
 	case p.State != StateNormal:
 		s.target = nil
 	default:
-		p.fireReimuA(held)
+		p.fireSHT(held)
 	}
 	p.Bullets.Update()
 }
 
-func (p *Player) fireReimuA(held bool) {
+// fireSHT ports FUN_004281d0/FUN_00428160. Slow frames do not repeat the
+// same timer phase, and FUN_0044bf40(-15) is not a plain modulo operation.
+func (p *Player) fireSHT(held bool) {
 	s := p.reimuA
-	if s.clock < 0 && held {
-		s.clock = 0
+	if s.timer.Cur < 0 {
+		if !held {
+			return
+		}
+		s.timer.Set(0) // 0x4281f9-0x428201
 	}
-	if s.clock >= 0 {
-		for _, shot := range s.file.Shots(p.GS.Power, p.focus) {
-			if s.clock%shot.Interval != shot.Delay {
+	if s.timer.Cur != s.timer.Prev { // 0x428206-0x428223
+		for _, shot := range p.shotFile.Shots(p.GS.Power, p.focus) {
+			if int(s.timer.Cur)%shot.Interval != shot.Delay {
 				continue
 			}
 			x, y := p.X, p.Y
 			if shot.Source != 0 {
-				option := s.options[shot.Source-1]
-				x, y = option.X, option.Y
+				x, y = p.optionScreen(shot.Source - 1)
 			}
 			p.Bullets.FireSHT(x, y, shot, s.target)
 		}
-		if s.clock >= 15 {
-			if held {
-				s.clock -= 15
-			} else {
-				s.clock = -1
-			}
+	}
+	if s.timer.Cur >= 15 {
+		if held {
+			s.timer.Add(-15, p.gameSpeed()) // 0x42823e-0x428243
 		} else {
-			s.clock++
+			s.timer.Set(-1) // 0x42824e-0x428252
 		}
+	} else {
+		s.timer.Tick(p.gameSpeed()) // 0x42825d
 	}
-}
-
-// RefreshOptions is FUN_00426f70 for Reimu A: when the option count (one per
-// 1.00 power, at most 4) changes, the options are put on their offsets from
-// the player and snap there on the next move.
-func (p *Player) RefreshOptions() {
-	s := p.reimuA
-	if s == nil {
-		return
-	}
-	offsets := s.file.OptionOffsets(p.GS.Power, p.focus)
-	if len(offsets) == s.optionCount {
-		return
-	}
-	x, y := int(math.Round(p.X*100)), int(math.Round(p.Y*100))
-	for i, offset := range offsets {
-		s.options[i] = Option{float64(x+offset.X) / 100, float64(y+offset.Y) / 100}
-	}
-	s.optionCount = len(offsets)
-	s.snap = true
-}
-
-// updateOptions is the option loop at the end of FUN_004250b0, run by state
-// 1 after the move: each option eases 30% of the way to its offset from the
-// player, or snaps there. A count change the items made without
-// RefreshOptions snaps too.
-func (s *reimuAShot) updateOptions(x, y float64, power int, focused bool) {
-	offsets := s.file.OptionOffsets(power, focused)
-	changed := s.snap || len(offsets) != s.optionCount
-	s.snap = false
-	for i, offset := range offsets {
-		tx, ty := int(math.Round(x*100))+offset.X, int(math.Round(y*100))+offset.Y
-		if !changed {
-			cx, cy := int(math.Round(s.options[i].X*100)), int(math.Round(s.options[i].Y*100))
-			dx, dy := (tx-cx)*30/100, (ty-cy)*30/100
-			// FUN_004250b0 snaps only when both fixed-point deltas truncate to 0.
-			if dx != 0 || dy != 0 {
-				tx, ty = cx+dx, cy+dy
-			}
-		}
-		s.options[i] = Option{float64(tx) / 100, float64(ty) / 100}
-	}
-	s.optionCount = len(offsets)
 }

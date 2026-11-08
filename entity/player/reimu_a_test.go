@@ -65,7 +65,18 @@ func TestReimuAPowerLevelsAndBirths(t *testing.T) {
 		}
 		for i, b := range bullets[2:] {
 			o := p.Options()[i]
-			if !b.Homing || math.Abs(b.X-o.X) > 1e-4 || math.Abs(b.Y-(o.Y-0.1)) > 1e-4 {
+			// FUN_00427e90 (0x427ff2) compensates speed 12 before the first
+			// FUN_00428b10 update adds 0.1 (DAT_00470c18 = 0x3dcccccd).
+			// FUN_00428280 (0x4283c5) then floors to the 0.01 game grid;
+			// at x=0 the negative residual becomes -0.01, not zero.
+			angle := float64(math.Float32frombits(0xbfc90fdb))
+			initialVX := float32(math.Cos(angle) * 12)
+			firstSpeed := float32(float32(12) + math.Float32frombits(0x3dcccccd))
+			firstVX := float32(math.Cos(angle) * float64(firstSpeed))
+			gx := float32(float32(-initialVX+float32(o.X-p.originX())) + firstVX)
+			gx = float32(float32(math.Floor(float64(float32(gx*100)))) * math.Float32frombits(0x3c23d70a))
+			wantX := p.originX() + float64(gx)
+			if !b.Homing || math.Abs(b.X-wantX) > 1e-4 || math.Abs(b.Y-(o.Y-0.1)) > 1e-4 {
 				t.Fatalf("homing muzzle %+v at option %+v", b, o)
 			}
 		}
@@ -153,13 +164,23 @@ func TestOtherShotsRemainLegacy(t *testing.T) {
 			var in input.State
 			in.Restore(1 << input.KeyShot)
 			p.UpdateInput(&in)
-			if len(newborns(p)) != 0 {
-				t.Fatal("legacy first-frame cadence changed")
+			// FUN_004281d0: 0x428201 sets tick 0, then 0x428223 runs
+			// the SHT group immediately. All five power-0 groups have two
+			// main shots at phase 0 with interval 3 (FUN_00428160).
+			if got := len(newborns(p)); got != 2 {
+				t.Fatalf("character %d shot %d: SHT tick 0 births=%d, want 2", character, shot, got)
 			}
 			p.UpdateInput(&in)
+			if got := len(newborns(p)); got != 0 {
+				t.Fatalf("character %d shot %d: SHT tick 1 births=%d, want 0", character, shot, got)
+			}
 			p.UpdateInput(&in)
-			if len(newborns(p)) == 0 {
-				t.Fatal("legacy shots missing")
+			if got := len(newborns(p)); got != 0 {
+				t.Fatalf("character %d shot %d: SHT tick 2 births=%d, want 0", character, shot, got)
+			}
+			p.UpdateInput(&in)
+			if got := len(newborns(p)); got != 2 {
+				t.Fatalf("character %d shot %d: SHT tick 3 births=%d, want 2", character, shot, got)
 			}
 		}
 	}

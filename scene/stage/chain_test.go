@@ -45,15 +45,18 @@ func TestChainTable(t *testing.T) {
 func TestChainDraws(t *testing.T) {
 	drawing := []uint8{
 		0x07, 0x09, 0x0a, 0x0b, 0x0d, // background and layers 0-2, 17, 18
+		0x0e,                         // inline cdbg spell backgrounds (FUN_00409230)
 		0x0f, 0x10, 0x11, 0x12, 0x13, // layers 3-7
 		0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d,
 		0x21, 0x24, 0x29, 0x2a, // layers 13-16
+		0x23, // score popups (FUN_0042b4d0)
+		0x25, // spell bonus and history digits (FUN_00409270 -> FUN_004091c0)
 		0x2b, // GUI
-		0x2e, // pause (a guess)
+		0x2e, // DAT_00477830 ranking/replay menu
 	}
 	// Of those, the ones still drawing with Ebiten. Node 0x14 (0x40d820,
 	// MOV EAX,1; RET) draws nothing: the enemies are world objects.
-	legacy := []uint8{0x16, 0x2b, 0x2e}
+	legacy := []uint8{}
 	for _, n := range drawChain {
 		if want := slices.Contains(drawing, n.prio); (n.draw != nil) != want {
 			t.Errorf("node %#x (%#x): draws %v, want %v", n.prio, n.fn, n.draw != nil, want)

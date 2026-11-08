@@ -122,6 +122,25 @@ func (w *World) SetOffset(vm *VM, pos [3]float32) {
 	w.eachHandle(vm, func(v *VM) { v.Offset = pos })
 }
 
+// Interrupt is FUN_00449210 (handle by value) and FUN_00449470 (handle by
+// address): VM.Interrupt(label) on the object and its chain.
+func (w *World) Interrupt(vm *VM, label int16) {
+	w.eachHandle(vm, func(v *VM) { v.Interrupt(label) })
+}
+
+// FindChild is FUN_004497d0: find script id in an object's chain. It also
+// works before the next World.Run, when newly spawned children are not in
+// the layer lists yet. A dead handle or absent script returns nil.
+func (w *World) FindChild(vm *VM, id int) *VM {
+	var found *VM
+	w.eachHandle(vm, func(v *VM) {
+		if found == nil && v.ScriptID == id {
+			found = v
+		}
+	})
+	return found
+}
+
 // Restart is FUN_004496d0: VM.Restart(id) on the object alone (no chain),
 // with its own file. Nil or a VM no longer in w does nothing.
 func (w *World) Restart(vm *VM, id int, env *Env) {

@@ -7,7 +7,6 @@ import (
 	"th10/input"
 	"th10/render"
 	"th10/scene/ending"
-	resultscene "th10/scene/result"
 	"th10/scene/stage"
 	"th10/scene/stage/extra"
 	"th10/scene/stage/stage1"
@@ -208,10 +207,9 @@ func (s *Select) Update(g *game.Game) error {
 }
 
 func (s *Select) startGame(g *game.Game) {
-	state := game.NewState(s.character, s.shotType, s.difficulty)
+	state := g.NewState(s.character, s.shotType, s.difficulty)
 	if s.practice {
-		state.Stage = s.practiceStage
-		state.SingleStage = true
+		state.Practice(s.practiceStage)
 	} else if s.isExtra {
 		state.Stage = game.StageExtra
 	} else {
@@ -242,29 +240,41 @@ func stageScript(stageNum int) stage.Script {
 	}
 }
 
+// ReplayScript shares the game's stage factory with the replay entry point.
+func ReplayScript(stageNum int) stage.Script { return stageScript(stageNum) }
+
 func buildStage(g *game.Game, state *game.GameState, back game.Scene) *stage.Stage {
 	s := stage.New(g, state, stageScript(state.Stage))
 	s.OnGameOver = func(g *game.Game, st *game.GameState) game.Scene {
-		return resultscene.New(st, resultscene.ModeGameOver, back)
+		return back // FUN_0040ac90(4), after the in-stage end menu
+	}
+	s.OnContinue = func(g *game.Game, st *game.GameState) game.Scene {
+		st.RestartStage() // FUN_004218d0 mode 13, fresh non-replay stage
+		g.BeginRun(st)
+		return buildStage(g, st, back)
 	}
 	s.NextScene = func(g *game.Game, st *game.GameState) game.Scene {
 		if st.SingleStage {
-			mode := resultscene.ModeStageClear
-			if st.Stage == game.StageExtra {
-				mode = resultscene.ModeExtraClear
-			}
-			if !st.DebugMode {
-				g.MarkClear(st)
-			}
-			return resultscene.New(st, mode, back)
+			return back // the stage's FUN_00423370 menu has already settled it
 		}
 		next := st.NextStage()
 		if next == 0 {
-			g.MarkClear(st)
-			return ending.New(st, st.Stage == game.StageExtra, back)
+			if st.Stage != game.StageExtra {
+				g.MarkClear(st)
+			}
+			e := ending.New(st, st.Stage == game.StageExtra, back)
+			if st.Stage == game.StageCount {
+				e.After = func(g *game.Game) game.Scene {
+					s.NextScene = func(*game.Game, *game.GameState) game.Scene { return back }
+					s.OpenCompletion(g)
+					return s
+				}
+			}
+			return e
 		}
 		st.Stage = next
 		st.Frame = 0
+		st.BeginStageTransition()
 		return buildStage(g, st, back)
 	}
 	return s
@@ -277,7 +287,7 @@ func NewDebugStage(g *game.Game, back game.Scene, stageNum, character, shotType,
 
 // NewDebugStageWithPower starts a reproducible shot test without changing normal-run defaults.
 func NewDebugStageWithPower(g *game.Game, back game.Scene, stageNum, character, shotType, difficulty, power int) game.Scene {
-	state := game.NewState(character, shotType, difficulty)
+	state := g.NewState(character, shotType, difficulty)
 	state.Power = max(0, min(power, game.PowerMax))
 	state.Stage = stageNum
 	state.SingleStage = true

@@ -10,7 +10,6 @@ import (
 	"th10/anm"
 	"th10/audio"
 	"th10/entity/bullet"
-	"th10/entity/effect"
 	"th10/entity/item"
 	"th10/entity/laser"
 	"th10/entity/player"
@@ -46,17 +45,18 @@ func NewContext(state *game.GameState) *Context {
 		rng.State = state.RNGSeed
 	}
 	c := &Context{
-		State:   state,
-		RNG:     rng,
-		Player:  player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
-		Bullets: bullet.NewPool(),
-		Lasers:  laser.NewManager(),
-		Items:   item.NewManager(),
-		Effects: effect.NewPool(512),
-		World:   &anm.World{},
+		State:         state,
+		RNG:           rng,
+		Player:        player.New(state, game.FieldLeft, game.FieldTop, game.FieldRight, game.FieldBottom),
+		Bullets:       bullet.NewPool(),
+		Lasers:        laser.NewManager(),
+		Items:         item.NewManager(),
+		World:         &anm.World{},
+		GUIController: &GUIController{},
 	}
-	// The alternate RNG's seed is not traced yet.
-	c.Anm = &anm.Env{GameSpeed: 1, RNG: rng, Alt: &zun.RNG{}, Spawn: c.World.Add}
+	// FUN_004201b0 seeds DAT_004918a8 once (0x4201e1); stage and replay
+	// starts never restore it. GameState references its application's RNG.
+	c.Anm = &anm.Env{GameSpeed: 1, RNG: rng, Alt: state.AlternateRNG(), Spawn: c.World.Add}
 	c.Player.GameSpeed = func() float32 { return c.Anm.GameSpeed }
 	c.Player.SetGameSpeed = func(v float32) { c.Anm.GameSpeed = v }
 	c.Player.ClearRound = c.respawnClear
@@ -65,6 +65,11 @@ func NewContext(state *game.GameState) *Context {
 		c.Lasers.ClearAll(false, c.LaserEnv)
 	}
 	c.Player.SpawnItem = c.SpawnItem // the death drops
+	c.Player.PowerChanged = func() {
+		if c.GUI != nil {
+			c.GUI.SetPower(powerDigits(c.State.Power)) // FUN_004054b0, original caller uses raw units of 0.05
+		}
+	}
 	c.Bomb = &Bomb{ctx: c}
 	c.Player.Bomb = c.Bomb
 	c.BulletEnv = &bullet.Env{
@@ -73,15 +78,33 @@ func NewContext(state *game.GameState) *Context {
 		Effects: c.World,
 		Hit:     c.bulletHit,
 		Graze:   c.bulletGraze,
-		PlaySE:     func(id int32, _ float32, _ bool) { c.PlaySEID(int(id)) },
+		PlaySE: func(id int32, x float32, pan bool) {
+			if pan {
+				c.PlaySEIDAt(int(id), x) // FUN_0043dd10; false is FUN_0043dc90 at pan 0.
+			} else {
+				c.PlaySEID(int(id))
+			}
+		},
 		CancelItem: c.cancelItem,
 	}
+	c.Player.AttachAnm(c.World, c.Anm, c.BulletEnv.File)                           // FUN_004247f0; share bullet.anm
+	c.Player.Bullets.PlaySE = c.PlaySEIDAt                                         // FUN_00427e90 -> FUN_0043dd10
+	c.Player.Bullets.ManagerPresent = func() bool { return c.ManagerOrder != nil } // DAT_00477704, 0x428328
+	c.CaptureReplayPlayer = c.Player.CaptureReplayPlayer                           // FUN_0042a450, 0x42a512-0x42a56a
+	c.RestoreReplayPlayer = func(header []byte) {
+		c.Player.RestoreReplayPlayer(header)
+		if c.GUI != nil {
+			c.GUI.SetLives(c.State.Life) // FUN_00424d90 -> FUN_00413790, 0x424e9c
+		}
+	}
 	c.ItemEnv = &item.Env{
-		State:   state,
-		Anm:     c.Anm,
-		File:    c.BulletEnv.File,
-		PlaySE:  func(id int32) { c.PlaySEID(int(id)) },
-		Options: c.Player.RefreshOptions,
+		State:    state,
+		Anm:      c.Anm,
+		File:     c.BulletEnv.File,
+		Effects:  c.World, // FUN_0041bb00/FUN_0041ba50: script 0x189 in the same World
+		PlaySE:   func(id int32) { c.PlaySEID(int(id)) },
+		PlaySEAt: func(id int32, x float32) { c.PlaySEIDAt(int(id), x) },
+		Options:  c.Player.RefreshOptions,
 	}
 	c.LaserEnv = &laser.Env{
 		Anm:        c.Anm,
@@ -157,7 +180,8 @@ func (c *Context) bulletHit() bool {
 func (c *Context) hitPlayer() {
 	p := c.Player
 	p.Hit()
-	c.Effects.Spawn(p.X, p.Y, effect.TypePlayerDead, 30)
+	// FUN_00426cf0 has the same timer > 59 failure writes as FUN_00405500.
+	c.Spell.Bombed()
 	c.PlaySE(audio.SEDead)
 }
 

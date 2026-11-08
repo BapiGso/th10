@@ -24,6 +24,19 @@ func (c *Context) PlaySEID(id int) {
 	}
 }
 
+// PlaySEIDAt is FUN_0043dd10: x is in game coordinates. The optional
+// interface keeps existing headless sound recorders compatible.
+func (c *Context) PlaySEIDAt(id int, x float32) {
+	if c.Audio == nil {
+		return
+	}
+	if p, ok := c.Audio.(interface{ PlaySEIDAt(int, float32) }); ok {
+		p.PlaySEIDAt(id, x)
+	} else {
+		c.Audio.PlaySEID(id)
+	}
+}
+
 // PlayBGM 切换 BGM；Audio 为 nil 时静默（无头模拟）。
 func (c *Context) PlayBGM(idx int) {
 	if c.Audio != nil {

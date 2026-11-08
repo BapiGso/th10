@@ -4,8 +4,10 @@ package zun
 // lives at DAT_004918b0 and is shared by ECL and every ANM VM without flag
 // 0x40000000; VMs with the flag draw from DAT_004918a8. FUN_00448db0 sets the
 // flag on its effects, but the reset inside FUN_0043e710 clears it again, so
-// bullet cancel/graze effects draw from the game RNG. Only children spawned by
-// ANM op 88 (FUN_0043e7e0, no reset) keep the flag.
+// bullet cancel/graze effects draw from the game RNG. Children spawned by ANM
+// op 88 and World objects started with FUN_00449870 keep the alternate flag.
+// FUN_004201b0 seeds both generators from timeGetTime at application startup
+// (0x4201db/0x4201e1), but only the game RNG is restored from replay headers.
 type RNG struct {
 	State uint16
 	Count uint32
