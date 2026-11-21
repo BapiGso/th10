@@ -82,11 +82,11 @@ func (s *PlayerData) Update(g *game.Game) error {
 		}
 	case 2:
 		oldShot, oldDifficulty := s.shot, s.difficulty
-		if menuRepeat(&input.Global, input.KeyUp) {
+		if input.Global.Menu().Move(input.MenuUp) {
 			s.difficulty = wrapSelection(s.difficulty-1, 5)
 			s.core.interrupt(s.arrows[0], 2)
 		}
-		if menuRepeat(&input.Global, input.KeyDown) {
+		if input.Global.Menu().Move(input.MenuDown) {
 			s.difficulty = wrapSelection(s.difficulty+1, 5)
 			s.core.interrupt(s.arrows[1], 2)
 		}
@@ -99,11 +99,11 @@ func (s *PlayerData) Update(g *game.Game) error {
 			}
 			menuSE(g, 12)
 		}
-		if menuRepeat(&input.Global, input.KeyLeft) {
+		if input.Global.Menu().Move(input.MenuLeft) {
 			s.shot = wrapSelection(s.shot-1, 6)
 			s.core.interrupt(s.arrows[2], 2)
 		}
-		if menuRepeat(&input.Global, input.KeyRight) {
+		if input.Global.Menu().Move(input.MenuRight) {
 			s.shot = wrapSelection(s.shot+1, 6)
 			s.core.interrupt(s.arrows[3], 2)
 		}

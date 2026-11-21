@@ -87,9 +87,9 @@ func New() *Game {
 		showPace:       os.Getenv("TH10_PACE") == "1",
 	}
 	g.BindMusicProgress(nil) // FUN_00420b10's ST music flags, before title playback
-	// One Update per display refresh; the Pacer picks the refreshes that run
-	// a logic frame, and a skipped refresh keeps the last frame on screen.
-	ebiten.SetTPS(ebiten.SyncWithFPS)
+	// Desktop picks display refreshes with the Pacer. The browser instead
+	// uses Ebiten's fixed 60 TPS clock without a second pacing gate.
+	ebiten.SetTPS(platformTPS())
 	ebiten.SetScreenClearedEveryFrame(false)
 	return g
 }
@@ -149,7 +149,7 @@ func (g *Game) SetScene(s Scene) {
 
 func (g *Game) Update() error {
 	now := time.Since(g.start).Seconds()
-	if !g.pace.Ready(now) {
+	if !g.logicFrameReady(now) {
 		return nil
 	}
 	g.fresh = true

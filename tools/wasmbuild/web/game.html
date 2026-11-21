@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TH10 Game</title>
+    <style>
+        html, body { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; color: #ede6d2; }
+        canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+        #boot { position: fixed; inset: 0; display: grid; place-content: center; gap: 16px; text-align: center; font: 18px "Palatino Linotype", "Noto Serif CJK SC", serif; background: radial-gradient(ellipse at 50% 80%, #263d2b, #0c1511); z-index: 10; }
+        #boot small { color: #d6ba72; font-size: 13px; }
+        #start { padding: 15px 25px; border: 1px solid #d6ba72; background: #d6ba7218; color: #ede6d2; font: 22px "Palatino Linotype", "Noto Serif CJK SC", serif; cursor: pointer; }
+        #start:focus-visible { outline: 2px solid #d6ba72; outline-offset: 5px; }
+        #start:disabled { opacity: .4; cursor: wait; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+<div id="boot"><span id="boot-text">等待游戏下载</span><button id="start" type="button" disabled>点击开始</button><small id="boot-note">下载与存储初始化后，可先导入原作文件。</small></div>
+<script src="wasm_exec.js"></script>
+<script type="module" src="player.mjs"></script>
+</body>
+</html>

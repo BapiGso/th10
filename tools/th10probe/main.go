@@ -1,365 +1,168 @@
-// Command th10probe samples a running TH10 process read-only and writes a
-// per-frame trace in the shared trace format (package trace).
-//
-// It attaches with PROCESS_VM_READ only — no writes, no injection, no code
-// patching — so the original process is never modified. Run the original,
-// start a replay (or play), then run this tool while it plays.
-//
-// Usage:
-//
-//	th10probe -pid 1234 -frames 3600 -out orig.trace
-//	th10probe -exe "C:\path\to\th10.exe" ...   # find the pid by module path
-//	th10probe -pid 1234 -frames 1300 -shot-frames 1200,1300-1302 -shot-dir shots
-//
-// -shot-frames captures the game window's client area from the screen at those
-// frames, writing shots/f<before>-<after>.png (the frame counter read just before
-// and after the copy). The screen copy only reads pixels; nothing is sent to the
-// window. The original must run in windowed mode, 32-bit colour, unobscured, at
-// 100% display scaling.
-//
-// The address map below comes from Ghidra decompilations of th10.exe
-// (SHA-256 2f14760b6fbbf57549541583283badb9a19a4222b90f0a146d5aa17f01dc9040,
-// un-ASLR'd image base 0x400000). The tool verifies the module base and the
-// executable hash before trusting any address.
+// Command th10probe samples a running, hash-checked TH10 v1.00a process.
+// It uses only process-memory reads and process/module queries. It never
+// writes memory, injects code, suspends threads, sends input or captures a window.
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"math"
 	"os"
-	"path/filepath"
-	"reflect"
-	"sort"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
-	"unsafe"
-
-	"golang.org/x/sys/windows"
-	"th10/trace"
 )
 
-// Known image base of th10.exe (no relocation applied at runtime for this build).
-const imageBase = 0x400000
+func main() { os.Exit(run()) }
 
-// ExpectedHash is the SHA-256 of the reference th10.exe.
-const ExpectedHash = "2f14760b6fbbf57549541583283badb9a19a4222b90f0a146d5aa17f01dc9040"
-
-// Global addresses (absolute, image-base relative offsets from Ghidra).
-const (
-	addrPlayerPtr   = 0x00477834 // *Player
-	addrBulletMgr   = 0x004776f0 // *bullet manager (FUN_004065c0, FUN_004067d0)
-	addrEnemyMgr    = 0x00477704 // *enemy manager (FUN_0040d750)
-	addrLife        = 0x00474c70 // lives
-	addrPower       = 0x00474c48 // power (raw, 0..100)
-	addrPlayerX     = 0x3c0      // offset from player base (game space, FUN_004073e0)
-	addrPlayerY     = 0x3c4
-	addrPlayerState = 0x458 // FUN_00425730 switch: 0 respawn entry, 1 normal, 2 dying, 3 ?, 4 deathbomb window
-)
-
-// addrPlayerInvinc is the invincibility timer (int, player base offset).
-// FUN_00425730 decrements it while >= 1 and the player flashes while it is positive.
-const addrPlayerInvinc = 0x4310
-
-// The score block is one struct at 0x474c40, the `this` that FUN_00409d90 and
-// FUN_0041be80 are called with (&DAT_00474c40). Its fields are stored values:
-//   - +0x0 (0x474c40) is the hi-score, not the score: FUN_00417870 sets it to
-//     max(hi-score, score) at stage start. Reading it gave the constant 1000000.
-//   - +0x4 (0x474c44) is the score: FUN_00409d90 adds n/10 to [base+0x4] and caps
-//     it at 999999999 (drops/func_409d90.c). A replay start zeroes it (emgr/func_417870.c:59)
-//     and then restores it from the chapter header +0x0c (replay/func_428f60.c:190).
-//   - +0xc (0x474c4c) is the faith: FUN_0041be80 adds n/10 to [base+0xc] and caps
-//     it at 99999 (item/func_41be80.c); FUN_00412e70 subtracts n/10 with a floor of
-//     5000 (bomb/func_412e70.c), and the item collector reads it (asm/func_41afd0.c).
-//
-// The original shows these stored values x10. game.GameState keeps Score and
-// Faith x10 as well (AddPoints, GainFaith, LoseFaith), so sampleFrame multiplies
-// the stored values by 10 to write the same units the replica's trace uses.
-const (
-	addrScore = 0x00474c44 // score (base+0x4), stored; trace value = stored x10
-	addrFaith = 0x00474c4c // faith (base+0xc), stored; trace value = stored x10
-)
-
-// Frame-counter candidates. FUN_00418190 increments DAT_00474c88 and
-// DAT_00474c8c once per main-loop iteration and FUN_00417870 zeroes both at
-// stage start, so those are the stage frame clocks. DAT_00491c10 looked like a
-// counter but is a millisecond timestamp (passed to ANM helpers).
-var frameCounterCandidates = []struct {
-	name string
-	addr uint32
-}{
-	{"DAT_00474c88", 0x00474c88},
-	{"DAT_00474c8c", 0x00474c8c},
-	{"DAT_00491c10", 0x00491c10},
-	{"DAT_00474c98", 0x00474c98}, // dynamic rank (+1/60f)
+type probeOptions struct {
+	PID                        uint
+	Exe, Out                   string
+	Frames                     int
+	Poll                       time.Duration
+	Sample                     sampleOptions
+	Timeout                    time.Duration
+	NoWait, SkipHash, Counters bool
+	Ext                        bool
+	Replay, OutDir             string
+	Chapter                    int
+	All, Demos                 bool
 }
 
-// addrFrameCounter is the stage frame clock, confirmed by probeFrameCounters.
-const addrFrameCounter = 0x00474c88
+func parseProbeOptions(args []string, out io.Writer) (probeOptions, error) {
+	var o probeOptions
+	fs := flag.NewFlagSet("th10probe", flag.ContinueOnError)
+	fs.SetOutput(out)
+	var poll, settle, gap, budget int
+	var shotFrames, shotDir string
+	fs.UintVar(&o.PID, "pid", 0, "target process id")
+	fs.StringVar(&o.Exe, "exe", "", "path to th10.exe (locate process and verify SHA-256)")
+	fs.StringVar(&o.Out, "out", "-", "trace output (- = stdout)")
+	fs.IntVar(&o.Frames, "frames", 3600, "last stage frame to sample (0 = until the stage ends)")
+	fs.IntVar(&poll, "poll-us", 500, "frame-poll interval in microseconds")
+	fs.IntVar(&settle, "settle-us", 3000, "minimum settle time after the observed frame tick")
+	fs.IntVar(&gap, "stable-us", 500, "gap between two logical snapshots")
+	fs.IntVar(&budget, "budget-us", 10000, "total per-frame confirmation/retry budget in microseconds")
+	fs.IntVar(&o.Sample.Attempts, "attempts", 4, "maximum full snapshots per sampled frame (at least 2)")
+	fs.DurationVar(&o.Timeout, "timeout", 30*time.Minute, "total waiting/capture deadline")
+	fs.BoolVar(&o.NoWait, "no-wait-start", false, "start at the current stage frame")
+	fs.BoolVar(&o.SkipHash, "skip-hash", false, "explicitly skip executable SHA-256 verification")
+	fs.BoolVar(&o.Counters, "probe-counters", false, "read candidate counters for 3 seconds, then exit")
+	fs.BoolVar(&o.Ext, "ext", false, "include native stats, player timers, all items, lasers and spell fields")
+	fs.StringVar(&o.Replay, "replay", "", "local replay file: read-only chapter/identity metadata, never controls the game")
+	fs.IntVar(&o.Chapter, "chapter", 0, "first replay chapter to capture (0-based, needs -replay)")
+	fs.BoolVar(&o.All, "all-chapters", false, "capture every chapter of -replay without detaching (needs -out-dir)")
+	fs.BoolVar(&o.Demos, "demos", false, "observe title demos and collect all four distinct native demo numbers")
+	fs.StringVar(&o.OutDir, "out-dir", "", "directory for per-chapter/demo files; existing files are never overwritten")
+	fs.StringVar(&shotFrames, "shot-frames", "", "disabled: this collector does not capture windows")
+	fs.StringVar(&shotDir, "shot-dir", "", "disabled: this collector does not capture windows")
+	if err := fs.Parse(args); err != nil {
+		return o, err
+	}
+	explicitFrames, explicitTimeout := false, false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "frames" {
+			explicitFrames = true
+		}
+		if f.Name == "timeout" {
+			explicitTimeout = true
+		}
+	})
+	if o.All || o.Demos {
+		if !explicitFrames {
+			o.Frames = 0
+		}
+		if o.All && !explicitTimeout {
+			o.Timeout = 2 * time.Hour
+		}
+	}
+	if fs.NArg() != 0 || o.Frames < 0 || o.Frames > math.MaxInt32 || o.PID > math.MaxUint32 || poll <= 0 || poll > 1000000 || settle < 0 || gap < 0 || gap > 1000000 || budget <= settle || budget > 1000000 || o.Sample.Attempts < 2 || o.Timeout <= 0 {
+		return o, fmt.Errorf("invalid frame, timing or retry options")
+	}
+	if o.Chapter < 0 || o.Chapter > 0 && o.Replay == "" || o.All && (o.Replay == "" || o.OutDir == "") || o.Demos && (o.All || o.Replay != "" || o.OutDir == "") ||
+		(o.All || o.Demos) && o.Out != "-" || o.OutDir != "" && !o.All && !o.Demos {
+		return o, fmt.Errorf("invalid replay/demo/output combination")
+	}
+	if shotFrames != "" || shotDir != "" {
+		return o, fmt.Errorf("window capture is disabled in the read-only collector")
+	}
+	o.Poll = time.Duration(poll) * time.Microsecond
+	o.Sample.Settle = time.Duration(settle) * time.Microsecond
+	o.Sample.Gap = time.Duration(gap) * time.Microsecond
+	o.Sample.Budget = time.Duration(budget) * time.Microsecond
+	o.Sample.Poll = 100 * time.Microsecond
+	return o, nil
+}
 
-// Enemy manager (FUN_0040d750): +0x58 points at the first list node, a node
-// is {enemy*, next*}. Enemy fields (docs/research/m2_motion.md section 5):
-// EnemyData sits at enemy+0x103c.
-const (
-	enemyListHead = 0x58
-	enemyMaxNodes = 4096   // guards against a torn list read
-	enemyPosX     = 0x1068 // final position (A+B), EnemyData+0x2c
-	enemyPosY     = 0x106c
-	enemyHP       = 0x23fc
-	enemyFlags    = 0x2480
-)
-
-// The dialog: the stage object at DAT_0047770c holds the MSG ECL 338 builds
-// (FUN_00415db0, 0x90 bytes) at +0x9eb8; ECL 339 reads its +0x78.
-const (
-	addrStageObj = 0x0047770c
-	stageMSG     = 0x9eb8
-	msgSize      = 0x90
-	msgClock     = 0x1c // timer +0x18: the current int
-	msgWait      = 0x30 // op 10's timer, current int
-	msgPC        = 0x5c // the instruction: u16 time, u8 op
-	msgSignal    = 0x78
-)
-
-// Bullet manager (FUN_004065c0/FUN_004067d0): 2000 bullets inline from +0x60,
-// stride 0x7f0, then a sentinel slot with state 5.
-const (
-	bulletArrayOff = 0x60
-	bulletStride   = 0x7f0
-	bulletSlots    = 2000
-	bulletPosX     = 0x3b4
-	bulletPosY     = 0x3b8
-	bulletSpeed    = 0x3d8
-	bulletAngle    = 0x3e4
-	bulletType     = 0x7ea // short (candidate)
-	bulletSprite   = 0x7ec // short (candidate)
-	bulletState    = 0x446 // short: 0 free, 1 normal, 2 spawning, ...
-)
-
-func main() {
-	os.Exit(run())
+type process interface {
+	memoryReader
+	io.Closer
+	ID() uint32
 }
 
 func run() int {
-	var (
-		pid      = flag.Uint("pid", 0, "target process id")
-		exePath  = flag.String("exe", "", "path to th10.exe (to locate the pid and verify the hash)")
-		frames   = flag.Int("frames", 3600, "sample up to this stage frame")
-		outPath  = flag.String("out", "-", "output trace path (- = stdout)")
-		pollUS   = flag.Int("poll-us", 500, "frame-poll interval in microseconds")
-		settleUS = flag.Int("settle-us", 3000, "wait after a frame tick before sampling, so the frame's update has finished")
-		stableUS = flag.Int("stable-us", 2000, "gap between the reads that must agree before a sample is kept")
-		noWait   = flag.Bool("no-wait-start", false, "sample from the current frame instead of waiting for a stage start")
-		skipHash = flag.Bool("skip-hash", false, "skip the exe SHA-256 check")
-		counters = flag.Bool("probe-counters", false, "print which frame-counter candidate ticks, then exit")
-		shotList = flag.String("shot-frames", "", "capture the game window at these frames (N or LO-HI, comma-separated); needs -shot-dir")
-		shotDir  = flag.String("shot-dir", "", "output directory for -shot-frames captures (created if missing)")
-	)
-	flag.Parse()
-
-	// Shots are keyed by the same frame clock as the trace (addrFrameCounter,
-	// the trace frame Index), so a shot at frame N lines up with trace frame N.
-	var shots *shotWriter
-	var shotPending []int32
-	if *shotList != "" {
-		list, err := parseFrameList(*shotList)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe: -shot-frames:", err)
-			return 2
-		}
-		if *shotDir == "" {
-			fmt.Fprintln(os.Stderr, "th10probe: -shot-frames needs -shot-dir")
-			return 2
-		}
-		if n := len(list); n > 0 && list[n-1] > int32(*frames) {
-			fmt.Fprintf(os.Stderr, "th10probe: -shot-frames names frame %d, past -frames %d\n", list[n-1], *frames)
-			return 2
-		}
-		if err := os.MkdirAll(*shotDir, 0o755); err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe:", err)
-			return 2
-		}
-		shots = newShotWriter(*shotDir)
-		defer shots.Close() // flushes every queued PNG on any return path
-		shotPending = list
-	}
-
-	target, err := resolveTarget(uint32(*pid), *exePath)
+	opts, err := parseProbeOptions(os.Args[1:], os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "th10probe:", err)
 		return 2
 	}
-	if !*skipHash {
-		if err := verifyHash(target.exePath); err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe:", err)
-			return 2
-		}
-	}
-
-	h, err := windows.OpenProcess(windows.PROCESS_VM_READ|windows.PROCESS_QUERY_INFORMATION, false, target.pid)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "th10probe: OpenProcess:", err)
-		return 2
-	}
-	defer windows.CloseHandle(h)
-
-	base, err := moduleBase(target.pid, target.exePath)
+	plan, err := newCapturePlan(opts)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "th10probe:", err)
 		return 2
 	}
-	if base != imageBase {
-		fmt.Fprintf(os.Stderr, "th10probe: module base 0x%x != expected 0x%x; addresses are image-relative and this build may be relocated\n",
-			base, imageBase)
+	p, err := openProcess(uint32(opts.PID), opts.Exe, opts.SkipHash)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "th10probe:", err)
 		return 2
 	}
-
-	out := os.Stdout
-	if *outPath != "-" {
-		f, err := os.Create(*outPath)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe:", err)
-			return 2
+	defer func() {
+		if err := p.Close(); err != nil {
+			fmt.Fprintln(os.Stderr, "th10probe: close process:", err)
 		}
-		defer f.Close()
-		out = f
-	}
-
-	rd := &reader{h: h}
-	if *counters {
-		probeFrameCounters(rd, 3*time.Second)
+	}()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	rd := &reader{mem: p, ext: opts.Ext}
+	if opts.Counters {
+		probeFrameCounters(ctx, rd)
 		return 0
 	}
-	tw := trace.NewWriter(out)
-	poll := time.Duration(*pollUS) * time.Microsecond
-
-	fmt.Fprintf(os.Stderr, "th10probe: attached to pid %d, sampling up to frame %d\n", target.pid, *frames)
-
-	// Frames are indexed by the stage frame clock, so dropped samples leave
-	// gaps that th10diff skips instead of shifting every later frame. Unless
-	// told otherwise, wait for the clock to restart (a new stage) so the
-	// trace begins at the stage's first frame.
-	lastFrame := int32(-1)
-	if !*noWait {
-		fmt.Fprintln(os.Stderr, "th10probe: waiting for a stage start (start the replay now)")
-		prev, _ := rd.i32(addrFrameCounter)
-		for {
-			fc, err := rd.i32(addrFrameCounter)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "th10probe: read frame counter:", err)
-				return 2
-			}
-			if fc >= 0 && fc <= 2 && fc != prev { // zeroed or first tick
-				fmt.Fprintf(os.Stderr, "th10probe: stage started (frame %d); sampling, this takes about %d s\n", fc, (*frames-int(fc))/60)
-				break
-			}
-			prev = fc
-			time.Sleep(poll)
+	fmt.Fprintf(os.Stderr, "th10probe: attached to pid %d (VM_READ/query only)\n", p.ID())
+	if err := collectCapture(ctx, rd, plan, os.Stderr, realClock()); err != nil {
+		fmt.Fprintln(os.Stderr, "th10probe: INCOMPLETE:", err)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return 1
 		}
-	}
-	sampled, torn, unsettled := 0, 0, 0
-	lastReport := int32(0)
-	settle := time.Duration(*settleUS) * time.Microsecond
-	stable := time.Duration(*stableUS) * time.Microsecond
-	deadline := time.Now().Add(30 * time.Minute)
-	for lastFrame < int32(*frames) {
-		if time.Now().After(deadline) {
-			fmt.Fprintln(os.Stderr, "th10probe: timeout waiting for frames")
-			break
-		}
-		fc, err := rd.i32(addrFrameCounter)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe: read frame counter:", err)
-			return 2
-		}
-		if fc == lastFrame || fc < 0 {
-			time.Sleep(poll)
-			continue
-		}
-		if lastFrame >= 0 && fc < lastFrame {
-			fmt.Fprintf(os.Stderr, "th10probe: frame clock restarted (%d -> %d); stopping\n", lastFrame, fc)
-			break
-		}
-		if lastFrame >= 0 && fc != lastFrame+1 {
-			fmt.Fprintf(os.Stderr, "th10probe: frame jump %d -> %d (dropped %d)\n",
-				lastFrame, fc, fc-lastFrame-1)
-		}
-		lastFrame = fc
-		if fc > int32(*frames) {
-			break
-		}
-		time.Sleep(settle)
-		// Targets at or before fc are due. One capture serves all of them when
-		// the loop skipped several, so no two captures collide on a file name.
-		// The file name carries the frame counter read around the copy, not the
-		// target number, so a skipped target shows up under the frame it reached.
-		if n := sort.Search(len(shotPending), func(i int) bool { return shotPending[i] > fc }); n > 0 {
-			shotPending = shotPending[n:]
-			img, before, after, err := captureClient(target.pid, func() (int32, error) { return rd.i32(addrFrameCounter) })
-			if err != nil {
-				fmt.Fprintln(os.Stderr, "th10probe: shot:", err)
-			} else {
-				shots.Queue(shotJob{img: img, before: before, after: after})
-			}
-		}
-		f, reread, err := rd.sampleSettled(fc, stable)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe: sample:", err)
-			return 2
-		}
-		if reread {
-			unsettled++
-		}
-		// A sample that straddles the next frame's update mixes two frames;
-		// drop it rather than report a false divergence.
-		if f == nil {
-			torn++
-			continue
-		}
-		sampled++
-		tw.WriteFrame(f)
-		if fc/600 != lastReport {
-			lastReport = fc / 600
-			fmt.Fprintf(os.Stderr, "th10probe: frame %d/%d\n", fc, *frames)
-		}
-	}
-	if len(shotPending) > 0 {
-		fmt.Fprintf(os.Stderr, "th10probe: shot frames never reached: %v\n", shotPending)
-	}
-	if unsettled > 0 {
-		fmt.Fprintf(os.Stderr, "th10probe: %d frames were still updating after -settle-us and were re-read\n", unsettled)
-	}
-	if torn > 0 {
-		fmt.Fprintf(os.Stderr, "th10probe: dropped %d torn samples (lower -settle-us?)\n", torn)
-	}
-	if err := tw.Flush(); err != nil {
-		fmt.Fprintln(os.Stderr, "th10probe:", err)
 		return 2
 	}
-	fmt.Fprintf(os.Stderr, "th10probe: wrote %d frames\n", sampled)
 	return 0
 }
-
-// probeFrameCounters prints which candidate global actually ticks, so the
-// frame-clock address is chosen from evidence instead of assumption.
-func probeFrameCounters(rd *reader, dur time.Duration) {
+func probeFrameCounters(ctx context.Context, rd *reader) {
+	candidates := []struct {
+		Name string
+		Addr uint32
+	}{
+		{"DAT_00474c88", addrFrameCounter}, {"DAT_00474c8c", 0x00474c8c},
+		{"DAT_00491c10", 0x00491c10}, {"DAT_00474c98", 0x00474c98},
+	}
 	type state struct {
 		first, last int32
 		changes     int
 		ok          bool
 	}
-	states := make([]state, len(frameCounterCandidates))
-	for i := range frameCounterCandidates {
-		v, err := rd.i32(frameCounterCandidates[i].addr)
+	states := make([]state, len(candidates))
+	for i, c := range candidates {
+		v, err := rd.i32(c.Addr)
 		states[i] = state{first: v, last: v, ok: err == nil}
 	}
-	deadline := time.Now().Add(dur)
-	for time.Now().Before(deadline) {
-		for i := range frameCounterCandidates {
-			v, err := rd.i32(frameCounterCandidates[i].addr)
+	deadline := time.Now().Add(3 * time.Second)
+	for ctx.Err() == nil && time.Now().Before(deadline) {
+		for i, c := range candidates {
+			v, err := rd.i32(c.Addr)
 			if err != nil {
 				states[i].ok = false
 				continue
@@ -371,288 +174,8 @@ func probeFrameCounters(rd *reader, dur time.Duration) {
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	fmt.Println("frame-counter probe (3s):")
-	for i, c := range frameCounterCandidates {
+	for i, c := range candidates {
 		s := states[i]
-		fmt.Printf("  %-14s 0x%08x  readable=%v  changes=%d  first=%d last=%d delta=%d\n",
-			c.name, c.addr, s.ok, s.changes, s.first, s.last, s.last-s.first)
+		fmt.Printf("%-14s 0x%08x readable=%v changes=%d first=%d last=%d\n", c.Name, c.Addr, s.ok, s.changes, s.first, s.last)
 	}
-}
-
-type target struct {
-	pid     uint32
-	exePath string
-}
-
-func resolveTarget(pid uint32, exePath string) (target, error) {
-	if pid != 0 {
-		if exePath == "" {
-			exePath = modulePathForPID(pid)
-		}
-		return target{pid: pid, exePath: exePath}, nil
-	}
-	if exePath == "" {
-		return target{}, fmt.Errorf("need -pid or -exe")
-	}
-	p, err := findPIDByExe(exePath)
-	if err != nil {
-		return target{}, err
-	}
-	return target{pid: p, exePath: exePath}, nil
-}
-
-func findPIDByExe(exePath string) (uint32, error) {
-	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
-	if err != nil {
-		return 0, err
-	}
-	defer windows.CloseHandle(snap)
-	want := strings.ToLower(filepath.Base(exePath))
-	var e windows.ProcessEntry32
-	e.Size = uint32(unsafe.Sizeof(e))
-	if err := windows.Process32First(snap, &e); err != nil {
-		return 0, err
-	}
-	for {
-		name := strings.ToLower(windows.UTF16ToString(e.ExeFile[:]))
-		if name == want {
-			return e.ProcessID, nil
-		}
-		if err := windows.Process32Next(snap, &e); err != nil {
-			break
-		}
-	}
-	return 0, fmt.Errorf("process %q not running", want)
-}
-
-func modulePathForPID(pid uint32) string {
-	h, err := windows.OpenProcess(windows.PROCESS_QUERY_INFORMATION, false, pid)
-	if err != nil {
-		return ""
-	}
-	defer windows.CloseHandle(h)
-	var buf [windows.MAX_PATH]uint16
-	n := uint32(len(buf))
-	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &n); err != nil {
-		return ""
-	}
-	return windows.UTF16ToString(buf[:n])
-}
-
-// moduleBase finds the load address of the target module inside pid's address
-// space. Falls back to the static image base when enumeration is unavailable.
-func moduleBase(pid uint32, exePath string) (uintptr, error) {
-	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPMODULE|windows.TH32CS_SNAPMODULE32, pid)
-	if err != nil {
-		return imageBase, nil
-	}
-	defer windows.CloseHandle(snap)
-	want := strings.ToLower(filepath.Base(exePath))
-	var m windows.ModuleEntry32
-	m.Size = uint32(unsafe.Sizeof(m))
-	if err := windows.Module32First(snap, &m); err != nil {
-		return imageBase, nil
-	}
-	for {
-		name := strings.ToLower(windows.UTF16ToString(m.ExePath[:]))
-		if filepath.Base(name) == want {
-			return uintptr(m.ModBaseAddr), nil
-		}
-		if err := windows.Module32Next(snap, &m); err != nil {
-			break
-		}
-	}
-	return imageBase, nil
-}
-
-func verifyHash(path string) error {
-	if path == "" {
-		return fmt.Errorf("cannot verify exe hash: path unknown (pass -exe or use -skip-hash)")
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("hash: %w", err)
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return fmt.Errorf("hash: %w", err)
-	}
-	got := hex.EncodeToString(h.Sum(nil))
-	if got != ExpectedHash {
-		return fmt.Errorf("th10.exe hash mismatch:\n  got  %s\n  want %s", got, ExpectedHash)
-	}
-	return nil
-}
-
-// reader wraps read-only process memory access.
-type reader struct {
-	h windows.Handle
-}
-
-func (r *reader) bytes(addr uint32, n int) ([]byte, error) {
-	buf := make([]byte, n)
-	var read uintptr
-	if err := windows.ReadProcessMemory(r.h, uintptr(addr), &buf[0], uintptr(n), &read); err != nil {
-		return nil, fmt.Errorf("ReadProcessMemory 0x%x: %w", addr, err)
-	}
-	if int(read) != n {
-		return nil, fmt.Errorf("short read at 0x%x: %d/%d", addr, read, n)
-	}
-	return buf, nil
-}
-
-func (r *reader) u32(addr uint32) (uint32, error) {
-	b, err := r.bytes(addr, 4)
-	if err != nil {
-		return 0, err
-	}
-	return le32(b), nil
-}
-
-func (r *reader) i32(addr uint32) (int32, error) {
-	v, err := r.u32(addr)
-	return int32(v), err
-}
-
-func (r *reader) f32(addr uint32) (float32, error) {
-	v, err := r.u32(addr)
-	if err != nil {
-		return 0, err
-	}
-	return math.Float32frombits(v), nil
-}
-
-func le32(b []byte) uint32 {
-	return uint32(b[0]) | uint32(b[1])<<8 | uint32(b[2])<<16 | uint32(b[3])<<24
-}
-
-func le16(b []byte) uint16 { return uint16(b[0]) | uint16(b[1])<<8 }
-
-// sampleSettled samples frame fc until two reads gap apart agree, so a frame
-// whose update outlasts the settle wait is not caught half done (MSG op 16
-// renders its text with GDI: at frame 4915 of th10_05 a single read saw op 9
-// run and the clock not yet stepped). reread reports whether the first two
-// reads differed. The frame is nil once the next frame has begun, as the reads
-// may then mix the two; a NaN field never agrees and ends the same way.
-func (r *reader) sampleSettled(fc int32, gap time.Duration) (f *trace.Frame, reread bool, err error) {
-	prev, err := r.sampleFrame(int(fc))
-	if err != nil {
-		return nil, false, err
-	}
-	for {
-		time.Sleep(gap)
-		if f, err = r.sampleFrame(int(fc)); err != nil {
-			return nil, reread, err
-		}
-		if after, err := r.i32(addrFrameCounter); err == nil && after != fc {
-			return nil, reread, nil
-		}
-		if reflect.DeepEqual(prev, f) {
-			return f, reread, nil
-		}
-		prev, reread = f, true
-	}
-}
-
-func (r *reader) sampleFrame(index int) (*trace.Frame, error) {
-	f := &trace.Frame{Index: index}
-
-	score, _ := r.i32(addrScore)
-	f.PScore = int64(score) * 10 // stored score x10, as game.GameState keeps it
-	life, _ := r.i32(addrLife)
-	f.PLife = int(life)
-	power, _ := r.i32(addrPower)
-	f.PPower = int(power) * 5 // original raw 0.05 units -> project hundredths
-	faith, _ := r.i32(addrFaith)
-	f.PFaith = int64(faith) * 10 // stored faith x10, as game.GameState keeps it
-	// TH10 keeps no graze count (FUN_00406240 / FUN_0041d3d0 only set bullet flag 4, spark, sound).
-	f.PGraze = 0
-
-	pp, err := r.u32(addrPlayerPtr)
-	if err == nil && pp != 0 {
-		x, errX := r.f32(pp + addrPlayerX)
-		y, errY := r.f32(pp + addrPlayerY)
-		if errX == nil && errY == nil {
-			f.PX, f.PY = float64(x), float64(y)
-		}
-		st, errSt := r.i32(pp + addrPlayerState)
-		if errSt == nil {
-			f.PState = int(st)
-		}
-		inv, errInv := r.i32(pp + addrPlayerInvinc)
-		if errInv == nil {
-			f.PInvinc = int(inv)
-		}
-	}
-
-	// Enemies: walk the manager's list, main first.
-	if em, err := r.u32(addrEnemyMgr); err == nil && em != 0 {
-		node, _ := r.u32(em + enemyListHead)
-		for n := 0; node != 0 && n < enemyMaxNodes; n++ {
-			pair, err := r.bytes(node, 8)
-			if err != nil {
-				break
-			}
-			e, next := le32(pair[0:]), le32(pair[4:])
-			node = next
-			if e == 0 {
-				continue
-			}
-			f.Enemies++
-			if len(f.E) >= trace.MaxEnemyRows {
-				continue
-			}
-			x, _ := r.f32(e + enemyPosX)
-			y, _ := r.f32(e + enemyPosY)
-			hp, _ := r.i32(e + enemyHP)
-			flags, _ := r.u32(e + enemyFlags)
-			f.E = append(f.E, trace.EnemyRow{
-				X: float64(x), Y: float64(y), HP: int(hp), Active: flags&0x20000 == 0,
-			})
-		}
-	}
-
-	// Bullets: one read of the whole pool, then slot order.
-	if bm, err := r.u32(addrBulletMgr); err == nil && bm != 0 {
-		pool, err := r.bytes(bm+bulletArrayOff, bulletSlots*bulletStride)
-		if err == nil {
-			for i := 0; i < bulletSlots; i++ {
-				b := pool[i*bulletStride:]
-				if le16(b[bulletState:]) == 0 {
-					continue
-				}
-				f.Bullets++
-				if len(f.B) >= trace.MaxBulletRows {
-					continue
-				}
-				f.B = append(f.B, trace.BulletRow{
-					X:     float64(math.Float32frombits(le32(b[bulletPosX:]))),
-					Y:     float64(math.Float32frombits(le32(b[bulletPosY:]))),
-					Angle: float64(math.Float32frombits(le32(b[bulletAngle:]))),
-					Speed: float64(math.Float32frombits(le32(b[bulletSpeed:]))),
-					Type:  int(int16(le16(b[bulletType:]))),
-					Color: int(int16(le16(b[bulletSprite:]))),
-				})
-			}
-		}
-	}
-
-	if so, err := r.u32(addrStageObj); err == nil && so != 0 {
-		if mp, err := r.u32(so + stageMSG); err == nil && mp != 0 {
-			if b, err := r.bytes(mp, msgSize); err == nil {
-				f.MSG = &trace.MSGRow{
-					ID:     int(int32(le32(b[0:]))),
-					Clock:  int(int32(le32(b[msgClock:]))),
-					Wait:   int(int32(le32(b[msgWait:]))),
-					Signal: int(int32(le32(b[msgSignal:]))),
-					At:     -1, Op: -1,
-				}
-				if in, err := r.bytes(le32(b[msgPC:]), 3); err == nil {
-					f.MSG.At, f.MSG.Op = int(le16(in)), int(in[2])
-				}
-			}
-		}
-	}
-	return f, nil
 }

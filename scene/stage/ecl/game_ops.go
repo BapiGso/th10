@@ -124,9 +124,6 @@ func (vm *VM) boss0Pos() ([3]float32, bool) {
 // set reports a float arg that is not the "keep the current value" sentinel.
 func set(v float32) bool { return float64(v) > unsetArg }
 
-// eclUnset is the sentinel test on an already-widened arg.
-func eclUnset(v float64) bool { return v <= unsetArg }
-
 // mirrorAngle reflects a heading about the vertical axis for a mirrored
 // enemy (flag 0x800): pi/2 - norm(a - pi/2).
 func mirrorAngle(a float32) float32 {

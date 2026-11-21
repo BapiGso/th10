@@ -53,7 +53,9 @@ func TestPresentationAssetsMatchTH10C(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(got, want) {
+		if strings.HasSuffix(name, ".ant") {
+			compareArchiveANM(t, name, got, want)
+		} else if !bytes.Equal(got, want) {
 			t.Errorf("%s differs from th10c.dat", name)
 		}
 		checked++

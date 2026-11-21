@@ -3,7 +3,6 @@ package menus
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"th10/audio"
 	"th10/game"
@@ -11,6 +10,7 @@ import (
 	"th10/replay"
 	selectscene "th10/scene/select"
 	"th10/scene/stage"
+	sceneui "th10/scene/ui"
 	"th10/supervisor"
 	"th10/zun"
 
@@ -91,10 +91,10 @@ func (s *Replay) Update(g *game.Game) error {
 		}
 	case 2:
 		before := s.selection
-		if menuRepeat(in, input.KeyUp) {
+		if in.Menu().Move(input.MenuUp) {
 			s.selection = wrapSelection(s.selection-1, len(s.entries))
 		}
-		if menuRepeat(in, input.KeyDown) {
+		if in.Menu().Move(input.MenuDown) {
 			s.selection = wrapSelection(s.selection+1, len(s.entries))
 		}
 		if s.selection != before {
@@ -114,10 +114,10 @@ func (s *Replay) Update(g *game.Game) error {
 	case 4:
 		if s.timer.Cur >= 15 { // 0x4318fd: chapter input is locked during the header move
 			before := s.chapter
-			if menuRepeat(in, input.KeyUp) {
+			if in.Menu().Move(input.MenuUp) {
 				s.moveChapter(-1)
 			}
-			if menuRepeat(in, input.KeyDown) {
+			if in.Menu().Move(input.MenuDown) {
 				s.moveChapter(1)
 			}
 			if s.chapter != before {
@@ -134,7 +134,7 @@ func (s *Replay) Update(g *game.Game) error {
 		}
 	case 3:
 		if s.timer.Cur == 2 {
-			s.core.fade = newMenuFade(32) // 0x4319c9..0x4319d2
+			s.core.fade = sceneui.NewFade(5, 32, 0) // 0x4319c9..0x4319d2, draw 0x2b
 		}
 		if s.timer.Cur >= 32 {
 			if a := g.Audio(); a != nil {
@@ -220,25 +220,6 @@ func (s *Replay) Close() {
 	s.core.close()
 	s.selected = nil
 	s.entries = nil
-}
-
-func replayEntryLabel(slot game.ReplaySlot) string {
-	if slot.Error != nil {
-		return fmt.Sprintf("No.%02d  [invalid replay]", slot.Number)
-	}
-	if slot.Replay == nil {
-		return fmt.Sprintf("No.%02d  -- empty --", slot.Number)
-	}
-	g := slot.Replay.Global
-	chara, diff := "Unknown", "Unknown"
-	if g.Character < 2 {
-		chara = []string{"Reimu", "Marisa"}[g.Character]
-	}
-	if g.Difficulty < 5 {
-		diff = []string{"Easy", "Normal", "Hard", "Lunatic", "Extra"}[g.Difficulty]
-	}
-	return fmt.Sprintf("No.%02d  %-8s %s  %s%c / %s  St%d", slot.Number, g.User,
-		time.Unix(int64(g.Timestamp), 0).Format("06/01/02"), chara, 'A'+g.ShotType, diff, g.Stage)
 }
 
 func (s *Replay) Draw(screen *ebiten.Image) {

@@ -1,0 +1,35 @@
+"use strict";
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+test("byte comparator spans blocks and identifies the first frame without epsilon", t => {
+    const temp = process.env.TMPDIR || process.env.GOTMPDIR || process.env.TMP;
+    assert.ok(temp, "set a workspace temporary directory");
+    const directory = fs.mkdtempSync(path.join(temp, "th10-compare-"));
+    const files = [path.join(directory, "a.txt"), path.join(directory, "b.txt")];
+    t.after(() => { files.forEach(file => fs.unlinkSync(file)); fs.rmdirSync(directory); });
+    const data = Buffer.from("F 1 p 0\n" + "B row\n".repeat(180000) + "F 23 p 1\nB 2.123\n");
+    files.forEach(file => fs.writeFileSync(file, data));
+    const compare = () => spawnSync(process.execPath, [path.join(__dirname, "compare.cjs"), ...files], { encoding: "utf8" });
+    let result = compare();
+    assert.equal(result.status, 0);
+    assert.deepEqual(JSON.parse(result.stdout), { equal: true, bytes: data.length });
+    const changed = Buffer.from(data);
+    changed[changed.length - 2] = 52;
+    fs.writeFileSync(files[1], changed);
+    result = compare();
+    assert.equal(result.status, 1);
+    let mismatch = JSON.parse(result.stdout);
+    assert.equal(mismatch.native.frame, 23);
+    assert.equal(mismatch.wasm.frame, 23);
+    assert.equal(mismatch.offset, changed.length - 2);
+    assert.equal(mismatch.native.line, "B 2.123");
+    fs.writeFileSync(files[1], data.subarray(0, data.length - 2));
+    result = compare();
+    assert.equal(result.status, 1);
+    mismatch = JSON.parse(result.stdout);
+    assert.equal(mismatch.offset, data.length - 2);
+});

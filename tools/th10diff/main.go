@@ -64,12 +64,12 @@ func parseFlags() (diffFlags, bool) {
 	fs.IntVar(&f.shift, "shift", 0, "added to A's frame indices before matching")
 	fs.IntVar(&f.from, "from-frame", 0, "first reference frame to compare (inclusive; earlier frames are not validated)")
 	fs.IntVar(&f.after, "after", 0, "compare only reference frames after N (0 = all)")
-	fs.StringVar(&f.scope, "scope", "all", "fields to compare: all or motion")
+	fs.StringVar(&f.scope, "scope", "all", "fields to compare: all, motion, ext, stats, items, lasers or spell")
 	fs.BoolVar(&f.bullets, "bullets", false, "on divergence, list every differing enemy bullet in the frame")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		return f, false
 	}
-	return f, f.pathA != "" && f.pathB != "" && f.from >= 0 && f.after >= 0 && (f.scope == "all" || f.scope == "motion")
+	return f, f.pathA != "" && f.pathB != "" && f.from >= 0 && f.after >= 0 && validScope(f.scope)
 }
 
 func run() int {
@@ -83,18 +83,19 @@ func run() int {
 		fmt.Fprintln(os.Stderr, "th10diff:", err)
 		return 2
 	}
-	defer fa.Close()
+	defer func() { _ = fa.Close() }()
 	fb, err := os.Open(opts.pathB)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "th10diff:", err)
 		return 2
 	}
-	defer fb.Close()
+	defer func() { _ = fb.Close() }()
 
 	ra, rb := trace.NewReader(fa), trace.NewReader(fb)
 	diff := &differ{eps: opts.eps + posUnit + slack, angEps: opts.angEps + angUnit + slack,
 		maxRows: opts.maxRows, context: opts.context, shift: opts.shift, from: opts.from, after: opts.after, motion: opts.scope == "motion",
 		bullets: opts.bullets}
+	diff.scope = opts.scope
 	if opts.from > 0 {
 		fmt.Printf("Comparing from reference frame %d (inclusive); earlier frames are not validated\n", opts.from)
 	}
@@ -102,8 +103,15 @@ func run() int {
 		fmt.Printf("Comparing after reference frame %d (explicit -after; tolerances unchanged)\n", opts.after)
 	}
 	code := diff.compare(ra, rb)
+	if diff.half > 0 {
+		fmt.Printf("SKIP: %d half-frame indices (A %d, B %d); not included in compared frames\n", diff.half, diff.halfA, diff.halfB)
+	}
 	if code == 2 {
-		fmt.Printf("INCOMPLETE: %d frames compared before the read error; invalid data is not validated\n", diff.frames)
+		if diff.incomplete != "" {
+			fmt.Printf("INCOMPLETE: %s; %d frames compared\n", diff.incomplete, diff.frames)
+		} else {
+			fmt.Printf("INCOMPLETE: %d frames compared before the read error; invalid data is not validated\n", diff.frames)
+		}
 	}
 	if code == 0 {
 		fmt.Printf("MATCH: %d frames compared, all within eps (pos %.4g px, ang %.4g rad)\n",
@@ -129,19 +137,24 @@ const (
 )
 
 type differ struct {
-	eps     float64 // budgets including posUnit/angUnit
-	angEps  float64
-	maxRows int
-	context int
-	shift   int
-	from    int  // inclusive reference index, before -shift
-	after   int  // explicit reference-frame cutoff; zero leaves comparison unchanged
-	motion  bool // -scope motion
-	bullets bool // -bullets
-	frames  int
-	gaps    int            // B frames with no A frame at that index
-	tail    int            // B frames after A ended
-	history []*trace.Frame // ring of recent A frames for context printing
+	eps        float64 // budgets including posUnit/angUnit
+	angEps     float64
+	maxRows    int
+	context    int
+	shift      int
+	from       int  // inclusive reference index, before -shift
+	after      int  // explicit reference-frame cutoff; zero leaves comparison unchanged
+	motion     bool // -scope motion
+	scope      string
+	bullets    bool // -bullets
+	frames     int
+	half       int // distinct skipped indices after alignment, including unmatched H blocks
+	halfA      int
+	halfB      int
+	incomplete string
+	gaps       int            // B frames with no A frame at that index
+	tail       int            // B frames after A ended
+	history    []*trace.Frame // ring of recent A frames for context printing
 }
 
 func (d *differ) compare(ra, rb *trace.Reader) int {
@@ -174,42 +187,73 @@ func (d *differ) compare(ra, rb *trace.Reader) int {
 		}
 		if a == nil {
 			for b != nil {
-				d.tail++
+				if b.Half != nil {
+					d.skipHalf(nil, b)
+				} else {
+					d.tail++
+				}
 				if b, err = rb.Next(); err != nil {
 					fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
 					return 2
 				}
 			}
+			if d.frames == 0 && d.half > 0 {
+				d.incomplete = "no stable overlapping samples"
+				return 2
+			}
 			return 0
 		}
 		if b == nil {
+			if a.Half != nil {
+				d.skipHalf(a, nil)
+				if a, err = ra.Next(); err != nil {
+					fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
+					return 2
+				}
+				continue
+			}
 			fmt.Printf("DIVERGE: trace B ended before frame %d; A continues\n", a.Index+d.shift)
 			d.printFrame("A", a)
 			return 1
 		}
 		switch ai := a.Index + d.shift; {
 		case ai < b.Index: // before the replica's first frame
+			if a.Half != nil {
+				d.skipHalf(a, nil)
+			}
 			if a, err = ra.Next(); err != nil {
 				fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
 				return 2
 			}
 			continue
 		case ai > b.Index: // the sampler dropped this frame
-			d.gaps++
+			if b.Half != nil {
+				d.skipHalf(nil, b)
+			} else {
+				d.gaps++
+			}
 			if b, err = rb.Next(); err != nil {
 				fmt.Fprintln(os.Stderr, "th10diff: read B:", err)
 				return 2
 			}
 			continue
 		}
-		d.frames++
-		if why := d.diffFrame(a, b); why != "" {
-			d.report(why, a, b)
-			return 1
-		}
-		d.history = append(d.history, a)
-		if len(d.history) > d.context {
-			d.history = d.history[1:]
+		if a.Half != nil || b.Half != nil {
+			d.skipHalf(a, b)
+		} else {
+			if needsExtension(d.scope) && (a.Ext == nil || b.Ext == nil) {
+				d.incomplete = fmt.Sprintf("scope %s requires -ext traces on both sides (frame %d)", d.scope, a.Index)
+				return 2
+			}
+			d.frames++
+			if why := d.diffFrame(a, b); why != "" {
+				d.report(why, a, b)
+				return 1
+			}
+			d.history = append(d.history, a)
+			if len(d.history) > d.context {
+				d.history = d.history[1:]
+			}
 		}
 		if a, err = ra.Next(); err != nil {
 			fmt.Fprintln(os.Stderr, "th10diff: read A:", err)
@@ -222,8 +266,21 @@ func (d *differ) compare(ra, rb *trace.Reader) int {
 	}
 }
 
+func (d *differ) skipHalf(a, b *trace.Frame) {
+	d.half++
+	if a != nil && a.Half != nil {
+		d.halfA++
+	}
+	if b != nil && b.Half != nil {
+		d.halfB++
+	}
+}
+
 // diffFrame returns a non-empty description when the frames disagree.
 func (d *differ) diffFrame(a, b *trace.Frame) string {
+	if needsExtension(d.scope) {
+		return d.diffExtended(a, b, d.scope)
+	}
 	if !d.motion {
 		if why := d.diffStats(a, b); why != "" {
 			return why
@@ -252,7 +309,13 @@ func (d *differ) diffFrame(a, b *trace.Frame) string {
 	if why := d.diffEnemies(a.E, b.E); why != "" {
 		return why
 	}
-	return d.diffBullets(a.B, b.B)
+	if why := d.diffBullets(a.B, b.B); why != "" {
+		return why
+	}
+	if !d.motion && (a.Ext != nil || b.Ext != nil) {
+		return d.diffExtended(a, b, "ext")
+	}
+	return ""
 }
 
 // diffMSG compares the dialogs: which entry is open and where it is. The
@@ -418,6 +481,9 @@ func (d *differ) printFrame(tag string, f *trace.Frame) {
 		f.Enemies, f.Bullets, f.Items, f.PBullets)
 	if f.MSG != nil {
 		fmt.Printf("       dialog %s\n", msgString(f.MSG))
+	}
+	if f.Ext != nil {
+		d.printExtended(f)
 	}
 	for i, e := range f.E {
 		if i >= d.maxRows {

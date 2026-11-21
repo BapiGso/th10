@@ -255,26 +255,3 @@ func stageIndex(stage string) int {
 	}
 	return 0
 }
-
-// msgFaceExpression maps a .msg portrait face id to one of our expression
-// suffixes. TH10 uses a compact 0-8 portrait variant index in the instruction
-// stream; the concrete image set differs per character, so getFace applies a
-// per-suffix fallback chain when a character lacks the exact variant.
-func msgFaceExpression(id int) string {
-	switch id {
-	case 1, 3, 4:
-		return "an"
-	case 2:
-		return "hp"
-	case 5:
-		return "pr"
-	case 6:
-		return "n2"
-	case 7:
-		return "sp"
-	case 8:
-		return "dp"
-	default:
-		return "no"
-	}
-}

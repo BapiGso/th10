@@ -61,8 +61,8 @@ type TextLine struct {
 	Side int
 }
 
-// View is what the dialog shows. The original draws it with front.anm and
-// the face scripts (M5); the overlay in dialog.go stands in.
+// View is what the dialog shows. Presentation applies it to the original
+// front.anm and portrait scripts without advancing this interpreter's clock.
 type View struct {
 	Box, Player, Boss, Name bool
 	PlayerFace, BossFace    int32
@@ -168,8 +168,12 @@ func (m *MSG) Update(advance, skip bool) bool {
 			m.waitTimer.Add(-1, speed) // 0x416a1c-0x416a24, FUN_0044bf40
 			m.wait = int(m.waitTimer.Cur)
 			if !advance && m.wait > 0 {
-				if !(m.skip && skip) {
+				// FUN_00415e90 tests the message gate before the held skip key.
+				if !m.skip {
 					return true // the clock waits too
+				}
+				if !skip {
+					return true
 				}
 			} else if m.hooks.SE != nil {
 				m.hooks.SE(0)

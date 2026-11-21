@@ -103,10 +103,10 @@ func (s *MusicRoom) Update(g *game.Game) error {
 	case 2:
 		s.revealComment()
 		previous := s.selection
-		if menuRepeat(&input.Global, input.KeyUp) {
+		if input.Global.Menu().Move(input.MenuUp) {
 			s.selection = wrapSelection(s.selection-1, len(s.tracks))
 		}
-		if menuRepeat(&input.Global, input.KeyDown) {
+		if input.Global.Menu().Move(input.MenuDown) {
 			s.selection = wrapSelection(s.selection+1, len(s.tracks))
 		}
 		if previous != s.selection {

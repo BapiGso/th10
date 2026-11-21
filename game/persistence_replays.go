@@ -90,8 +90,8 @@ func (g *Game) ListReplays() []ReplaySlot {
 
 func isReplayMissing(err error) bool { return errors.Is(err, fs.ErrNotExist) }
 
-// MemoryReplayStore is the current browser persistence policy and an
-// injectable backend for tests; returned data never aliases stored bytes.
+// MemoryReplayStore is an injectable backend for tests and headless callers;
+// returned data never aliases stored bytes. The browser uses IndexedDB.
 type MemoryReplayStore struct{ files map[int][]byte }
 
 func NewMemoryReplayStore() *MemoryReplayStore {

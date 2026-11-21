@@ -46,6 +46,14 @@ type Runner struct {
 	// Recorder observes the same input cursor, including transition input
 	// after MSG op 20. Those tail records do not advance or lengthen trace.
 	Recorder *replay.Recorder
+	// ConfigureState is an optional tool-only initial-condition override,
+	// called before stage/GUI construction. Nil preserves the default run.
+	ConfigureState func(*game.GameState)
+	// TraceFrame adds optional diagnostic fields after the ordinary snapshot.
+	// It must not modify the stage or consume RNG.
+	TraceFrame func(*stage.Stage, *trace.Frame)
+	// Writer is optionally supplied by tools for atomic capture/session output.
+	Writer *trace.Writer
 }
 
 // New builds a runner. factory must return the same script type the real game
@@ -64,7 +72,13 @@ func ConfigFor(rp *replay.Replay, chapter int) (Config, error) {
 // trace to out. It stops at the end of the input, when the stage finishes, or
 // at maxFrames (0 = no cap).
 func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
-	h, err := newHeadless(r.cfg, r.factory)
+	var h *headless
+	var err error
+	if r.ConfigureState == nil {
+		h, err = newHeadless(r.cfg, r.factory)
+	} else {
+		h, err = newHeadlessConfigured(r.cfg, r.factory, 0, r.ConfigureState)
+	}
 	if err != nil {
 		return err
 	}
@@ -75,7 +89,10 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 			return err
 		}
 	}
-	tw := trace.NewWriter(out)
+	tw := r.Writer
+	if tw == nil {
+		tw = trace.NewWriter(out)
+	}
 	limit := len(ch.Records)
 	if maxFrames > 0 && maxFrames < limit {
 		limit = maxFrames
@@ -148,7 +165,11 @@ func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
 		if r.OnFrame != nil {
 			r.OnFrame(h.st)
 		}
-		tw.WriteFrame(h.sample(i + 1))
+		f := h.sample(i + 1)
+		if r.TraceFrame != nil {
+			r.TraceFrame(h.st, f)
+		}
+		tw.WriteFrame(f)
 		if i+1 >= dump0 && i+1 <= dump1 {
 			h.dumpBullets(os.Stderr, i+1)
 		}
@@ -176,6 +197,10 @@ func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
 // Inject before STD/ANM initialization; replay seeds only restore the main
 // generator (FUN_00428f60 / FUN_0042a6a0), never DAT_004918a8.
 func newHeadlessWithAlternateSeed(cfg Config, factory ScriptFactory, seed uint16) (*headless, error) {
+	return newHeadlessConfigured(cfg, factory, seed, nil)
+}
+
+func newHeadlessConfigured(cfg Config, factory ScriptFactory, seed uint16, configure func(*game.GameState)) (*headless, error) {
 	if factory == nil {
 		return nil, fmt.Errorf("sim: no script factory")
 	}
@@ -194,6 +219,9 @@ func newHeadlessWithAlternateSeed(cfg Config, factory ScriptFactory, seed uint16
 	state.Rank = cfg.Rank
 	if cfg.Difficulty == game.DiffExtra {
 		state.Difficulty = game.DiffExtra
+	}
+	if configure != nil {
+		configure(state)
 	}
 	st := stage.NewHeadless(state, factory(cfg.Stage))
 	ctx := stage.ExportContext(st)

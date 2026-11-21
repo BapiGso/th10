@@ -23,6 +23,9 @@ func main() {
 	ebiten.SetWindowSize(game.ScreenWidth, game.ScreenHeight)
 	ebiten.SetWindowTitle("东方风神录 ~ Mountain of Faith")
 
+	if err := preparePlatform(); err != nil {
+		log.Fatal(err)
+	}
 	g := game.New()
 	if stageNum, ok := parseDebugStageArg(*debugStage); ok {
 		difficulty := parseDebugDifficultyArg(*debugDiff)
@@ -38,7 +41,7 @@ func main() {
 		g.SetScene(loading.New())
 	}
 
-	if err := ebiten.RunGame(g); err != nil {
+	if err := runPlatformGame(g); err != nil {
 		log.Fatal(err)
 	}
 }

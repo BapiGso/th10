@@ -1,9 +1,5 @@
 package enemy
 
-import (
-	"th10/collision"
-)
-
 // Type 敌人类型
 type Type int
 
@@ -73,36 +69,6 @@ func New(x, y float64, hp int, t Type) *Enemy {
 		BodyWidth: 24, BodyHeight: 24,
 		Active: true, Type: t,
 	}
-}
-
-// NewBoss 创建 Boss 敌人
-func NewBoss(x, y float64, phases []SpellCard) *Enemy {
-	totalHP := 0
-	for _, p := range phases {
-		totalHP += p.HP
-	}
-	e := &Enemy{
-		X: x, Y: y, HP: totalHP, MaxHP: totalHP,
-		HitWidth: 48, HitHeight: 48,
-		BodyWidth: 32, BodyHeight: 32,
-		Active: true, Type: TypeBoss,
-		Boss: &BossData{
-			Phases:       phases,
-			DialogBefore: -1,
-			DialogAfter:  -1,
-		},
-	}
-	if len(phases) > 0 {
-		e.Boss.PhaseHP = phases[0].HP
-		e.HP = phases[0].HP
-	}
-	return e
-}
-
-// SetPath 设置移动路径
-func (e *Enemy) SetPath(nodes []PathNode) {
-	e.path = nodes
-	e.pathIdx = 0
 }
 
 // Update 更新敌人
@@ -210,54 +176,7 @@ func (e *Enemy) advancePhase() {
 	bd.Invincible = true
 }
 
-// EndInvincible Stage 脚本在清弹/对话后调用，解除 Boss 无敌
-func (e *Enemy) EndInvincible() {
-	if e.Boss != nil {
-		e.Boss.Invincible = false
-	}
-}
-
-// MaybeEndInvincible 阶段切换 2 帧后自动解除 Boss 无敌。
-// nil/非 Boss/已解除时 no-op，方便 stage 脚本每帧无差别调用。
-func (e *Enemy) MaybeEndInvincible() {
-	if e == nil || !e.Active || e.Boss == nil || !e.Boss.Invincible {
-		return
-	}
-	if e.Boss.PhaseFrame > 2 {
-		e.Boss.Invincible = false
-	}
-}
-
-// CurrentPhaseName 返回当前阶段名称
-func (e *Enemy) CurrentPhaseName() string {
-	if e.Boss == nil || e.Boss.PhaseIdx >= len(e.Boss.Phases) {
-		return ""
-	}
-	return e.Boss.Phases[e.Boss.PhaseIdx].Name
-}
-
-// PhaseProgress 当前阶段 HP 比例 (0~1)
-func (e *Enemy) PhaseProgress() float64 {
-	if e.Boss == nil || e.Boss.PhaseHP == 0 {
-		return 0
-	}
-	return float64(e.HP) / float64(e.Boss.PhaseHP)
-}
-
-// RemainingPhases 剩余阶段数
-func (e *Enemy) RemainingPhases() int {
-	if e.Boss == nil {
-		return 0
-	}
-	return len(e.Boss.Phases) - e.Boss.PhaseIdx
-}
-
 // HitRect 返回受弹判定矩形参数
 func (e *Enemy) HitRect() (x, y, w, h float64) {
 	return e.X, e.Y, e.HitWidth, e.HitHeight
-}
-
-// InBounds 检查是否在游戏区域内
-func (e *Enemy) InBounds(left, top, right, bottom float64) bool {
-	return collision.InBounds(e.X, e.Y, 64, left, top, right, bottom)
 }

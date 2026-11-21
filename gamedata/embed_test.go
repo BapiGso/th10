@@ -23,8 +23,9 @@ var notInDat = map[string]bool{
 }
 
 // TestEmbeddedMatchesDat checks the embedded copies against the user's
-// th10.dat: raw files byte for byte, decoded textures pixel for pixel (colour
-// under zero alpha ignored). Skips without a TH10 install.
+// th10.dat: logical bytes and desktop THTX pixels byte for byte, including
+// colour under zero alpha. Packed resources are restored before comparison.
+// Skips without a TH10 install.
 func TestEmbeddedMatchesDat(t *testing.T) {
 	dir, err := datfs.Locate()
 	if err != nil {
@@ -34,7 +35,7 @@ func TestEmbeddedMatchesDat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer dat.Close()
+	defer func() { _ = dat.Close() }()
 
 	raw := 0
 	for _, name := range dat.Names() {
@@ -48,7 +49,9 @@ func TestEmbeddedMatchesDat(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(got, want) {
+		if strings.HasSuffix(name, ".anm") {
+			compareArchiveANM(t, name, got, want)
+		} else if !bytes.Equal(got, want) {
 			t.Errorf("%s differs from th10.dat:%s", datfs.EmbedPath(name), name)
 		}
 		raw++
@@ -188,9 +191,6 @@ func comparePixels(got, want image.Image) string {
 	a, b := toNRGBA(got), toNRGBA(want)
 	n := 0
 	for i := 0; i < len(a.Pix); i += 4 {
-		if a.Pix[i+3] == 0 && b.Pix[i+3] == 0 {
-			continue
-		}
 		if !bytes.Equal(a.Pix[i:i+4], b.Pix[i:i+4]) {
 			n++
 		}
@@ -199,6 +199,39 @@ func comparePixels(got, want image.Image) string {
 		return fmt.Sprintf("%d pixels differ from th10.dat", n)
 	}
 	return ""
+}
+
+// compareArchiveANM verifies every non-pixel byte in both builds and every
+// raw pixel byte on desktop. This includes unused padding and script labels,
+// not only the interpreted VM instructions or the visible RGBA pixels.
+func compareArchiveANM(t *testing.T, name string, got, want []byte) {
+	t.Helper()
+	a, err := anm.PixelRanges(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := anm.PixelRanges(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) || len(a) != len(b) {
+		t.Fatalf("%s: restored ANM layout differs from archive", name)
+	}
+	x, y := bytes.Clone(got), bytes.Clone(want)
+	for i, r := range a {
+		p, q := r.Texture, b[i].Texture
+		if r.Offset != b[i].Offset || p.W != q.W || p.H != q.H || p.Format != q.Format || len(p.Pixels) != len(q.Pixels) {
+			t.Fatalf("%s texture %d: dimensions/format/range changed", name, i)
+		}
+		if assets.TextureVariant == "lossless" && !bytes.Equal(p.Pixels, q.Pixels) {
+			t.Errorf("%s texture %d: lossless THTX pixels differ", name, i)
+		}
+		clear(x[r.Offset : r.Offset+len(p.Pixels)])
+		clear(y[b[i].Offset : b[i].Offset+len(q.Pixels)])
+	}
+	if !bytes.Equal(x, y) {
+		t.Errorf("%s: ANM non-pixel bytes differ from archive", name)
+	}
 }
 
 func toNRGBA(img image.Image) *image.NRGBA {

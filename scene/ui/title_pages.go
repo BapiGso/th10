@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 
-	"th10/anm"
 	"th10/audio"
 	"th10/game"
 	"th10/input"
@@ -615,25 +614,7 @@ func (c *TitleController) launch(g *game.Game, stage int) error {
 
 // GlyphText is FUN_00401760's native small-font path, shared with t11.
 func GlyphText(sv *supervisor.Supervisor, text string, x, y float32, colour uint32) {
-	vm := anm.New()
-	vm.File = titleASCII()
-	vm.Flags = vm.Flags&0xffd7ffff | 0x140001
-	vm.Color, vm.Alpha = [3]uint8{uint8(colour >> 16), uint8(colour >> 8), uint8(colour)}, uint8(colour>>24)
-	start := x
-	for i := range len(text) {
-		ch := text[i]
-		if ch == '\n' {
-			x, y = start, y+16
-			continue
-		}
-		if ch < 0x20 || ch > 0x81 {
-			ch = '?'
-		}
-		vm.SetSprite(int(ch) + 66)
-		vm.Pos = [3]float32{x, y, 0}
-		sv.ANM.Draw(vm)
-		x += math.Float32frombits(0x41100000) // 9, PE 0x470c10
-	}
+	GlyphTextFile(sv, titleASCII(), text, x, y, colour)
 }
 
 // drawPractice is FUN_00431410, with only unlocked rows per the task.

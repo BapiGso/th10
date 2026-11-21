@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#14231d">
+    <title>TH10 · Mountain of Faith</title>
+    <style>
+        :root { --ink: #14231d; --deep: #0c1511; --paper: #ede6d2; --muted: #a8b5a1; --gold: #d6ba72; --line: #3c4b3a; --serif: "Palatino Linotype", "Book Antiqua", "Noto Serif CJK SC", serif; --mono: "Cascadia Code", "Lucida Console", monospace; }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100dvh; color: var(--paper); font-family: var(--serif); background: radial-gradient(ellipse at 15% 0%, #32463380, transparent 65%), repeating-linear-gradient(90deg, transparent 0 79px, #d6ba7207 80px), var(--ink); }
+        main { max-width: 1800px; margin: auto; padding: 22px 28px 30px; }
+        header { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+        .eyebrow { margin: 0 0 7px; color: var(--gold); font: 11px var(--mono); letter-spacing: .19em; }
+        h1 { font-size: clamp(24px, 3vw, 38px); font-weight: 400; line-height: 1.1; margin: 0; letter-spacing: .05em; }
+        h1 small { display: inline-block; font-size: .38em; color: var(--muted); letter-spacing: .03em; margin-left: 14px; }
+        button { border: 1px solid var(--gold); padding: 9px 15px; background: #d6ba7210; color: var(--paper); font: 14px var(--serif); cursor: pointer; }
+        button:hover { background: #d6ba7226; }
+        button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+        button:disabled { opacity: .4; cursor: wait; }
+        .toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
+        #stage { display: grid; place-items: center; height: max(480px, calc(100dvh - 245px)); min-width: 640px; border: 1px solid var(--line); background: radial-gradient(ellipse, #16231e, var(--deep)); overflow: auto; }
+        #stage:fullscreen { width: 100%; height: 100%; border: 0; }
+        iframe { display: block; width: 640px; height: 480px; border: 0; background: #000; image-rendering: pixelated; }
+        .download { display: grid; grid-template-columns: 1fr auto; gap: 7px 20px; margin: 14px 0; font-size: 14px; }
+        #transfer { font-family: var(--mono); color: var(--gold); font-size: 12px; }
+        progress { width: 100%; height: 5px; grid-column: 1 / -1; border: 0; accent-color: var(--gold); }
+        progress::-webkit-progress-bar { background: var(--line); }
+        progress::-webkit-progress-value { background: var(--gold); }
+        .notes { display: flex; justify-content: space-between; gap: 15px; flex-wrap: wrap; color: var(--muted); font-size: 13px; line-height: 1.7; }
+        kbd { font: 11px var(--mono); color: var(--paper); padding: 2px 4px; border-bottom: 1px solid var(--line); }
+        #status.error { color: #f2ad90; }
+        .storage { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 13px; font-size: 13px; }
+        .storage summary { color: var(--gold); cursor: pointer; }
+        .storage-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 12px 0; }
+        .storage-controls button { font-size: 13px; }
+        select { padding: 8px; font: 12px var(--mono); background: var(--deep); color: var(--paper); border: 1px solid var(--line); }
+        #storage-status { color: var(--muted); line-height: 1.7; }
+        @media (max-width: 700px) { main { padding: 16px 12px; overflow-x: auto; } header { align-items: start; flex-direction: column; } h1 small { display: block; margin: 9px 0 0; } .download { min-width: 300px; } }
+        @media (prefers-reduced-motion: no-preference) { header { animation: arrive .6s ease-out; } @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } } }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <div><p class="eyebrow">TH10 / WEB ASSEMBLY EDITION</p><h1>东方风神录<small>Mountain of Faith</small></h1></div>
+        <div class="toolbar"><button id="fullscreen" type="button">全屏 · F</button><button id="debug" type="button" disabled>调试 · F3</button></div>
+    </header>
+    <section id="stage" aria-label="640×480 游戏画面"><iframe id="game" src="game.html" title="东方风神录游戏" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe></section>
+    <div class="download" aria-live="polite"><span id="status">读取发布清单…</span><span id="transfer"></span><progress id="progress" max="1" value="0" aria-label="WASM 下载进度"></progress></div>
+    <div class="notes"><span><kbd>↑ ↓ ← →</kbd> 移动　<kbd>Z</kbd> 射击／确认　<kbd>X</kbd> 灵击／取消　<kbd>Shift</kbd> 低速　<kbd>Esc</kbd> 暂停</span><span id="scale">640 × 480 / 1×</span></div>
+    <details class="storage" open>
+        <summary>存档与回放 · IndexedDB</summary>
+        <div class="storage-controls">
+            <button id="import-score" type="button" disabled>导入 scoreth10.dat</button>
+            <button id="export-score" type="button" disabled>导出存档</button>
+            <button id="export-cfg" type="button" disabled>导出 cfg</button>
+            <label for="slot">回放槽</label><select id="slot" aria-label="回放槽位"></select>
+            <button id="import-replay" type="button" disabled>导入 .rpy</button>
+            <button id="export-replay" type="button" disabled>导出槽位</button>
+            <button id="persist" type="button">请求保留网站数据</button>
+        </div>
+        <p id="storage-status">导入只允许在“点击开始”之前；游戏内按原保存检查点提交，不逐帧写入。刷新后使用同一浏览器、网址与端口读取。</p>
+        <input id="score-file" type="file" accept=".dat" hidden><input id="replay-file" type="file" accept=".rpy" hidden>
+    </details>
+</main>
+<script type="module" src="app.mjs"></script>
+</body>
+</html>

@@ -3,13 +3,10 @@ package ui
 
 import (
 	"image/color"
-	"th10/input"
 	"th10/render"
 
-	"github.com/ebitenui/ebitenui"
 	eimage "github.com/ebitenui/ebitenui/image"
 	"github.com/ebitenui/ebitenui/widget"
-	"github.com/hajimehoshi/ebiten/v2"
 	ebitext "github.com/hajimehoshi/ebiten/v2/text/v2"
 )
 
@@ -83,103 +80,9 @@ func NewRoot(theme *Theme, layout widget.Layouter) *widget.Container {
 	)
 }
 
-// NewPanel 构造半透明黑底面板，用于场景中部内容区域。
-func NewPanel(theme *Theme, layout widget.Layouter, padding *widget.Insets) *widget.Container {
-	return widget.NewContainer(
-		widget.ContainerOpts.BackgroundImage(theme.Panel),
-		widget.ContainerOpts.Layout(layout),
-		widget.ContainerOpts.WidgetOpts(
-			widget.WidgetOpts.LayoutData(widget.AnchorLayoutData{
-				HorizontalPosition: widget.AnchorLayoutPositionCenter,
-				VerticalPosition:   widget.AnchorLayoutPositionCenter,
-				StretchHorizontal:  false,
-				StretchVertical:    false,
-				Padding:            padding,
-			}),
-		),
-	)
-}
-
 // Label 快速构造一个文字标签。
 func Label(text string, face ebitext.Face, col color.Color) *widget.Text {
 	return widget.NewText(
 		widget.TextOpts.Text(text, &face, col),
 	)
-}
-
-// Button 快速构造一个按钮（带统一的内边距与主题）。
-func Button(theme *Theme, text string, onClick func()) *widget.Button {
-	face := theme.ItemFace
-	return widget.NewButton(
-		widget.ButtonOpts.Image(theme.Button),
-		widget.ButtonOpts.Text(text, &face, &widget.ButtonTextColor{
-			Idle:  theme.TextColor,
-			Hover: theme.HighColor,
-		}),
-		widget.ButtonOpts.TextPadding(&widget.Insets{Left: 18, Right: 18, Top: 6, Bottom: 6}),
-		widget.ButtonOpts.ClickedHandler(func(args *widget.ButtonClickedEventArgs) {
-			if onClick != nil {
-				onClick()
-			}
-		}),
-	)
-}
-
-// Scene 提供 ebitenui + 键盘导航的最小壳子。
-// 使用者在 Build 中构建 root 并把 focusable 组件按顺序加到 Focus 中。
-type Scene struct {
-	UI       *ebitenui.UI
-	Focus    []widget.Focuser // 上下键切换的顺序
-	cursor   int
-	OnOk     func()
-	OnCancel func()
-}
-
-// SetCursor 强制设置当前焦点 index。
-func (s *Scene) SetCursor(i int) {
-	if len(s.Focus) == 0 {
-		return
-	}
-	s.cursor = ((i % len(s.Focus)) + len(s.Focus)) % len(s.Focus)
-	s.UI.SetFocusedWidget(s.Focus[s.cursor])
-}
-
-// Cursor 当前焦点 index。
-func (s *Scene) Cursor() int { return s.cursor }
-
-// Update 按我们自己的 input.Global 驱动 Up/Down 换焦点，Z 触发 Click，X 触发 OnCancel。
-func (s *Scene) Update() {
-	in := &input.Global
-	if len(s.Focus) > 0 {
-		if in.JustPressed(input.KeyUp) {
-			s.SetCursor(s.cursor - 1)
-		}
-		if in.JustPressed(input.KeyDown) {
-			s.SetCursor(s.cursor + 1)
-		}
-	}
-	if in.JustPressed(input.KeyOk) {
-		s.activateFocused()
-		if s.OnOk != nil {
-			s.OnOk()
-		}
-	}
-	if in.JustPressed(input.KeyCancel) && s.OnCancel != nil {
-		s.OnCancel()
-	}
-	s.UI.Update()
-}
-
-func (s *Scene) activateFocused() {
-	if w := s.UI.GetFocusedWidget(); w != nil {
-		switch v := w.(type) {
-		case *widget.Button:
-			v.Click()
-		}
-	}
-}
-
-// Draw 透传给 UI。
-func (s *Scene) Draw(screen *ebiten.Image) {
-	s.UI.Draw(screen)
 }

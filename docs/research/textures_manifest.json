@@ -1,0 +1,4068 @@
+{
+  "version": 1,
+  "logical_bytes": 790168,
+  "lossless_pack_bytes": 16223947,
+  "web_pack_bytes": 11976760,
+  "textures": [
+    {
+      "id": "0052268405a3a5fbd373f97c5f753c53ec477e1bbedbe496c2e1a6b4fa78104c",
+      "references": [
+        "stage06.anm#4"
+      ],
+      "name": "background/stg6bg6.png",
+      "format": 5,
+      "width": 32,
+      "height": 128,
+      "raw_bytes": 8192,
+      "lossless_bytes": 641,
+      "lossless_codec": "flate",
+      "web_bytes": 641,
+      "web_codec": "flate"
+    },
+    {
+      "id": "009939aeba47221d9076bbbbd88c7b94ef6e9f20a9218cbff0fbf9bb5114fe48",
+      "references": [
+        "stage06.anm#3"
+      ],
+      "name": "background/stg6bg5.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 15267,
+      "lossless_codec": "palette-png",
+      "web_bytes": 15267,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "019c10352b1f5263caac167849a1c923810f7244651dbcccd41bd36fa5440db0",
+      "references": [
+        "stgenm04.anm#8"
+      ],
+      "name": "face/enemy4/face04pr_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 79903,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 38133,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.19722557871363,
+      "all_psnr": 37.5148374195167,
+      "edge_psnr": 45.56493258890737,
+      "edge_samples": 6780
+    },
+    {
+      "id": "01d2578e8ab8460ec79e77ef551a0db2a4e9012a104dec0f8e72be94921254fd",
+      "references": [
+        "title.ant#7"
+      ],
+      "name": "title/rank00.png",
+      "format": 1,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 1048576,
+      "lossless_bytes": 65253,
+      "lossless_codec": "flate",
+      "web_bytes": 65253,
+      "web_codec": "flate"
+    },
+    {
+      "id": "02727a2c8ae14176cf1bd632ea8d3e521dc31ba5ce40761b2bff911c43fead61",
+      "references": [
+        "sig.anm#0"
+      ],
+      "name": "loading/sig.png",
+      "format": 1,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 983040,
+      "lossless_bytes": 282239,
+      "lossless_codec": "png",
+      "web_bytes": 282239,
+      "web_codec": "png"
+    },
+    {
+      "id": "03ccaa73868225e3e6f6a3dd229729e05b9918d3f08c7593d8341d563235c4d6",
+      "references": [
+        "e03.anm#2"
+      ],
+      "name": "ending/e03b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 206192,
+      "lossless_codec": "flate",
+      "web_bytes": 206192,
+      "web_codec": "flate"
+    },
+    {
+      "id": "0603866aade41e8ce24bec7077c6bb8b245d78d9cd3f79e9169ab19c62e744ba",
+      "references": [
+        "stgenm05.anm#14"
+      ],
+      "name": "face/enemy5/face05ct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 65846,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 65846,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "08ea61716d830646d3e80d9ad946fe64a8a3d71884589713ecf755bc26323b8b",
+      "references": [
+        "st01logo.anm#0"
+      ],
+      "name": "front/st01logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 9364,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9364,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "08f3756e332e9b3edc227af83b3820ab333f1f250d885975780d8e582fd6939b",
+      "references": [
+        "pl00.anm#1"
+      ],
+      "name": "face/pl00/face_pl00no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 48153,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21165,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.53500168590671,
+      "all_psnr": 39.14022393387877,
+      "edge_psnr": 44.06523911296454,
+      "edge_samples": 1758
+    },
+    {
+      "id": "0916516c180393331b60216f7c337365cb5b2577ce96c821e5d7d442088b6a5b",
+      "references": [
+        "e06.anm#2"
+      ],
+      "name": "ending/e06b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 186613,
+      "lossless_codec": "flate",
+      "web_bytes": 186613,
+      "web_codec": "flate"
+    },
+    {
+      "id": "0c18a60aaa9c40ebf2f7c4da25b5171e0649cbbaf2516980e836fb648fc33821",
+      "references": [
+        "stage06.anm#1"
+      ],
+      "name": "background/stg6bg2.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 67093,
+      "lossless_codec": "flate",
+      "web_bytes": 67093,
+      "web_codec": "flate"
+    },
+    {
+      "id": "0ca2fc07e24e7e73fcbe00bc90ac5a24410804deb01cc7924d83175958c6aa8a",
+      "references": [
+        "stage03.anm#2"
+      ],
+      "name": "background/stg3bg3.png",
+      "format": 1,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 1048576,
+      "lossless_bytes": 477237,
+      "lossless_codec": "flate",
+      "web_bytes": 111141,
+      "web_codec": "quantized-palette-png",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.65562959731656,
+      "all_psnr": 36.65562959731656,
+      "edge_psnr": 100
+    },
+    {
+      "id": "0ee2614b7f270dae935e7e78ca276771eb44adc0be201777c54b655e7723797e",
+      "references": [
+        "stgenm04.anm#7"
+      ],
+      "name": "face/enemy4/face04dp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 78826,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 37816,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.19476688570666,
+      "all_psnr": 37.57429669107769,
+      "edge_psnr": 45.54381388652007,
+      "edge_samples": 6781
+    },
+    {
+      "id": "13a0a91b259dab983cedaf7c5247b89bd47ceab7aaf54c1c939001642663108d",
+      "references": [
+        "stgenm07.anm#13"
+      ],
+      "name": "face/enemy7/face07no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 30378,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 30378,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "151c0652f77a01842fb17e1c5e17ea67883475e2dab2c7d85bed62a0dac68c8d",
+      "references": [
+        "stgenm03.anm#0"
+      ],
+      "name": "stgenm/stg3enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10542,
+      "lossless_codec": "flate",
+      "web_bytes": 10542,
+      "web_codec": "flate"
+    },
+    {
+      "id": "152c89ef5da4ca312083ead6d6654bab968a82f1b62c0b90d574a12b2ee3106d",
+      "references": [
+        "stgenm05.anm#0"
+      ],
+      "name": "stgenm/stg5enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 14163,
+      "lossless_codec": "flate",
+      "web_bytes": 14163,
+      "web_codec": "flate"
+    },
+    {
+      "id": "186689ac8cfcabd8691f57dc2ae4ab46ed5a123bfdb94c5c20832d57d4a15637",
+      "references": [
+        "stgenm07.anm#1"
+      ],
+      "name": "stgenm/stg7enm3.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 38223,
+      "lossless_codec": "flate",
+      "web_bytes": 38223,
+      "web_codec": "flate"
+    },
+    {
+      "id": "1cdc4fab5d389e89215ed5d4bd4cb70c16ca1f08b4f1512e029e83d8a282e72b",
+      "references": [
+        "title.anm#1",
+        "title.ant#1"
+      ],
+      "name": "title/title00a.png",
+      "format": 1,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 983040,
+      "lossless_bytes": 468603,
+      "lossless_codec": "png",
+      "web_bytes": 201613,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.06165404795324,
+      "all_psnr": 36.06165404795324,
+      "edge_psnr": 100
+    },
+    {
+      "id": "1d1e30733ac1882dea2dcecc7a938554fd6f579ef1a689dd172623262c7e1ab4",
+      "references": [
+        "e02.anm#3"
+      ],
+      "name": "ending/e02br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32549,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32549,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "1d95531064ddcdf4650ca9239e25057f0ed85c28d757d2671ccc5153b1a50b27",
+      "references": [
+        "e09.anm#2"
+      ],
+      "name": "ending/e09b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 185309,
+      "lossless_codec": "flate",
+      "web_bytes": 185309,
+      "web_codec": "flate"
+    },
+    {
+      "id": "1def62188f60c9ea1037cdfd75ba18eab64a0f490e97341596344081463ebab4",
+      "references": [
+        "stgenm01.anm#9",
+        "stgenm01.anm#10",
+        "stgenm01.anm#12"
+      ],
+      "name": "face/enemy1/face01no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 13698,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 13698,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "1eb68c7a605f7acb5f6405deb275347da0f518720682b28fe3951a6862129688",
+      "references": [
+        "front.anm#0",
+        "front.ant#0"
+      ],
+      "name": "front/front00.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 108172,
+      "lossless_codec": "flate",
+      "web_bytes": 108172,
+      "web_codec": "flate"
+    },
+    {
+      "id": "2425ab54a0f1224df91b11012bcf64b54a5c84fbc339a890c200d8d3bb4dbf0d",
+      "references": [
+        "stgenm07.anm#2"
+      ],
+      "name": "stgenm/stg7enm2.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 22927,
+      "lossless_codec": "flate",
+      "web_bytes": 22927,
+      "web_codec": "flate"
+    },
+    {
+      "id": "242b386550317daff7f65d2c96bde641136b3b60797beb3455155858d6883a54",
+      "references": [
+        "stgenm02.anm#2"
+      ],
+      "name": "face/enemy2/face02n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 64564,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 28223,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.95202147627835,
+      "all_psnr": 39.32808237173458,
+      "edge_psnr": 43.949347370104505,
+      "edge_samples": 2464
+    },
+    {
+      "id": "270d1580ec37081b9b5114939616549e1f98a02da304bc23652551bb37da6539",
+      "references": [
+        "staff.anm#7",
+        "staff.ant#7"
+      ],
+      "name": "ending/st03r.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 26038,
+      "lossless_codec": "palette-png",
+      "web_bytes": 26038,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "277898caa2dadc7cda51f4c77299c3d705a5e24b812265fbf8a9d05b18cb0336",
+      "references": [
+        "stgenm03.anm#12"
+      ],
+      "name": "card/cdbg03a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 33026,
+      "lossless_codec": "palette-png",
+      "web_bytes": 33026,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "277cfe3493716524762406856275f44a87d627cef8bc1c4f306e7fbc13d4c6af",
+      "references": [
+        "title.ant#13"
+      ],
+      "name": "title/result00.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10096,
+      "lossless_codec": "palette-png",
+      "web_bytes": 10096,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "295d2526a392561fcf0af0a85ee445ada4f31c94a33086f3c0c6272de11a3ec3",
+      "references": [
+        "stgenm07.anm#10"
+      ],
+      "name": "face/enemy7/face07pr_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 83942,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 33021,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.70229625959071,
+      "all_psnr": 36.896440322932435,
+      "edge_psnr": 44.72877595886338,
+      "edge_samples": 2457
+    },
+    {
+      "id": "29746a0ff31a7582a525a83428e934661430304193850cc2d14d5be367432ea3",
+      "references": [
+        "stgenm01.anm#20"
+      ],
+      "name": "face/enemy1/face01ct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 34389,
+      "lossless_codec": "flate",
+      "web_bytes": 34389,
+      "web_codec": "flate"
+    },
+    {
+      "id": "29a8003c25cad7e6af81b6812481023ae0ea2ce7d99aacf13995dcafaf950ed0",
+      "references": [
+        "title.anm#0",
+        "title.ant#0"
+      ],
+      "name": "title/title01.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 31306,
+      "lossless_codec": "palette-png",
+      "web_bytes": 31306,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "2c0b5dac6d4de22ddb08418776db317061f13b86291219043b30986f17d73743",
+      "references": [
+        "e08.anm#4"
+      ],
+      "name": "ending/e08c.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 187472,
+      "lossless_codec": "flate",
+      "web_bytes": 187472,
+      "web_codec": "flate"
+    },
+    {
+      "id": "2e8abb7a116e57a706b96747004266bb937a54ead19bad8311def26bc4d9390a",
+      "references": [
+        "title_v.anm#0"
+      ],
+      "name": "title/title_ver.png",
+      "format": 5,
+      "width": 64,
+      "height": 16,
+      "raw_bytes": 2048,
+      "lossless_bytes": 284,
+      "lossless_codec": "flate",
+      "web_bytes": 284,
+      "web_codec": "flate"
+    },
+    {
+      "id": "2f553b8d36a33968c4bfff2a27c144f6fa8c15720019d31a71586783d29243df",
+      "references": [
+        "title.anm#8",
+        "title.ant#8"
+      ],
+      "name": "title/sl_pl00.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 42380,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21354,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.26305938002416,
+      "all_psnr": 40.572960422531,
+      "edge_psnr": 42.641933530914535,
+      "edge_samples": 3955
+    },
+    {
+      "id": "300d2bae38f346d6c9fadf92f9a7a3be21b10ac238c3a3b2664a4240a8633112",
+      "references": [
+        "stage07.anm#0"
+      ],
+      "name": "background/stg7bg.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 137838,
+      "lossless_codec": "png",
+      "web_bytes": 28244,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 85,
+      "visible_psnr": 34.05836377490548,
+      "all_psnr": 34.05962343543082,
+      "edge_psnr": 43.355643111744556,
+      "edge_samples": 15771
+    },
+    {
+      "id": "3029374ecbd141f9ab154a87440202646b1c89a9810192f87dcdfe5c43ec1871",
+      "references": [
+        "stgenm02.anm#7"
+      ],
+      "name": "face/enemy2/face02pr_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 63627,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 27780,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.998534790196544,
+      "all_psnr": 39.37363391480516,
+      "edge_psnr": 43.93875912068498,
+      "edge_samples": 2458
+    },
+    {
+      "id": "307fa87632a5f67ebb38b352fb53815d7d985df7036ec5c3e4e7d9031e5c1f14",
+      "references": [
+        "stgenm01.anm#17"
+      ],
+      "name": "card/cdbg01a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 120349,
+      "lossless_codec": "flate",
+      "web_bytes": 120349,
+      "web_codec": "flate"
+    },
+    {
+      "id": "315048f59ebabf873e04d9acedad7f4d0260b6536576a9dc43f07a295452b50d",
+      "references": [
+        "title.anm#13"
+      ],
+      "name": "title/result00.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10065,
+      "lossless_codec": "palette-png",
+      "web_bytes": 10065,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "33776d050d91f4205bc009d1db04050991869d6f439d734fe0f7b5cbfaf80352",
+      "references": [
+        "bullet.anm#3"
+      ],
+      "name": "bullet/etama3.png",
+      "format": 5,
+      "width": 128,
+      "height": 128,
+      "raw_bytes": 32768,
+      "lossless_bytes": 13246,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 13246,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "33bae7d9f5ec2d82bfa10002eaae66d57fb00a1f82607fd39dda8848122c86fd",
+      "references": [
+        "st05logo.ant#0"
+      ],
+      "name": "front/st05logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 9211,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9211,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "35fda719bfb942850d359af77c371255e7dc2a396a21f0d6de634d5374f1c8cc",
+      "references": [
+        "st03logo.anm#0"
+      ],
+      "name": "front/st03logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10328,
+      "lossless_codec": "palette-png",
+      "web_bytes": 10328,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "3812ffda5ba672f03267833906c263f4d62e3b66238a27d448db28b1daab5bcc",
+      "references": [
+        "stage01.anm#3",
+        "stage05.anm#3"
+      ],
+      "name": "background/stg1bg4.png",
+      "format": 1,
+      "width": 128,
+      "height": 128,
+      "raw_bytes": 65536,
+      "lossless_bytes": 7944,
+      "lossless_codec": "palette-png",
+      "web_bytes": 7944,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "3b2960084f126b108d2301b96c6b1fd6eb3f1c77bc1e59650236b10a69211f27",
+      "references": [
+        "enemy.anm#0"
+      ],
+      "name": "enemy/enemy.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 140280,
+      "lossless_codec": "flate",
+      "web_bytes": 140280,
+      "web_codec": "flate"
+    },
+    {
+      "id": "3b50f69c970a8557b0d6773c5e2e672151fd62c9ff46a0454a0f72b8df35d280",
+      "references": [
+        "stgenm02.anm#13"
+      ],
+      "name": "face/enemy2/ename02.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 3671,
+      "lossless_codec": "flate",
+      "web_bytes": 3671,
+      "web_codec": "flate"
+    },
+    {
+      "id": "3b8f837290573cec7a20394b493564932c151b52294627ac5d031494e8534b12",
+      "references": [
+        "stage06.anm#2"
+      ],
+      "name": "background/stg6bg3.png",
+      "format": 5,
+      "width": 32,
+      "height": 256,
+      "raw_bytes": 16384,
+      "lossless_bytes": 3616,
+      "lossless_codec": "palette-png",
+      "web_bytes": 3616,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "3ba760b5a27045e63938d43333957b8231374f0e79a56d0657b3b0ae84223b37",
+      "references": [
+        "e10.anm#5"
+      ],
+      "name": "ending/e10cr.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 33050,
+      "lossless_codec": "palette-png",
+      "web_bytes": 33050,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "3d823293a741f5faec86efdb05597d4589543bdd08f21ce855739ae23c216cec",
+      "references": [
+        "st05logo.anm#0"
+      ],
+      "name": "front/st05logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 9744,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9744,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "3e87192ce3252e40395987a80963bd1e6b765e45bd0e01c0a3ee68e43c20b96b",
+      "references": [
+        "stgenm05.anm#2"
+      ],
+      "name": "face/enemy5/face05n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 77677,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 36190,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.2054173851884,
+      "all_psnr": 37.92946742597269,
+      "edge_psnr": 46.5027375889583,
+      "edge_samples": 5162
+    },
+    {
+      "id": "3e9dae6e92d7d82df8fe9bed39f6aa31bbc04135a53dde10f804a17764f1141a",
+      "references": [
+        "staff.anm#4",
+        "staff.ant#4"
+      ],
+      "name": "ending/st01r.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 24909,
+      "lossless_codec": "palette-png",
+      "web_bytes": 24909,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "3f140179c7dd092b8fc44db41249af44dfc8dfa754a9f409350c2a7b8a6f9f6c",
+      "references": [
+        "stgenm01.anm#21"
+      ],
+      "name": "face/enemy1m/face01mct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 42679,
+      "lossless_codec": "flate",
+      "web_bytes": 42679,
+      "web_codec": "flate"
+    },
+    {
+      "id": "3f4827af54e39f64ceafbacd64931c0a39fc1734f3590696f6c39eb0fdcd6dbc",
+      "references": [
+        "stgenm03.anm#5"
+      ],
+      "name": "face/enemy3/face03an_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 94598,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 41180,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.827543400884025,
+      "all_psnr": 36.99072614356032,
+      "edge_psnr": 44.58793335491443,
+      "edge_samples": 3921
+    },
+    {
+      "id": "41324d55d80d3f093c650e108318c35f42fe6213edd31a0485496c9a5f086add",
+      "references": [
+        "stage05.anm#1"
+      ],
+      "name": "background/stg5bg2.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 68241,
+      "lossless_codec": "png",
+      "web_bytes": 15077,
+      "web_codec": "jpeg-rgb-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 35.77307407356856,
+      "all_psnr": 35.77307407356856,
+      "edge_psnr": 100
+    },
+    {
+      "id": "418affa689a8f7a0c81f11f6f040200e790ee85843138f9042d998938605ce52",
+      "references": [
+        "stgenm01.anm#18"
+      ],
+      "name": "card/cdbg01b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 11131,
+      "lossless_codec": "palette-png",
+      "web_bytes": 11131,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "427b98cd8863b09097d3b92862e260512cbb6ee23f31a35f279e9fea07c9eb72",
+      "references": [
+        "e01.anm#3"
+      ],
+      "name": "ending/e01br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32308,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32308,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "4396242a201851b97965a5cd5d8f3f44f83a7d687a9d3fe48ebadf0fdea6b239",
+      "references": [
+        "stgenm06.anm#16"
+      ],
+      "name": "face/enemy6/ename06.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 4094,
+      "lossless_codec": "flate",
+      "web_bytes": 4094,
+      "web_codec": "flate"
+    },
+    {
+      "id": "4431de6add3250eac231e205ed7a0e014cb0e99bbad0280210c8aa8cbc3e334e",
+      "references": [
+        "pl00.anm#5"
+      ],
+      "name": "face/pl00/face_pl00sw_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 48957,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21634,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.60570377555613,
+      "all_psnr": 39.2058137138761,
+      "edge_psnr": 44.286144282691936,
+      "edge_samples": 1821
+    },
+    {
+      "id": "453f892ca585e73a24fae130d8e1b7e0a62243992341c707f04ec021bb623ada",
+      "references": [
+        "stage05.anm#0"
+      ],
+      "name": "background/stg5bg.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 139119,
+      "lossless_codec": "png",
+      "web_bytes": 27908,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.24660364209896,
+      "all_psnr": 35.24660364209896,
+      "edge_psnr": 43.92873301659143,
+      "edge_samples": 8892
+    },
+    {
+      "id": "4918c1c3fb1782ed527a6eae814f475e6e9950e1c98c2065677a17147be5feec",
+      "references": [
+        "stgenm06.anm#5"
+      ],
+      "name": "face/enemy6/face06n2_u.png",
+      "format": 1,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 524288,
+      "lossless_bytes": 131124,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 55136,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.585128529092266,
+      "all_psnr": 39.084714903120094,
+      "edge_psnr": 44.9652437814344,
+      "edge_samples": 7489
+    },
+    {
+      "id": "498913d6363c584eb0c6581db0e78783026efa1659ba1e21645278467e9d18ce",
+      "references": [
+        "st02logo.ant#0"
+      ],
+      "name": "front/st02logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 8407,
+      "lossless_codec": "palette-png",
+      "web_bytes": 8407,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "4a3bb16ab0d3520355e0d9f219ca4eab9c5ee9cfd1506de0f986cb711c20d519",
+      "references": [
+        "pl00.anm#6"
+      ],
+      "name": "face/pl00/face_pl00dp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 52379,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 24377,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.59020669067439,
+      "all_psnr": 38.986321991615974,
+      "edge_psnr": 44.74318186147119,
+      "edge_samples": 2954
+    },
+    {
+      "id": "4a92bc85cd31e3bad3b7c6c0a5ec6beb952f36d1d293880e75e3013a718bf438",
+      "references": [
+        "staff.anm#2"
+      ],
+      "name": "ending/staff2.png",
+      "format": 5,
+      "width": 256,
+      "height": 128,
+      "raw_bytes": 65536,
+      "lossless_bytes": 9147,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9147,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "4dd49317dcb807aa3b0d68c2f8bb1a1491687da38381146141ef5ba80a7343ff",
+      "references": [
+        "stage03.anm#0"
+      ],
+      "name": "background/stg3bg.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 132324,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 62726,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.353832848911374,
+      "all_psnr": 35.88010762227636,
+      "edge_psnr": 45.298809857796776,
+      "edge_samples": 9877
+    },
+    {
+      "id": "4e3fc9af2562ac54df38f07598ea1c00989e0c97a9cb89f873afaaedff8120f0",
+      "references": [
+        "stgenm03.anm#1"
+      ],
+      "name": "stgenm/stg3enm2.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 17388,
+      "lossless_codec": "flate",
+      "web_bytes": 17388,
+      "web_codec": "flate"
+    },
+    {
+      "id": "519529fe99a9389f75e49fc78f72c0bc7798935ae181fb6e1f287987887bbbb1",
+      "references": [
+        "e07.anm#5"
+      ],
+      "name": "ending/e07cr.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 33091,
+      "lossless_codec": "palette-png",
+      "web_bytes": 33091,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "51cb5545e997b683a97da7a6a39aa0227e81eec03d3e8124cf4bd553f455aeb9",
+      "references": [
+        "stgenm03.anm#11"
+      ],
+      "name": "face/enemy3/face03no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 30216,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 30216,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "537980bd5a0167801a0f21a63c295134478befa398bdadb1abff170526dfe65b",
+      "references": [
+        "front.anm#1"
+      ],
+      "name": "ascii/pause.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 29852,
+      "lossless_codec": "flate",
+      "web_bytes": 29852,
+      "web_codec": "flate"
+    },
+    {
+      "id": "53dfb0a08a151a599b9754aa381151b3f66dd4bb7088190354ea44ef928f99fd",
+      "references": [
+        "title.ant#11"
+      ],
+      "name": "title/sl_pl01b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 28702,
+      "lossless_codec": "flate",
+      "web_bytes": 28702,
+      "web_codec": "flate"
+    },
+    {
+      "id": "57c1f361de384952167f95934e672ef8c4dba1ea4c38a0ed1ebeda928971d6d1",
+      "references": [
+        "stgenm04.anm#10"
+      ],
+      "name": "face/enemy4/face04lo_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 78218,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 36939,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.20533233631135,
+      "all_psnr": 37.654215659211616,
+      "edge_psnr": 45.14516298656518,
+      "edge_samples": 6398
+    },
+    {
+      "id": "5821c6ae952d45d4a55e7a4abc00ce12fc4e2c25d17c4a7b24d37a16ef83e372",
+      "references": [
+        "stgenm02.anm#11"
+      ],
+      "name": "card/cdbg02a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 26214,
+      "lossless_codec": "palette-png",
+      "web_bytes": 26214,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "58a088d3f3b6644870de6954592ba7ef4f28783414411509e8961d65437762e7",
+      "references": [
+        "stgenm04.anm#0"
+      ],
+      "name": "stgenm/stg4enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 19395,
+      "lossless_codec": "flate",
+      "web_bytes": 19395,
+      "web_codec": "flate"
+    },
+    {
+      "id": "5aea1e88cc72a7caa5dbb359bc01147460b424580744fbc46580a038a47bfc10",
+      "references": [
+        "stgenm05.anm#11"
+      ],
+      "name": "card/cdbg05a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 116096,
+      "lossless_codec": "flate",
+      "web_bytes": 116096,
+      "web_codec": "flate"
+    },
+    {
+      "id": "5b0b4812d27cabaa08055e8b9b5783eedeec82d21954f6eed485ef09c361ed5d",
+      "references": [
+        "stgenm04.anm#3"
+      ],
+      "name": "face/enemy4/face04n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 77632,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 37228,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.128486887846066,
+      "all_psnr": 37.606152615982005,
+      "edge_psnr": 45.311635123663045,
+      "edge_samples": 6428
+    },
+    {
+      "id": "5b7e9524d6363cfc8964562cd8200d49366f6be466e41508ca3911d9bc6ed374",
+      "references": [
+        "e11.anm#4"
+      ],
+      "name": "ending/e11c.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 186352,
+      "lossless_codec": "flate",
+      "web_bytes": 186352,
+      "web_codec": "flate"
+    },
+    {
+      "id": "5d175d35171119bb234c8f58dff2d8e4f17d3a3520b0703cee24f42bb612b643",
+      "references": [
+        "stage07.anm#1"
+      ],
+      "name": "background/stg7bg2.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 90403,
+      "lossless_codec": "png",
+      "web_bytes": 90403,
+      "web_codec": "png"
+    },
+    {
+      "id": "5d4f31d006f0081ab3babf0c4eefe7cb35be06f832351870ac5f94af3dc01b65",
+      "references": [
+        "pl00.anm#3"
+      ],
+      "name": "face/pl00/face_pl00hp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 49420,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21887,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.538764357622966,
+      "all_psnr": 39.093943703153975,
+      "edge_psnr": 44.25672332969639,
+      "edge_samples": 2085
+    },
+    {
+      "id": "605fdce0fc816cd066c3b411aa2e39c11733b2b3a58b65fce4aa9ccaf9a9b2d6",
+      "references": [
+        "stgenm02.anm#1"
+      ],
+      "name": "face/enemy2/face02no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 64037,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 28004,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.97784100246915,
+      "all_psnr": 39.35349792572568,
+      "edge_psnr": 43.93875912068498,
+      "edge_samples": 2458
+    },
+    {
+      "id": "6061279a6d09368252efcfea7042bf13d9eee91ba6dd4e1bdc52ff262a119237",
+      "references": [
+        "pl01.anm#9"
+      ],
+      "name": "face/pl01/face_pl01no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 7569,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 7569,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "60838f4c64354387ed2247fd05b81bfa74a703166691eb706eb0b9abf48746b4",
+      "references": [
+        "stage02.anm#0"
+      ],
+      "name": "background/stg2bg.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 106004,
+      "lossless_codec": "flate",
+      "web_bytes": 15569,
+      "web_codec": "quantized-palette-png",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.73421718534335,
+      "all_psnr": 35.73421718534335,
+      "edge_psnr": 41.12485612732871,
+      "edge_samples": 1016
+    },
+    {
+      "id": "608945f4924a28d0295c89166f65874f3fb00e17375d43efbe2e604f9958e2a7",
+      "references": [
+        "stgenm07.anm#14"
+      ],
+      "name": "card/cdbg07a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 68381,
+      "lossless_codec": "palette-png",
+      "web_bytes": 68381,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "60f14f8d3eb6d8fcde09d6d3e3e176e6f37d9c0ad465d4cf087cac3121ab9cef",
+      "references": [
+        "staff.ant#2"
+      ],
+      "name": "ending/staff2.png",
+      "format": 5,
+      "width": 256,
+      "height": 128,
+      "raw_bytes": 65536,
+      "lossless_bytes": 9661,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9661,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "614801947839e3b4b87c5dbfd77a32f6f7e7b693718911cb122319b6e2a3d987",
+      "references": [
+        "e10.anm#2"
+      ],
+      "name": "ending/e10b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 191601,
+      "lossless_codec": "flate",
+      "web_bytes": 191601,
+      "web_codec": "flate"
+    },
+    {
+      "id": "63934657077a5388e9a0b30abe8d6cb8c6eb89d0382af499f4e26a7b3e0dfc28",
+      "references": [
+        "stage06.anm#0"
+      ],
+      "name": "background/stg6bg.png",
+      "format": 3,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 103409,
+      "lossless_codec": "flate",
+      "web_bytes": 103409,
+      "web_codec": "flate"
+    },
+    {
+      "id": "657bdd3c2845296b41f9f91a3274b41d88a729d323602c6cc4ba045822ce2f7c",
+      "references": [
+        "stgenm04.anm#11"
+      ],
+      "name": "face/enemy4/face04no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 17318,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 17318,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "66445ec15bb3f31fed6bbf69dcf9c5c89e71619380a48a2500118f5006946800",
+      "references": [
+        "stgenm02.anm#10"
+      ],
+      "name": "face/enemy2/face02no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 22560,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 22560,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "665d13aa6d86b2376bacaf5810e3264f30d5885c909b0bc6e7960cd5a5c1bfb5",
+      "references": [
+        "ascii.anm#1"
+      ],
+      "name": "ascii/loading.png",
+      "format": 5,
+      "width": 128,
+      "height": 128,
+      "raw_bytes": 32768,
+      "lossless_bytes": 3292,
+      "lossless_codec": "flate",
+      "web_bytes": 3292,
+      "web_codec": "flate"
+    },
+    {
+      "id": "66cb7171e023759844ee55d090f1bfdbb932f4d4fdca1961737147a1675bfb21",
+      "references": [
+        "stgenm03.anm#13"
+      ],
+      "name": "card/cdbg03b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 27088,
+      "lossless_codec": "palette-png",
+      "web_bytes": 27088,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "66e8dd4bcb332077e505d12d9f627c07e38c7fbec409a55d06a4b7b71b0f8b11",
+      "references": [
+        "stage03.anm#1"
+      ],
+      "name": "background/stg3bg2.png",
+      "format": 1,
+      "width": 128,
+      "height": 128,
+      "raw_bytes": 65536,
+      "lossless_bytes": 34234,
+      "lossless_codec": "png",
+      "web_bytes": 34234,
+      "web_codec": "png"
+    },
+    {
+      "id": "67921ce42f96b4d8fec0022a9d5d1a8914e24336cc0d1ec71aafefd53200164b",
+      "references": [
+        "stgenm04.anm#2"
+      ],
+      "name": "face/enemy4/face04no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 77466,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 37091,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.142662055395014,
+      "all_psnr": 37.62006385468527,
+      "edge_psnr": 45.3605354123811,
+      "edge_samples": 6428
+    },
+    {
+      "id": "697d5ed35e296ef54b708258c7aa82cce941478121a8cc28344be699798d8ab5",
+      "references": [
+        "title.anm#3",
+        "title.ant#3"
+      ],
+      "name": "title/title_logo.png",
+      "format": 5,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 25156,
+      "lossless_codec": "flate",
+      "web_bytes": 25156,
+      "web_codec": "flate"
+    },
+    {
+      "id": "6afbc9e08f49b6a86a7ebe8a5eddeaee7ebc0fed9f42ccec0d93c3f34319cc24",
+      "references": [
+        "e02.anm#2"
+      ],
+      "name": "ending/e02b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 191750,
+      "lossless_codec": "flate",
+      "web_bytes": 191750,
+      "web_codec": "flate"
+    },
+    {
+      "id": "6b14b4253468c55d714b58c1b5780c5fae78b822366547ecb17666cc77c83537",
+      "references": [
+        "e09.anm#1"
+      ],
+      "name": "ending/e09ar.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32297,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32297,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "6bd114cb6a95b5a6a8aa240f50e4656ff352de34d58297d1239f50026f53cccf",
+      "references": [
+        "staff.anm#5",
+        "staff.ant#5"
+      ],
+      "name": "ending/st02.png",
+      "format": 3,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 85754,
+      "lossless_codec": "palette-png",
+      "web_bytes": 85754,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "6c358387b23faff53f20cc2eff496d632e686314e0edac0b3abe5af4b57d4e5c",
+      "references": [
+        "pl01.anm#0"
+      ],
+      "name": "player/pl01/pl01.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 34524,
+      "lossless_codec": "flate",
+      "web_bytes": 34524,
+      "web_codec": "flate"
+    },
+    {
+      "id": "6d2bf273afba4754bf9ce046462c76a59f0d1bd8e9b6ed66821ed412f841454c",
+      "references": [
+        "stgenm07.anm#0"
+      ],
+      "name": "stgenm/stg7enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 16500,
+      "lossless_codec": "flate",
+      "web_bytes": 16500,
+      "web_codec": "flate"
+    },
+    {
+      "id": "6e0eb5f70907da816aee37d2226183027423ab217318b5e7706dd7424cf87035",
+      "references": [
+        "e08.anm#3"
+      ],
+      "name": "ending/e08br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32589,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32589,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "6f64f62abae44c9a81650c37d8e1401359b9aa2f2470a1c65f8af6896669a9b1",
+      "references": [
+        "staff.anm#3",
+        "staff.ant#3"
+      ],
+      "name": "ending/st01.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 86738,
+      "lossless_codec": "palette-png",
+      "web_bytes": 86738,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "70481dae48ed40d4d84b2276b7a5f8eede8258dd67b58626e7423ac14bb7dcdb",
+      "references": [
+        "pl00.anm#2"
+      ],
+      "name": "face/pl00/face_pl00n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 49543,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 22118,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.53276111642055,
+      "all_psnr": 39.08938813874978,
+      "edge_psnr": 44.20080780194582,
+      "edge_samples": 2078
+    },
+    {
+      "id": "71b6d84c299d9c71424b0516488b201ce47e2ed8eeb6a759cfddc35ec818e753",
+      "references": [
+        "staff.anm#8",
+        "staff.ant#8"
+      ],
+      "name": "ending/st04.png",
+      "format": 3,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 52320,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 52320,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "72cb6f8721bf82511fa1a54f973eddd2fd6b7bb32677ac26ebbc67915e9f2d59",
+      "references": [
+        "stgenm06.anm#3"
+      ],
+      "name": "stgenm/stg6enm4.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 19756,
+      "lossless_codec": "flate",
+      "web_bytes": 19756,
+      "web_codec": "flate"
+    },
+    {
+      "id": "7506ee6989a687b7c7b97c0d07e7b5b8b8887c8b4a29b65aec6707aad4ee33d7",
+      "references": [
+        "title.ant#10"
+      ],
+      "name": "title/sl_pl00b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 26644,
+      "lossless_codec": "flate",
+      "web_bytes": 26644,
+      "web_codec": "flate"
+    },
+    {
+      "id": "756805d4203fb559c17e7ef260fce7f059af124b3460d962b4f81261310a539e",
+      "references": [
+        "stage01.anm#0"
+      ],
+      "name": "background/stg1bg.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 12386,
+      "lossless_codec": "palette-png",
+      "web_bytes": 12386,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "75a92cddc019cd1e6f4a0b9d1fd44eab165d5f36870c529bd6737842e78e56c4",
+      "references": [
+        "e11.anm#5"
+      ],
+      "name": "ending/e11cr.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32839,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32839,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "7741f1b81c963399f4cea96b225a1f93e28446cde0c925e9ab16136c0a7e42c6",
+      "references": [
+        "staff.anm#1",
+        "staff.ant#1"
+      ],
+      "name": "ending/staff.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 20967,
+      "lossless_codec": "palette-png",
+      "web_bytes": 20967,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "7770b38843574aed066a3d10a3dc19eb091c8eb54fc985566119424ea04f59f2",
+      "references": [
+        "pl01.anm#5"
+      ],
+      "name": "face/pl01/face_pl01sw_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 63822,
+      "lossless_codec": "png",
+      "web_bytes": 26104,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.95074491084118,
+      "all_psnr": 39.08175114103619,
+      "edge_psnr": 44.56166999414318,
+      "edge_samples": 2880
+    },
+    {
+      "id": "78717841887b2dc20089b8cc210a1ef14503ae17e5602bbf9e8e29bb1259a9f0",
+      "references": [
+        "e09.anm#0"
+      ],
+      "name": "ending/e09a.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 163862,
+      "lossless_codec": "flate",
+      "web_bytes": 163862,
+      "web_codec": "flate"
+    },
+    {
+      "id": "7a7ca3e6bab2fbe230abfa8f89c859017420aeecc90e0a3c7ca6d39c33f2f20b",
+      "references": [
+        "bullet.anm#2"
+      ],
+      "name": "bullet/etama2.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 43116,
+      "lossless_codec": "flate",
+      "web_bytes": 43116,
+      "web_codec": "flate"
+    },
+    {
+      "id": "7b188a6ce2038046cdeb6fb7153583fab974f2c2e77f3990502302a9951b1462",
+      "references": [
+        "stage04.anm#1"
+      ],
+      "name": "background/stg4bg3.png",
+      "format": 1,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 524288,
+      "lossless_bytes": 178391,
+      "lossless_codec": "png",
+      "web_bytes": 70875,
+      "web_codec": "quantized-png",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.45711246213229,
+      "all_psnr": 35.45711246213229,
+      "edge_psnr": 100
+    },
+    {
+      "id": "7c57f654e8851901092d2b46db5c2cb4ef43a0d1ac40b99e0059f47cc693c580",
+      "references": [
+        "stgenm07.anm#15"
+      ],
+      "name": "card/cdbg07b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 23940,
+      "lossless_codec": "flate",
+      "web_bytes": 23940,
+      "web_codec": "flate"
+    },
+    {
+      "id": "7ffe61bc35e1d2568a95e5cd1f06dfb467d28d875bd67d8597b20995958e25c8",
+      "references": [
+        "pl01.anm#4"
+      ],
+      "name": "face/pl01/face_pl01an_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 63195,
+      "lossless_codec": "png",
+      "web_bytes": 25987,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 37.09852346760047,
+      "all_psnr": 39.24207831460724,
+      "edge_psnr": 44.59795970453088,
+      "edge_samples": 2966
+    },
+    {
+      "id": "8153dac6896718c1deb1acffc2b40cd3304599d731babd6bab1aeaf30f92dce9",
+      "references": [
+        "e04.anm#2"
+      ],
+      "name": "ending/e04b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 206865,
+      "lossless_codec": "flate",
+      "web_bytes": 206865,
+      "web_codec": "flate"
+    },
+    {
+      "id": "81c932d46b7c110f18724edf59cd86f1ed8d1731a3f3c4cdbe942411067ef2f7",
+      "references": [
+        "title.anm#10"
+      ],
+      "name": "title/sl_pl00b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 25675,
+      "lossless_codec": "flate",
+      "web_bytes": 25675,
+      "web_codec": "flate"
+    },
+    {
+      "id": "82bb0556b683cdc34d56d6dd4ba313ac9e5ca25800ca17eea3783555b8046ebb",
+      "references": [
+        "stage07.anm#2"
+      ],
+      "name": "background/stg7bg3.png",
+      "format": 5,
+      "width": 32,
+      "height": 256,
+      "raw_bytes": 16384,
+      "lossless_bytes": 3724,
+      "lossless_codec": "palette-png",
+      "web_bytes": 3724,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "837b0b5cb06d9200458fc7b087bda0a3413473558235efefefbfbfdba631e785",
+      "references": [
+        "stgenm07.anm#17"
+      ],
+      "name": "face/enemy7/face07ct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 49515,
+      "lossless_codec": "flate",
+      "web_bytes": 49515,
+      "web_codec": "flate"
+    },
+    {
+      "id": "839f6d908cb9d010ba46bd6f4c99abd1b0e5c38447a2af0c75c26778eb088a4f",
+      "references": [
+        "pl01.anm#2"
+      ],
+      "name": "face/pl01/face_pl01n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 65932,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 27231,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.99554733100704,
+      "all_psnr": 39.04778585973232,
+      "edge_psnr": 44.864928228598544,
+      "edge_samples": 3365
+    },
+    {
+      "id": "83c7c80590a9bf1f0c9849429ce1645a383315e3531c26d8f7ba249a9630fa8e",
+      "references": [
+        "title.anm#12"
+      ],
+      "name": "title/weapon.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 81959,
+      "lossless_codec": "flate",
+      "web_bytes": 81959,
+      "web_codec": "flate"
+    },
+    {
+      "id": "85a7edaaa4e6427e84a248297d13d189bbea96ed3cc8b5ebaa7152840fc46c7b",
+      "references": [
+        "title.anm#2",
+        "title.ant#2"
+      ],
+      "name": "title/title00b.png",
+      "format": 1,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 245760,
+      "lossless_bytes": 92501,
+      "lossless_codec": "png",
+      "web_bytes": 92501,
+      "web_codec": "png"
+    },
+    {
+      "id": "86ce224d6c06027b321bdf1a94458f949a460529306a0b31d010681f5e75723e",
+      "references": [
+        "stgenm07.anm#9"
+      ],
+      "name": "face/enemy7/face07dp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 83811,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 32954,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.77839749930973,
+      "all_psnr": 36.92696004431285,
+      "edge_psnr": 44.95548909503121,
+      "edge_samples": 2518
+    },
+    {
+      "id": "86f679b8eddb9fae5e89da2a89a3ebd630ab7c2f9b09afb2a74f257b03da53dd",
+      "references": [
+        "title.ant#6"
+      ],
+      "name": "title/select01.png",
+      "format": 1,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 134418,
+      "lossless_codec": "flate",
+      "web_bytes": 134418,
+      "web_codec": "flate"
+    },
+    {
+      "id": "87a5d511dc3de32767fe043045e67a18a925d89574bab27ee7c9602944380ea1",
+      "references": [
+        "stgenm01.anm#0"
+      ],
+      "name": "stgenm/stg1enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 16456,
+      "lossless_codec": "flate",
+      "web_bytes": 16456,
+      "web_codec": "flate"
+    },
+    {
+      "id": "88978ca2441cf9021ed1fe6b1c1ebc3773d4b85719cb9aeb2df978ae50fa1bd9",
+      "references": [
+        "stage04.anm#0"
+      ],
+      "name": "background/stg4bg.png",
+      "format": 1,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 1048576,
+      "lossless_bytes": 282379,
+      "lossless_codec": "png",
+      "web_bytes": 19543,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 38.15996592768843,
+      "all_psnr": 38.15996592768843,
+      "edge_psnr": 100
+    },
+    {
+      "id": "895ef9521e62cc2a31c9373878796680678d272cb24ea72e87f644e2b8fadd27",
+      "references": [
+        "staff.anm#6",
+        "staff.ant#6"
+      ],
+      "name": "ending/st03.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 98976,
+      "lossless_codec": "palette-png",
+      "web_bytes": 98976,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "8962f77f27e6ca49a24d4c8516301ad45ba9ff561dafc6ba858e0b0ca6eba76f",
+      "references": [
+        "staff.anm#10",
+        "staff.ant#10"
+      ],
+      "name": "ending/st05r.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 24198,
+      "lossless_codec": "palette-png",
+      "web_bytes": 24198,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "89686cb20c23ae959aabff0392e7702fc13227e87697f62fcf17f272357f2102",
+      "references": [
+        "pl01.anm#6"
+      ],
+      "name": "face/pl01/face_pl01dp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 67145,
+      "lossless_codec": "png",
+      "web_bytes": 27827,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 37.033645436596714,
+      "all_psnr": 38.99803072480168,
+      "edge_psnr": 45.52976281124805,
+      "edge_samples": 3939
+    },
+    {
+      "id": "8bb48b82af08ab0b79a5a154c1a8194777ffc93dc58afa86a6ba5f5b964e4e7a",
+      "references": [
+        "e10.anm#1"
+      ],
+      "name": "ending/e10ar.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32735,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32735,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "8c0262e7be870a673c3cf2972978960806f13056d9126d441bd707c7a7a9a0e4",
+      "references": [
+        "e00.anm#2"
+      ],
+      "name": "ending/e00b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 188362,
+      "lossless_codec": "flate",
+      "web_bytes": 188362,
+      "web_codec": "flate"
+    },
+    {
+      "id": "8cc536a57a4ac81f2a7519263d236c90d1dd622be169d26d9f1acdf67e82a211",
+      "references": [
+        "stgenm05.anm#6"
+      ],
+      "name": "face/enemy5/face05dp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 80064,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 37953,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.328963631520274,
+      "all_psnr": 37.89746963312888,
+      "edge_psnr": 47.045631216606566,
+      "edge_samples": 5817
+    },
+    {
+      "id": "8ce0b12eb762edc7cce471c891f79077ee53efc4c3f52d42e5c5b2e2369ec24c",
+      "references": [
+        "stgenm06.anm#2"
+      ],
+      "name": "stgenm/stg6enm3.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 2091,
+      "lossless_codec": "flate",
+      "web_bytes": 2091,
+      "web_codec": "flate"
+    },
+    {
+      "id": "8dc70a5bb8ab2c70d4191d09b1afa614e36edfa608bcb40d135dab40093fc7be",
+      "references": [
+        "e10.anm#4"
+      ],
+      "name": "ending/e10c.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 192196,
+      "lossless_codec": "flate",
+      "web_bytes": 192196,
+      "web_codec": "flate"
+    },
+    {
+      "id": "8e8ae568d73766f86d8be4ccd7fe3663e71cd2bd888addb87f020484151d6889",
+      "references": [
+        "front.anm#2",
+        "front.ant#2"
+      ],
+      "name": "front/ename.png",
+      "format": 5,
+      "width": 128,
+      "height": 256,
+      "raw_bytes": 65536,
+      "lossless_bytes": 1984,
+      "lossless_codec": "palette-png",
+      "web_bytes": 1984,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "8f1bfc24dbf7728f73569726f2915c2903836af66bc3e99deec3df079e269544",
+      "references": [
+        "stgenm06.anm#13",
+        "stgenm07.anm#27"
+      ],
+      "name": "face/enemy6/face06no_d.png",
+      "format": 1,
+      "width": 512,
+      "height": 128,
+      "raw_bytes": 262144,
+      "lossless_bytes": 47789,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 18776,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.25562538897711,
+      "all_psnr": 39.4113898624525,
+      "edge_psnr": 44.384513661524316,
+      "edge_samples": 2088
+    },
+    {
+      "id": "8f2a2921c2be4aab8d9c24b2fa0bda84329f22e39444d5db60f2a5858d62b9c3",
+      "references": [
+        "stgenm07.anm#16"
+      ],
+      "name": "face/enemy7/ename07.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 4028,
+      "lossless_codec": "flate",
+      "web_bytes": 4028,
+      "web_codec": "flate"
+    },
+    {
+      "id": "8fd2c261fe41bdcdba49d4c6141ff7fa78ebacb77a3f01c2c721f525aa0cc1b7",
+      "references": [
+        "e11.anm#2"
+      ],
+      "name": "ending/e11b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 201945,
+      "lossless_codec": "flate",
+      "web_bytes": 201945,
+      "web_codec": "flate"
+    },
+    {
+      "id": "9019944552f1bb4c65ec605c1d95fd5d9ad20688e9642856876059f305c1fc68",
+      "references": [
+        "stage04.anm#2"
+      ],
+      "name": "background/stg4bg7.png",
+      "format": 1,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 688128,
+      "lossless_bytes": 167612,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 31139,
+      "web_codec": "jpeg-rgb-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 38.17109665127863,
+      "all_psnr": 38.17109665127863,
+      "edge_psnr": 44.990188803614366,
+      "edge_samples": 281
+    },
+    {
+      "id": "9022bded2dafa64f23a204aaad79f80591cb1d7d6be83bed687606584bda120e",
+      "references": [
+        "stgenm06.anm#0",
+        "stgenm07.anm#3"
+      ],
+      "name": "stgenm/stg6enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 26327,
+      "lossless_codec": "flate",
+      "web_bytes": 26327,
+      "web_codec": "flate"
+    },
+    {
+      "id": "9210ca52f97fdff1e53ee7116051501e3dcf99c1b2e5767a53ec2d9e24133fcc",
+      "references": [
+        "stgenm04.anm#13"
+      ],
+      "name": "card/cdbg04b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 47694,
+      "lossless_codec": "flate",
+      "web_bytes": 47694,
+      "web_codec": "flate"
+    },
+    {
+      "id": "92d84e4d36b908d9403ba758d7c228b92ea1518233856789341c68ee0aa65e1d",
+      "references": [
+        "stgenm03.anm#9"
+      ],
+      "name": "face/enemy3/face03sp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 95818,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 41776,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.661222386449076,
+      "all_psnr": 36.81373661235297,
+      "edge_psnr": 44.54611850469018,
+      "edge_samples": 3917
+    },
+    {
+      "id": "941a6b1c3154fc1766d1de506d5dab98a44bbd7c357c8d88094074d85fcff12e",
+      "references": [
+        "e01.anm#2"
+      ],
+      "name": "ending/e01b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 184104,
+      "lossless_codec": "flate",
+      "web_bytes": 184104,
+      "web_codec": "flate"
+    },
+    {
+      "id": "94431639da2ba8fe8fb3f66e1a8c709fb86503c7ebcc3147cff4b5769a45fdc4",
+      "references": [
+        "title.anm#7"
+      ],
+      "name": "title/rank00.png",
+      "format": 1,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 1048576,
+      "lossless_bytes": 108829,
+      "lossless_codec": "flate",
+      "web_bytes": 108829,
+      "web_codec": "flate"
+    },
+    {
+      "id": "95c070ac182e03c189e90df33f0b30955174b6a7fd400c6be71fc9bf300b7ed3",
+      "references": [
+        "e07.anm#2"
+      ],
+      "name": "ending/e07b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 183881,
+      "lossless_codec": "flate",
+      "web_bytes": 183881,
+      "web_codec": "flate"
+    },
+    {
+      "id": "9648c5cd5417ed8eea0365123af46345c0086f5ee2ee1b0b1b1e08d7118074c2",
+      "references": [
+        "stgenm02.anm#9"
+      ],
+      "name": "face/enemy2/face02lo_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 66467,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 30341,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.987351352072814,
+      "all_psnr": 39.316300737609254,
+      "edge_psnr": 44.10931268333169,
+      "edge_samples": 3486
+    },
+    {
+      "id": "96bb1293a68945514098af1d6ddd7ac658884dab1c0dd1244df600dbc8f03e8a",
+      "references": [
+        "stgenm07.anm#12"
+      ],
+      "name": "face/enemy7/face07lo_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 87433,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 36355,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.66631670648061,
+      "all_psnr": 36.800940053616785,
+      "edge_psnr": 42.728081268643486,
+      "edge_samples": 3797
+    },
+    {
+      "id": "989f4c5538e33aac8a80edc06fd0a09a8e009c86a4c99f03d799bf8d1d6ed28e",
+      "references": [
+        "front.ant#1"
+      ],
+      "name": "ascii/pause.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 23943,
+      "lossless_codec": "flate",
+      "web_bytes": 23943,
+      "web_codec": "flate"
+    },
+    {
+      "id": "9a7bf2ec06b6b8d4f6e66669538683b53b7c8ab6c27a112e6237c3ee70574708",
+      "references": [
+        "stage01.anm#2",
+        "stage05.anm#2"
+      ],
+      "name": "background/stg1bg3.png",
+      "format": 1,
+      "width": 128,
+      "height": 128,
+      "raw_bytes": 65536,
+      "lossless_bytes": 9109,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9109,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "9b22dea43f7dac14d0091ddec666806995531e4d27fb3521bba175953b144115",
+      "references": [
+        "pl00.anm#0"
+      ],
+      "name": "player/pl00/pl00.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 45345,
+      "lossless_codec": "flate",
+      "web_bytes": 45345,
+      "web_codec": "flate"
+    },
+    {
+      "id": "9c5da55611e677fef72b7222d1bd6199a1c916c66068d9a55ef8e5ceb0f5b1c5",
+      "references": [
+        "stgenm05.anm#12",
+        "stgenm07.anm#29"
+      ],
+      "name": "card/cdbg05b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 13373,
+      "lossless_codec": "palette-png",
+      "web_bytes": 13373,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "9e11a659a2665cd750280dddaaa3fe3beeeaa42c381f87e2bf51ce20db93ab72",
+      "references": [
+        "stgenm06.anm#17",
+        "stgenm07.anm#30"
+      ],
+      "name": "face/enemy6/face06ct.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 76000,
+      "lossless_codec": "flate",
+      "web_bytes": 76000,
+      "web_codec": "flate"
+    },
+    {
+      "id": "9f12155938484b8a523dd2fa3b1172298f2918b196e4d0bace7eec7b4477e6fd",
+      "references": [
+        "e07.anm#3"
+      ],
+      "name": "ending/e07br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32322,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32322,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "9f675ad5b3f5871282fa65100a0ca80519faa4139f1916e7370a9a4c8f95496f",
+      "references": [
+        "staff.anm#9",
+        "staff.ant#9"
+      ],
+      "name": "ending/st05.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 95781,
+      "lossless_codec": "palette-png",
+      "web_bytes": 95781,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "9fb9068748b6a4157504e28263c92788bffd190a0abaa30f7eba33a36b24168c",
+      "references": [
+        "st04logo.anm#0"
+      ],
+      "name": "front/st04logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 8120,
+      "lossless_codec": "palette-png",
+      "web_bytes": 8120,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "a11c0e186e77ff8acc0a151d8b58110f6a587cdcb5d8fe515415112b16a8bb0b",
+      "references": [
+        "stgenm03.anm#10"
+      ],
+      "name": "face/enemy3/face03lo_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 97717,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 43567,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.616760445188866,
+      "all_psnr": 36.75777734280815,
+      "edge_psnr": 44.40509845802281,
+      "edge_samples": 4316
+    },
+    {
+      "id": "a4ce713b0f4c68facee4a8a296b27188c16eaf7e947e76aa61dc3a2c783df06d",
+      "references": [
+        "bullet.anm#0"
+      ],
+      "name": "bullet/etama.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 103182,
+      "lossless_codec": "flate",
+      "web_bytes": 103182,
+      "web_codec": "flate"
+    },
+    {
+      "id": "a5a706ae116c34fe16a61c7364623358fd565996438bd60f3efa0072e6bfe4c3",
+      "references": [
+        "stgenm05.anm#10"
+      ],
+      "name": "face/enemy5/face05no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 36635,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 36635,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "a5d695096a572f00309e5869365b79358f37d2930c9804278b1b1f23fe6cf2c9",
+      "references": [
+        "e00.anm#3"
+      ],
+      "name": "ending/e00br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32361,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32361,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "a7eb258730275ef207a0adb9b1f59d38affe73e992c9f15495f088beadecc64e",
+      "references": [
+        "stage01.anm#1"
+      ],
+      "name": "background/stg1bg2.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 147305,
+      "lossless_codec": "flate",
+      "web_bytes": 96250,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.173331897770765,
+      "all_psnr": 35.10543175799997,
+      "edge_psnr": 51.16443232193064,
+      "edge_samples": 64395
+    },
+    {
+      "id": "a8a1e70398af3f8600e33de0a324bbe9734515d5d22c218d278d6c243a7fe58c",
+      "references": [
+        "staff.anm#0",
+        "staff.ant#0"
+      ],
+      "name": "ending/st00.png",
+      "format": 1,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 524288,
+      "lossless_bytes": 142986,
+      "lossless_codec": "png",
+      "web_bytes": 9025,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 37.58054781895474,
+      "all_psnr": 37.58054781895474,
+      "edge_psnr": 100
+    },
+    {
+      "id": "a954a548b0d546ec126229cfe67cf72cd01d0ea548fb9b5b58baf6c246af867d",
+      "references": [
+        "pl00.anm#9"
+      ],
+      "name": "face/pl00/face_pl00no_d.png",
+      "format": 1,
+      "width": 256,
+      "height": 64,
+      "raw_bytes": 65536,
+      "lossless_bytes": 11705,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 11705,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "aa5ef964b83d2f41a44dee75b441ba3cfb3a5cc8afac2c8ca87fcda5370d54a0",
+      "references": [
+        "e08.anm#2"
+      ],
+      "name": "ending/e08b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 187822,
+      "lossless_codec": "flate",
+      "web_bytes": 187822,
+      "web_codec": "flate"
+    },
+    {
+      "id": "ad86e951dd4fc0a8734459687f30996c7db130e7e026b6af6121c223040c414e",
+      "references": [
+        "ascii.anm#0"
+      ],
+      "name": "ascii/ascii.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 21879,
+      "lossless_codec": "flate",
+      "web_bytes": 21879,
+      "web_codec": "flate"
+    },
+    {
+      "id": "b151a0d841786d210991320c809fe8b0514c15a74a254a7ee622ab185e294034",
+      "references": [
+        "title.anm#11"
+      ],
+      "name": "title/sl_pl01b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 26928,
+      "lossless_codec": "flate",
+      "web_bytes": 26928,
+      "web_codec": "flate"
+    },
+    {
+      "id": "b1ec52d2d070c6a7156646fda8752516552b6bd49cd54e6a84c82d71b3dae367",
+      "references": [
+        "st04logo.ant#0"
+      ],
+      "name": "front/st04logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 7998,
+      "lossless_codec": "palette-png",
+      "web_bytes": 7998,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "b415d85d39303479695c2956a74314f8e978b985caa5dd5dc76e59c1b643e6c6",
+      "references": [
+        "e06.anm#3"
+      ],
+      "name": "ending/e06br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32279,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32279,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "b5940f8e42a4cd439c2277f71d608d47aa0001da87a0c374f82b4c1387a8d497",
+      "references": [
+        "title.anm#6"
+      ],
+      "name": "title/select01.png",
+      "format": 1,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 151198,
+      "lossless_codec": "flate",
+      "web_bytes": 151198,
+      "web_codec": "flate"
+    },
+    {
+      "id": "b5d78ca0abb01e04dbb548e137a9500825d8c2d3e952e55260095bc2242cb137",
+      "references": [
+        "stgenm06.anm#4",
+        "stgenm07.anm#18"
+      ],
+      "name": "face/enemy6/face06no_u.png",
+      "format": 1,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 524288,
+      "lossless_bytes": 130813,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 54890,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.59715656707965,
+      "all_psnr": 39.09610051233953,
+      "edge_psnr": 44.9652437814344,
+      "edge_samples": 7489
+    },
+    {
+      "id": "b631cccdeab7052d80ea44eb3c0006dbfd96b0c93785f54affc1e18bf6efbdb7",
+      "references": [
+        "stgenm02.anm#14"
+      ],
+      "name": "face/enemy2/face02ct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 40158,
+      "lossless_codec": "flate",
+      "web_bytes": 40158,
+      "web_codec": "flate"
+    },
+    {
+      "id": "b6ea40425daaa2d6bc3718e34c26dba9455ace1fc62dc9c3c43d53364cf72cf8",
+      "references": [
+        "pl00.anm#7"
+      ],
+      "name": "face/pl00/face_pl00pr_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 53126,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 23074,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.62643762840229,
+      "all_psnr": 38.81626194171632,
+      "edge_psnr": 46.0575072102409,
+      "edge_samples": 2863
+    },
+    {
+      "id": "b73f93e168a071895b8821346c1f9d649477533a894c32a3cc691781d8bfccff",
+      "references": [
+        "e05.anm#2"
+      ],
+      "name": "ending/e05b.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 205885,
+      "lossless_codec": "flate",
+      "web_bytes": 205885,
+      "web_codec": "flate"
+    },
+    {
+      "id": "b86764b01616499814bd59b24818517c0c52e9938719f18c2693688d8c2d573d",
+      "references": [
+        "stgenm06.anm#15"
+      ],
+      "name": "card/cdbg06b.png",
+      "format": 5,
+      "width": 128,
+      "height": 128,
+      "raw_bytes": 32768,
+      "lossless_bytes": 6396,
+      "lossless_codec": "palette-png",
+      "web_bytes": 6396,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "b8a4cdee07669d4178643dc67db6607f7523aba6c89cb44c9d953488588d3597",
+      "references": [
+        "e10.anm#0"
+      ],
+      "name": "ending/e10a.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 190613,
+      "lossless_codec": "flate",
+      "web_bytes": 190613,
+      "web_codec": "flate"
+    },
+    {
+      "id": "b9efadf1311a5ae22ac1bf9820c5b53aea15656b8f704af036a51dffc502291b",
+      "references": [
+        "e06.anm#5"
+      ],
+      "name": "ending/e06cr.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 39761,
+      "lossless_codec": "flate",
+      "web_bytes": 39761,
+      "web_codec": "flate"
+    },
+    {
+      "id": "baac1aecc5da0f5737794296048db1935737e797348387e655e2293fbf77ff04",
+      "references": [
+        "pl01.anm#7"
+      ],
+      "name": "face/pl01/face_pl01pr_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 66682,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 27290,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.96302629171397,
+      "all_psnr": 38.92871436124902,
+      "edge_psnr": 45.39243227090563,
+      "edge_samples": 3872
+    },
+    {
+      "id": "bb75a2de9c47d26c7eef2e38b86379ca265cfe0589192dcc85a8836b6f9e65fe",
+      "references": [
+        "stgenm05.anm#5"
+      ],
+      "name": "face/enemy5/face05sw_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 77221,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 35483,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.266237007775544,
+      "all_psnr": 37.935426957787435,
+      "edge_psnr": 46.73519929784331,
+      "edge_samples": 5222
+    },
+    {
+      "id": "bbb433e2b2f5f6d35721f9ca76fd1be511c1700ae196fd8f4169e7a9d304302a",
+      "references": [
+        "stgenm01.anm#1"
+      ],
+      "name": "face/enemy1/face01no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 51245,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21392,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.596168833803446,
+      "all_psnr": 39.12593382715469,
+      "edge_psnr": 44.33894862086254,
+      "edge_samples": 2011
+    },
+    {
+      "id": "bca764a7e000dceee42ec84d09248742be9577797ad9be64f5cb3a26497baa5e",
+      "references": [
+        "stgenm07.anm#4"
+      ],
+      "name": "face/enemy7/face07no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 83434,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 32866,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.71627331112336,
+      "all_psnr": 36.91012047913386,
+      "edge_psnr": 44.72877595886338,
+      "edge_samples": 2457
+    },
+    {
+      "id": "bdad6da5d06f978b15609ad9a9d00eb27fdbef974b87182487511df12fb03366",
+      "references": [
+        "stgenm04.anm#9"
+      ],
+      "name": "face/enemy4/face04sp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 79164,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 37815,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.235153399964,
+      "all_psnr": 37.581584222710795,
+      "edge_psnr": 45.53189567259392,
+      "edge_samples": 6784
+    },
+    {
+      "id": "c0782802f5f78146d4d50014658b71176651da2431ea1a32cea0403330c058cc",
+      "references": [
+        "stgenm05.anm#8"
+      ],
+      "name": "face/enemy5/face05sp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 78861,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 36849,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.31190895576597,
+      "all_psnr": 37.93667307753087,
+      "edge_psnr": 46.73945974025016,
+      "edge_samples": 5242
+    },
+    {
+      "id": "c1b54580b50507ab1751aeb4c983adc7fafe8c8ab3baab1761106901fc5abdc0",
+      "references": [
+        "stgenm04.anm#12"
+      ],
+      "name": "card/cdbg04a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 117367,
+      "lossless_codec": "flate",
+      "web_bytes": 117367,
+      "web_codec": "flate"
+    },
+    {
+      "id": "c1c2fb534687655c84e0999fc011b2f2a835c2695b689aa3e03e045e1801c5c7",
+      "references": [
+        "e03.anm#3",
+        "e04.anm#3",
+        "e05.anm#3"
+      ],
+      "name": "ending/e03br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 42018,
+      "lossless_codec": "flate",
+      "web_bytes": 42018,
+      "web_codec": "flate"
+    },
+    {
+      "id": "c2a87780631ebb72c13bd8193d872e84f245b21bce00819269131e1a71b281bd",
+      "references": [
+        "stgenm04.anm#1"
+      ],
+      "name": "stgenm/stg4benm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10165,
+      "lossless_codec": "flate",
+      "web_bytes": 10165,
+      "web_codec": "flate"
+    },
+    {
+      "id": "c2c1417fd5ceb3e896d12a95ca94fcdfce6cd17b5bbaef4dca3d42c6cdabe176",
+      "references": [
+        "st03logo.ant#0"
+      ],
+      "name": "front/st03logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10939,
+      "lossless_codec": "palette-png",
+      "web_bytes": 10939,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "c3082356d0f13e021e01cd26c2d664d4868d3221c5df3d08b3c8ceb7b06e14bc",
+      "references": [
+        "stage03.anm#3"
+      ],
+      "name": "background/stg3bg4.png",
+      "format": 1,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 99766,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 63403,
+      "web_codec": "jpeg-rgb-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 36.00606757780962,
+      "all_psnr": 38.20032673190103,
+      "edge_psnr": 56.231272500759474,
+      "edge_samples": 62704
+    },
+    {
+      "id": "c5a3b624a8b66bd9780b5191f54b97df1498267c5b2297999c727dbaaa282c12",
+      "references": [
+        "stgenm05.anm#13"
+      ],
+      "name": "face/enemy5/ename05.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 4206,
+      "lossless_codec": "flate",
+      "web_bytes": 4206,
+      "web_codec": "flate"
+    },
+    {
+      "id": "c768667c78985826ed16b470914237ce3dcc46bc6647e8b1783bb26c4f1ae646",
+      "references": [
+        "stgenm01.anm#4"
+      ],
+      "name": "face/enemy1/face01an_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 51758,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21754,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.616461397281604,
+      "all_psnr": 39.14563393506567,
+      "edge_psnr": 44.33894862086254,
+      "edge_samples": 2011
+    },
+    {
+      "id": "c7835d1776969fccb3cbe5319dd122d9a269bd530049ee56e88daee2045957aa",
+      "references": [
+        "e09.anm#4"
+      ],
+      "name": "ending/e09c.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 192630,
+      "lossless_codec": "flate",
+      "web_bytes": 192630,
+      "web_codec": "flate"
+    },
+    {
+      "id": "c899a18f20bf372ebc4e79423a546f18ea85812bf03ba19dc83ae284c5f7a9ed",
+      "references": [
+        "pl01.anm#8"
+      ],
+      "name": "face/pl01/face_pl01sp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 64907,
+      "lossless_codec": "png",
+      "web_bytes": 26830,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.99162072056865,
+      "all_psnr": 39.028368849349334,
+      "edge_psnr": 44.98180950335023,
+      "edge_samples": 3335
+    },
+    {
+      "id": "c95dd2253403f663b127b21be668e9ef7cd0d6559242cf4d81089becca566e65",
+      "references": [
+        "stgenm03.anm#2"
+      ],
+      "name": "face/enemy3/face03no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 95876,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 41644,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.625498529253356,
+      "all_psnr": 36.83876581997205,
+      "edge_psnr": 44.39563966473677,
+      "edge_samples": 3852
+    },
+    {
+      "id": "cab31b841eccac3e269f25afc2eceea137885e7ad0ef4bf6c6aa28b1ba680dd8",
+      "references": [
+        "pl01.anm#1"
+      ],
+      "name": "face/pl01/face_pl01no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 63228,
+      "lossless_codec": "png",
+      "web_bytes": 25846,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 37.015245464391604,
+      "all_psnr": 39.161652420795484,
+      "edge_psnr": 44.570321856673615,
+      "edge_samples": 2978
+    },
+    {
+      "id": "ccfbfb5067893715171285d35948fe79a697c49babb6082be8fa13be727cc777",
+      "references": [
+        "title.anm#5",
+        "title.ant#5"
+      ],
+      "name": "title/select00b.png",
+      "format": 1,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 245760,
+      "lossless_bytes": 84373,
+      "lossless_codec": "png",
+      "web_bytes": 84373,
+      "web_codec": "png"
+    },
+    {
+      "id": "cd170c4778a439c4954238219433b67831a6d48715f7f6b0d19498aba4c546b8",
+      "references": [
+        "stgenm06.anm#9",
+        "stgenm07.anm#23"
+      ],
+      "name": "face/enemy6/face06dp_u.png",
+      "format": 1,
+      "width": 512,
+      "height": 256,
+      "raw_bytes": 524288,
+      "lossless_bytes": 131141,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 55144,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.579431032525044,
+      "all_psnr": 39.07932112780735,
+      "edge_psnr": 44.9652437814344,
+      "edge_samples": 7489
+    },
+    {
+      "id": "cd68c4f6156fbe1db2a24a1c5427008186d96698c416613c83fa93a4ae346f7a",
+      "references": [
+        "e00.anm#1",
+        "e01.anm#1",
+        "e02.anm#1",
+        "e03.anm#1",
+        "e04.anm#1",
+        "e05.anm#1",
+        "e06.anm#1",
+        "e07.anm#1",
+        "e08.anm#1",
+        "e11.anm#1"
+      ],
+      "name": "ending/e00ar.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32377,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32377,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "cdbe70094b81da1df27717e43355f4801e5ba2d1fc0fcc17490634718fee04ca",
+      "references": [
+        "title.anm#4",
+        "title.ant#4"
+      ],
+      "name": "title/select00.png",
+      "format": 1,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 983040,
+      "lossless_bytes": 328555,
+      "lossless_codec": "png",
+      "web_bytes": 125838,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 37.40949875682178,
+      "all_psnr": 37.40949875682178,
+      "edge_psnr": 100
+    },
+    {
+      "id": "ce5aaf99618be3475979e529b384d186fa29c18cb8e71a468d08eaafd2a33c47",
+      "references": [
+        "e09.anm#3"
+      ],
+      "name": "ending/e09br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32411,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32411,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "d0689b308950f6e3957182d0c89d67bcc33aae096a564d4c9d6f079f52f2ee4b",
+      "references": [
+        "pl00.anm#8"
+      ],
+      "name": "face/pl00/face_pl00sp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 49911,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 22145,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.601330939927124,
+      "all_psnr": 39.0981783503194,
+      "edge_psnr": 44.779993233910595,
+      "edge_samples": 2094
+    },
+    {
+      "id": "d10e7600ded258622cae9386ff8a447da86ae8d00967f57c137a8144fcaab128",
+      "references": [
+        "pl01.anm#3"
+      ],
+      "name": "face/pl01/face_pl01hp_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 64799,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 26498,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 37.02426789303153,
+      "all_psnr": 39.11773326658882,
+      "edge_psnr": 44.76661179444971,
+      "edge_samples": 3145
+    },
+    {
+      "id": "d22bcdd14d7f294a0799b4ca6597e7e8684af7467475e3aa58fb507cfeb7aeb9",
+      "references": [
+        "stgenm01.anm#19"
+      ],
+      "name": "face/enemy1/ename01.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 4114,
+      "lossless_codec": "flate",
+      "web_bytes": 4114,
+      "web_codec": "flate"
+    },
+    {
+      "id": "d3469a2ee22ed35f3d77e73b788431fc6561ef088e7b007d80c84bc0ad0e79b7",
+      "references": [
+        "sig.anm#1"
+      ],
+      "name": "loading/sig_r.png",
+      "format": 1,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 245760,
+      "lossless_bytes": 70497,
+      "lossless_codec": "png",
+      "web_bytes": 70497,
+      "web_codec": "png"
+    },
+    {
+      "id": "d4e88a4cf152b23264c116f4b94a44d1c4fd21c3c3b5fa2cce8e037230f7686e",
+      "references": [
+        "title.ant#12"
+      ],
+      "name": "title/weapon.png",
+      "format": 5,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 524288,
+      "lossless_bytes": 62436,
+      "lossless_codec": "flate",
+      "web_bytes": 62436,
+      "web_codec": "flate"
+    },
+    {
+      "id": "d5aaec0237bc38317d47f4e07b83a60955b99896e52c752c426ce5ceee2cca8a",
+      "references": [
+        "stgenm03.anm#14"
+      ],
+      "name": "face/enemy3/ename03.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 4553,
+      "lossless_codec": "flate",
+      "web_bytes": 4553,
+      "web_codec": "flate"
+    },
+    {
+      "id": "d6f8adffba361745a8550d8bedd19550c0e84e66861f101ee6ab076d92ae208e",
+      "references": [
+        "st01logo.ant#0"
+      ],
+      "name": "front/st01logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10109,
+      "lossless_codec": "palette-png",
+      "web_bytes": 10109,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "d7555d760549461a3a2cdfd0c666b7f959abf1a5fa26727da2d98b0db0f9cc77",
+      "references": [
+        "stage02.anm#1"
+      ],
+      "name": "background/stg2bg2.png",
+      "format": 1,
+      "width": 512,
+      "height": 512,
+      "raw_bytes": 1048576,
+      "lossless_bytes": 357814,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 215694,
+      "web_codec": "jpeg-rgb-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 34.23362579983726,
+      "all_psnr": 35.34304932688486,
+      "edge_psnr": 45.614644238809504,
+      "edge_samples": 175396
+    },
+    {
+      "id": "d762bd34c3f2747e68f558b3014f5f96ec19f5acb9220010dfd646588637fb88",
+      "references": [
+        "st07logo.ant#0"
+      ],
+      "name": "front/st07logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 9881,
+      "lossless_codec": "palette-png",
+      "web_bytes": 9881,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "d97b080b15095a72b1d2cb8876c0f6d0dd149123a0f6dd989b0561d12f5cfce1",
+      "references": [
+        "e00.anm#0",
+        "e01.anm#0",
+        "e02.anm#0",
+        "e03.anm#0",
+        "e04.anm#0",
+        "e05.anm#0",
+        "e06.anm#0",
+        "e07.anm#0",
+        "e08.anm#0",
+        "e11.anm#0"
+      ],
+      "name": "ending/e00a.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 187321,
+      "lossless_codec": "flate",
+      "web_bytes": 187321,
+      "web_codec": "flate"
+    },
+    {
+      "id": "db33eff0d05497c58390ec6688863b8eaf253afcb0cd547fd92295aaf89e2961",
+      "references": [
+        "e11.anm#3"
+      ],
+      "name": "ending/e11br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 44460,
+      "lossless_codec": "flate",
+      "web_bytes": 44460,
+      "web_codec": "flate"
+    },
+    {
+      "id": "dc32d1dfbcd1072eea5178c0a35513ad784b75f02419d1034b8fc4743231ae19",
+      "references": [
+        "e08.anm#5"
+      ],
+      "name": "ending/e08cr.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32309,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32309,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "dfe55eadf4f243d06682d02e30f1cfea5f1cce8a304a2bafa1db89e5e9dfa07e",
+      "references": [
+        "stgenm02.anm#0"
+      ],
+      "name": "stgenm/stg2enm.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 9388,
+      "lossless_codec": "flate",
+      "web_bytes": 9388,
+      "web_codec": "flate"
+    },
+    {
+      "id": "e0ceb3822d8de5c6b09731359deba8943cabdaf7dba6c27b0c0a7e5a7f197fc6",
+      "references": [
+        "e07.anm#4"
+      ],
+      "name": "ending/e07c.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 186824,
+      "lossless_codec": "flate",
+      "web_bytes": 186824,
+      "web_codec": "flate"
+    },
+    {
+      "id": "e176f65c8692aa1227ccc27b2e7a1984c286acee19693b3da4884379c04e6d6d",
+      "references": [
+        "stgenm03.anm#3"
+      ],
+      "name": "face/enemy3/face03n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 96136,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 41797,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 34.618426652196675,
+      "all_psnr": 36.831881130484525,
+      "edge_psnr": 44.39563966473677,
+      "edge_samples": 3852
+    },
+    {
+      "id": "e1dc11f6695207af8275aa63a251cc4089517199672fffc7990c4f3b01b39c0a",
+      "references": [
+        "e06.anm#4"
+      ],
+      "name": "ending/e06c.png",
+      "format": 3,
+      "width": 512,
+      "height": 480,
+      "raw_bytes": 491520,
+      "lossless_bytes": 190441,
+      "lossless_codec": "flate",
+      "web_bytes": 190441,
+      "web_codec": "flate"
+    },
+    {
+      "id": "e1ee88dd609641a17b2f6949462f4532aa0b62ee4755cd5cc424466f16dd361a",
+      "references": [
+        "stgenm06.anm#1"
+      ],
+      "name": "stgenm/stg6enm2.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 70792,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 70792,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "e2ea7c26dd3210e197cb25529b136df13189ed4eec42e9ed544258265f8b1daa",
+      "references": [
+        "stgenm04.anm#14"
+      ],
+      "name": "face/enemy4/ename04.png",
+      "format": 5,
+      "width": 128,
+      "height": 64,
+      "raw_bytes": 16384,
+      "lossless_bytes": 4122,
+      "lossless_codec": "flate",
+      "web_bytes": 4122,
+      "web_codec": "flate"
+    },
+    {
+      "id": "e47777848b721122dc93137efb279c43f7da781bcb9b4fae7e24af9787e211d3",
+      "references": [
+        "bullet.anm#1"
+      ],
+      "name": "bullet/etama6.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 75587,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 75587,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "e521686c195eb87fd4814975f48c9c8beea749072436adae65abdcae8e33af17",
+      "references": [
+        "st02logo.anm#0"
+      ],
+      "name": "front/st02logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 8796,
+      "lossless_codec": "palette-png",
+      "web_bytes": 8796,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "e57c93f20e2d67cf406b02c592d605bb15ba59edd6fac88979ef1d91e31aec39",
+      "references": [
+        "stgenm02.anm#4"
+      ],
+      "name": "face/enemy2/face02an_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 64286,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 28193,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 36.09789553641551,
+      "all_psnr": 39.43090563495875,
+      "edge_psnr": 44.202026844698366,
+      "edge_samples": 2538
+    },
+    {
+      "id": "e5d932156b0ea008ccf0a9037386fa81bc7682368538d4fc25621aec269926b9",
+      "references": [
+        "stgenm05.anm#1"
+      ],
+      "name": "face/enemy5/face05no_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 77397,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 36031,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.20758802959848,
+      "all_psnr": 37.93158524627446,
+      "edge_psnr": 46.5027375889583,
+      "edge_samples": 5162
+    },
+    {
+      "id": "e78677dc6f52ac44ad9a41b1c91a721676e21e0d83bd66f3b4a87dc91f5cc831",
+      "references": [
+        "st06logo.anm#0"
+      ],
+      "name": "front/st06logo.png",
+      "format": 5,
+      "width": 160,
+      "height": 512,
+      "raw_bytes": 163840,
+      "lossless_bytes": 11308,
+      "lossless_codec": "palette-png",
+      "web_bytes": 11308,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "e9bb0692aa57fca41f6aeaacbd75b354e9d66c28ea092e860ebb610107fea5f6",
+      "references": [
+        "st06logo.ant#0"
+      ],
+      "name": "front/st06logo.png",
+      "format": 5,
+      "width": 160,
+      "height": 512,
+      "raw_bytes": 163840,
+      "lossless_bytes": 13925,
+      "lossless_codec": "palette-png",
+      "web_bytes": 13925,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "ec935210e67a0af4a2c3fe8897de30dcd21b5a47a0859daa20767b8ad95f3b75",
+      "references": [
+        "st07logo.anm#0"
+      ],
+      "name": "front/st07logo.png",
+      "format": 5,
+      "width": 128,
+      "height": 512,
+      "raw_bytes": 131072,
+      "lossless_bytes": 11204,
+      "lossless_codec": "palette-png",
+      "web_bytes": 11204,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "ef1ca47aa37ca0a3d932034f73bd0f28e45232ed2ea94ecbbedf84734ce8b9a3",
+      "references": [
+        "stgenm05.anm#4"
+      ],
+      "name": "face/enemy5/face05an_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 78990,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 37187,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.3884156008282,
+      "all_psnr": 37.963156177689385,
+      "edge_psnr": 46.7958434492474,
+      "edge_samples": 5274
+    },
+    {
+      "id": "f237d641d776ec9873fce29163476c73e5a829a67463faef0d173c7ff657ca31",
+      "references": [
+        "e10.anm#3"
+      ],
+      "name": "ending/e10br.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 32792,
+      "lossless_codec": "palette-png",
+      "web_bytes": 32792,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "f44d52f8a1ede08c15c79c265104046b970d1efd7adb5b1c152f9b80200b4d45",
+      "references": [
+        "stgenm03.anm#15"
+      ],
+      "name": "face/enemy3/face03ct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 56044,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 56044,
+      "web_codec": "filtered-flate"
+    },
+    {
+      "id": "f5b7ae95421038ef9711dfcca32ad8ab76e1221acf2f1d5efd5fbcd016c7bda4",
+      "references": [
+        "stgenm06.anm#14",
+        "stgenm07.anm#28"
+      ],
+      "name": "card/cdbg06a.png",
+      "format": 5,
+      "width": 384,
+      "height": 448,
+      "raw_bytes": 344064,
+      "lossless_bytes": 63533,
+      "lossless_codec": "flate",
+      "web_bytes": 63533,
+      "web_codec": "flate"
+    },
+    {
+      "id": "f645205c5d63a7e1d6e0483de33054365062b23bbd7e68be355f744eb6ce16b6",
+      "references": [
+        "stgenm04.anm#15"
+      ],
+      "name": "face/enemy4/face04ct.png",
+      "format": 5,
+      "width": 256,
+      "height": 512,
+      "raw_bytes": 262144,
+      "lossless_bytes": 42481,
+      "lossless_codec": "flate",
+      "web_bytes": 42481,
+      "web_codec": "flate"
+    },
+    {
+      "id": "f83e604a8edb8a2d3cd494344ad5a6ccceb14e6b02ea98dbfea7d4b6f41f510e",
+      "references": [
+        "stgenm02.anm#12"
+      ],
+      "name": "card/cdbg02b.png",
+      "format": 5,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 131072,
+      "lossless_bytes": 10054,
+      "lossless_codec": "palette-png",
+      "web_bytes": 10054,
+      "web_codec": "palette-png"
+    },
+    {
+      "id": "fb208a63214daa0910e23c3a3a068f6149d4a7a4a719a2c9290be43fcbc7fb86",
+      "references": [
+        "pl00.anm#4"
+      ],
+      "name": "face/pl00/face_pl00an_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 49326,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 21631,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.76008933216305,
+      "all_psnr": 39.28184889226999,
+      "edge_psnr": 44.50831183603083,
+      "edge_samples": 1868
+    },
+    {
+      "id": "fbb8e6b3b2b231a5e9005ee40301e9d4151d672a68bc185bece6318105c83d70",
+      "references": [
+        "stgenm05.anm#9"
+      ],
+      "name": "face/enemy5/face05lo_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 79293,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 38415,
+      "web_codec": "quantized-filtered-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.16692941037067,
+      "all_psnr": 37.86950635890364,
+      "edge_psnr": 44.75746639586583,
+      "edge_samples": 5906
+    },
+    {
+      "id": "fbe8a398eebec93b947e6d285d1d40df3e6819c6e27fe442d0b456ba3aec6cbb",
+      "references": [
+        "stgenm01.anm#3",
+        "stgenm01.anm#5",
+        "stgenm01.anm#6",
+        "stgenm01.anm#7",
+        "stgenm01.anm#8",
+        "stgenm01.anm#11",
+        "stgenm01.anm#13",
+        "stgenm01.anm#14",
+        "stgenm01.anm#15",
+        "stgenm01.anm#16",
+        "stgenm02.anm#3",
+        "stgenm02.anm#5",
+        "stgenm02.anm#6",
+        "stgenm02.anm#8",
+        "stgenm03.anm#4",
+        "stgenm03.anm#6",
+        "stgenm03.anm#7",
+        "stgenm03.anm#8",
+        "stgenm04.anm#4",
+        "stgenm04.anm#5",
+        "stgenm04.anm#6",
+        "stgenm05.anm#3",
+        "stgenm05.anm#7",
+        "stgenm06.anm#6",
+        "stgenm06.anm#7",
+        "stgenm06.anm#8",
+        "stgenm06.anm#10",
+        "stgenm06.anm#11",
+        "stgenm06.anm#12",
+        "stgenm07.anm#5",
+        "stgenm07.anm#6",
+        "stgenm07.anm#7",
+        "stgenm07.anm#8",
+        "stgenm07.anm#11",
+        "stgenm07.anm#19",
+        "stgenm07.anm#20",
+        "stgenm07.anm#21",
+        "stgenm07.anm#22",
+        "stgenm07.anm#24",
+        "stgenm07.anm#25",
+        "stgenm07.anm#26"
+      ],
+      "name": "face/dummy.png",
+      "format": 1,
+      "width": 8,
+      "height": 8,
+      "raw_bytes": 256,
+      "lossless_bytes": 22,
+      "lossless_codec": "flate",
+      "web_bytes": 22,
+      "web_codec": "flate"
+    },
+    {
+      "id": "fe896a2b8fe114cae1d5f5f5ca969e5bc9cda7025910c2fd4af1fda420c161fc",
+      "references": [
+        "title.anm#9",
+        "title.ant#9"
+      ],
+      "name": "title/sl_pl01.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 34863,
+      "lossless_codec": "flate",
+      "web_bytes": 16563,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 38.24274409430363,
+      "all_psnr": 42.924719196014436,
+      "edge_psnr": 47.35908449666383,
+      "edge_samples": 2618
+    },
+    {
+      "id": "ff87d9c7564f913b5282a582a6214c0c873515d8f5d12c30e0efa6a73260f2ce",
+      "references": [
+        "e09.anm#5"
+      ],
+      "name": "ending/e09cr.png",
+      "format": 3,
+      "width": 128,
+      "height": 480,
+      "raw_bytes": 122880,
+      "lossless_bytes": 41899,
+      "lossless_codec": "flate",
+      "web_bytes": 41899,
+      "web_codec": "flate"
+    },
+    {
+      "id": "ffa0f71a8e33fd162785fbd9769397f88a326bd61e543bb380dfcb65b48659cd",
+      "references": [
+        "stgenm01.anm#2"
+      ],
+      "name": "face/enemy1/face01n2_u.png",
+      "format": 1,
+      "width": 256,
+      "height": 256,
+      "raw_bytes": 262144,
+      "lossless_bytes": 52736,
+      "lossless_codec": "filtered-flate",
+      "web_bytes": 22290,
+      "web_codec": "quantized-flate",
+      "color_bits": [
+        4,
+        4,
+        4
+      ],
+      "visible_psnr": 35.637138290738086,
+      "all_psnr": 39.09504955462357,
+      "edge_psnr": 44.77485703011602,
+      "edge_samples": 2304
+    }
+  ]
+}

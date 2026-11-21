@@ -54,25 +54,6 @@ func TestParseMSGStage2Reimu(t *testing.T) {
 	}
 }
 
-func TestMSGFaceExpressionMapping(t *testing.T) {
-	tests := map[int]string{
-		0: "no",
-		1: "an",
-		2: "hp",
-		3: "an",
-		4: "an",
-		5: "pr",
-		6: "n2",
-		7: "sp",
-		8: "dp",
-	}
-	for id, want := range tests {
-		if got := msgFaceExpression(id); got != want {
-			t.Errorf("msgFaceExpression(%d) = %q, want %q", id, got, want)
-		}
-	}
-}
-
 // TestStageEntries: every stage's entries load for both characters and end
 // in op 0. Only the last entry clears the stage (op 20), and the boss's
 // pre-fight entry starts the boss theme (op 18); midboss entries do not.

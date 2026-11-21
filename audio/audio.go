@@ -1,20 +1,19 @@
 // Package audio plays the original sound, all embedded (see package
-// gamedata): SE are th10.dat's WAV files as is, BGM is thbgm.dat's PCM
+// gamedata): SE are losslessly packed original WAVs, BGM is thbgm.dat's PCM
 // encoded to Ogg Vorbis sample for sample and looped at thbgm.fmt's points.
 package audio
 
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"sync"
+	"time"
 
 	"th10/datfs"
 	"th10/gamedata"
 
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
-	"github.com/hajimehoshi/ebiten/v2/audio/wav"
 )
 
 const (
@@ -88,6 +87,7 @@ const (
 type Manager struct {
 	ctx         *audio.Context
 	bgm         *audio.Player
+	bgmBuffer   time.Duration // optional host source buffer; zero retains Oto's default
 	bgmVolume   float64
 	fadeLeft    int // FadeOutBGM: frames left, 0 = not fading
 	fadeTotal   int
@@ -108,6 +108,9 @@ func NewManager(ctx *audio.Context) *Manager {
 	m := &Manager{ctx: ctx, bgmVolume: 1, seVolume: 1, seCache: map[string][]byte{}}
 	for i := range m.seAux {
 		m.seAux[i] = -1 // FUN_004659a0 / FUN_0043e580 initialize the attribute array.
+	}
+	if ctx != nil {
+		_ = m.preloadSE(ctx.SampleRate())
 	}
 	return m
 }
@@ -148,16 +151,11 @@ func (m *Manager) loadSEPCM(name string) ([]byte, error) {
 	if pcm, ok := m.seCache[name]; ok {
 		return pcm, nil
 	}
-	data, err := gamedata.ReadFile(datfs.EmbedPath(name))
-	if err != nil {
-		return nil, err
+	rate := 44100
+	if m.ctx != nil {
+		rate = m.ctx.SampleRate()
 	}
-	// The SE mix 8/16-bit, mono/stereo and 11.025–44.1 kHz.
-	stream, err := wav.DecodeWithSampleRate(m.ctx.SampleRate(), bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	pcm, err := io.ReadAll(stream)
+	pcm, err := decodeSEPCM(name, rate)
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +267,9 @@ func (m *Manager) playBGM(idx int, unlock bool) {
 		return
 	}
 	m.bgm = p
+	if m.bgmBuffer > 0 {
+		p.SetBufferSize(m.bgmBuffer)
+	}
 	p.SetVolume(m.bgmVolume)
 	p.Play()
 }
@@ -319,7 +320,7 @@ func BGMTracks() ([]datfs.BGMTrack, error) {
 
 func (m *Manager) StopBGM() {
 	if m.bgm != nil {
-		m.bgm.Close()
+		m.bgm.PauseAndStopReading()
 		m.bgm = nil
 	}
 }

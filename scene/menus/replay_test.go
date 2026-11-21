@@ -1,25 +1,11 @@
 package menus
 
 import (
-	"strings"
 	"testing"
 	"th10/game"
 	"th10/input"
 	"th10/replay"
 )
-
-func TestReplayEntryLabels(t *testing.T) {
-	if !strings.Contains(replayEntryLabel(game.ReplaySlot{Number: 2}), "empty") {
-		t.Fatal("vacant slot hidden")
-	}
-	r := &replay.Replay{Global: replay.GlobalHeader{User: "TEST", Stage: 8, Character: 1, ShotType: 2, Difficulty: 4}}
-	label := replayEntryLabel(game.ReplaySlot{Number: 25, Replay: r})
-	for _, text := range []string{"No.25", "TEST", "MarisaC", "Extra"} {
-		if !strings.Contains(label, text) {
-			t.Fatal("metadata missing:", label)
-		}
-	}
-}
 
 func TestReplayMenuLoadsStorage(t *testing.T) {
 	g := &game.Game{Replays: game.NewMemoryReplayStore()}

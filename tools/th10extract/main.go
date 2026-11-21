@@ -1,14 +1,20 @@
-// Command th10extract copies original resources from a TH10 install into
-// assets/ so the game can embed them. Files keep their th10.dat bytes; where
-// each goes is datfs.EmbedPath. With -bgm, every thbgm.fmt track is cut out
-// of thbgm.dat and encoded to Ogg Vorbis by ffmpeg, sample for sample, so
-// thbgm.fmt's loop points (embedded alongside) still apply. With -textures,
-// the decoded pictures under assets/anm/ are redrawn from th10.dat's THTX
-// data wherever their pixels differ (see anm.Texture.Image).
+// Command th10extract generates embedded runtime resources from a TH10
+// install. Ordinary files keep their original bytes. -pack-textures splits
+// ANM logic from deduplicated lossless THTX pixels; -web-textures additionally
+// selects bounded-error web colors. -pack-se losslessly packs WAVs. -fonts
+// preserves the original glyph programs for fixed text and printable ASCII.
+// -bgm cuts exactly thbgm.fmt's PCM span and uses ffmpeg libvorbis, without
+// shifting its sample-exact loop points. -textures is the legacy PNG repair
+// command; decoded reference PNGs are no longer runtime assets.
 //
 // Usage:
 //
-//	th10extract [-dir DIR] [-archive th10.dat|th10c.dat] [-out assets] [-list] [-bgm [-q 4]] [-textures] [PATTERN ...]
+//	th10extract [-dir DIR] [-archive th10.dat|th10c.dat] [-out assets] [-list] [PATTERN ...]
+//	th10extract [-dir DIR] [-out assets] -pack-textures|-web-textures [-compare DIR]
+//	th10extract [-dir DIR] [-out assets] -bgm [-q 1] [-bgm-track N]
+//	th10extract [-dir DIR] [-out assets] -pack-se
+//	th10extract [-out assets] -fonts -font-source DIR
+//	th10extract [-out assets] -audit FILE.json
 //
 // PATTERNs are path.Match globs over th10.dat names ("stage01.std",
 // "se_*.wav"). -list prints every th10.dat file and whether it is embedded.
@@ -41,9 +47,52 @@ func main() {
 	out := flag.String("out", "assets", "assets directory to write into")
 	list := flag.Bool("list", false, "list th10.dat and mark what is embedded")
 	bgm := flag.Bool("bgm", false, "encode every thbgm.dat track (needs ffmpeg with libvorbis)")
-	quality := flag.Float64("q", 4, "Ogg Vorbis quality for -bgm")
+	quality := flag.Float64("q", 1, "Ogg Vorbis quality for -bgm (1 is nominally 80 kbps stereo)")
+	bgmTrack := flag.Int("bgm-track", -1, "encode only this zero-based thbgm.fmt track for auditioning")
+	se := flag.Bool("pack-se", false, "losslessly compress embedded SE WAVs from th10.dat")
+	fonts := flag.Bool("fonts", false, "subset original fonts to fixed game text and printable ASCII")
+	fontSource := flag.String("font-source", "", "directory containing unmodified source fonts for -fonts")
 	textures := flag.Bool("textures", false, "redraw the decoded pictures under anm/ from th10.dat")
+	audit := flag.String("audit", "", "write an asset census JSON (reads -out, does not change assets)")
+	pack := flag.Bool("pack-textures", false, "split runtime ANM pixels into deduplicated lossless texture packs")
+	web := flag.Bool("web-textures", false, "also choose lossy js textures (implies -pack-textures)")
+	compare := flag.String("compare", "", "directory for the worst web texture comparison images")
 	flag.Parse()
+	if *audit != "" {
+		if err := auditAssets(*out, *audit); err != nil {
+			fmt.Fprintln(os.Stderr, "th10extract:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *fonts {
+		if err := subsetFonts(*out, *fontSource); err != nil {
+			fmt.Fprintln(os.Stderr, "th10extract:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *pack || *web {
+		if err := packTextures(*dir, *out, *web, *compare); err != nil {
+			fmt.Fprintln(os.Stderr, "th10extract:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *se {
+		if err := packSounds(*dir, *out); err != nil {
+			fmt.Fprintln(os.Stderr, "th10extract:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *bgm && *bgmTrack >= 0 {
+		if err := encodeOneBGM(*dir, *archive, *out, *quality, *bgmTrack); err != nil {
+			fmt.Fprintln(os.Stderr, "th10extract:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if !*list && !*bgm && !*textures && flag.NArg() == 0 {
 		flag.Usage()
 		os.Exit(2)
@@ -72,7 +121,7 @@ func runArchive(dir, archive, out string, list, bgm, textures bool, quality floa
 	if err != nil {
 		return err
 	}
-	defer dat.Close()
+	defer func() { _ = dat.Close() }()
 
 	if list {
 		for _, name := range dat.Names() {
@@ -138,6 +187,10 @@ func write(dst string, data []byte) error {
 }
 
 func encodeBGM(dat *datfs.Archive, dir, out string, quality float64) error {
+	return encodeBGMSelection(dat, dir, out, quality, -1)
+}
+
+func encodeBGMSelection(dat *datfs.Archive, dir, out string, quality float64, only int) error {
 	fmtData, err := dat.ReadFile("thbgm.fmt")
 	if err != nil {
 		return err
@@ -145,6 +198,9 @@ func encodeBGM(dat *datfs.Archive, dir, out string, quality float64) error {
 	tracks, err := datfs.ParseBGMFmt(fmtData)
 	if err != nil {
 		return err
+	}
+	if only < -1 || only >= len(tracks) {
+		return fmt.Errorf("BGM track %d out of range", only)
 	}
 	f, err := os.Open(filepath.Join(dir, "thbgm.dat"))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -154,7 +210,10 @@ func encodeBGM(dat *datfs.Archive, dir, out string, quality float64) error {
 	}
 	defer f.Close()
 
-	for _, t := range tracks {
+	for i, t := range tracks {
+		if only >= 0 && only != i {
+			continue
+		}
 		if t.BitsPerSample != 16 {
 			return fmt.Errorf("%s: %d-bit PCM, want 16", t.Name, t.BitsPerSample)
 		}

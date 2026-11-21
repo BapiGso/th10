@@ -162,7 +162,6 @@ const (
 	opSetTimeout   = 341
 	opSpellBg      = 342
 	opSpellEnd     = 343
-	opSetChapter   = 344
 	opEnemySweep   = 345
 	opLifeMarker   = 347
 	opSpellAlt     = 348
@@ -177,7 +176,6 @@ const (
 	opSpell        = 357 // index + difficulty
 	opSpell2       = 358 // index + difficulty - 1
 	opSpell3       = 359 // index + difficulty - 2
-	opStars        = 360
 	opContactOff   = 361 // S: suppress enemy-body contact for this many frames
 	opBombSwap     = 366
 	opWaitRank     = 368 // SSSS: difficulty-indexed wait (Easy,Normal,Hard,Lunatic)

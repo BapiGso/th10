@@ -1,111 +1,25 @@
+// Package stage2 contains stage 2 configuration only.
 package stage2
 
 import (
-	"image/color"
-	"math"
 	"th10/audio"
-	"th10/render"
-	"th10/scene/stage"
-	stageecl "th10/scene/stage/ecl"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/vector"
+	stagescript "th10/scene/stage/script"
 )
 
-// Script2 第二关脚本 — 鍵山雛。道中与 Boss 弹幕由官方编译字节码
-// (assets/ecl/stage02.ecl) 经通用 ECL VM 驱动，与 Stage 1 同源；本文件只负责
-// 背景绘制、BGM 切换与对话桥接。
-type Script2 struct {
-	frame    int
-	finished bool
-	bgY      float64
-	bg1, bg2 *ebiten.Image // stg2bg.png [256x256], stg2bg2.png [512x512]
-	vm       *stageecl.VM
+type Script2 = stagescript.Script
+
+var Config = stagescript.Config{
+	ECL:              "ecl/stage02.ecl",
+	MSG:              "stage2",
+	BGM:              audio.BGMStage2,
+	BossBGM:          audio.BGMStage2Boss,
+	FrameCap:         60000,
+	BackgroundStage:  2,
+	BackgroundScroll: 2.0,
+	Backgrounds: [5]string{
+		"anm/background/stg2bg.png",
+		"anm/background/stg2bg2.png",
+	},
 }
 
-func NewScript() *Script2 {
-	s := &Script2{vm: stageecl.NewStageVM("ecl/stage02.ecl")}
-	s.loadBg()
-	return s
-}
-
-func (s *Script2) loadBg() {
-	s.bg1 = render.LoadImage("anm/background/stg2bg.png")
-	s.bg2 = render.LoadImage("anm/background/stg2bg2.png")
-}
-
-func (s *Script2) Init(ctx *stage.Context) {
-	s.vm.BindContext(ctx) // FUN_00417870: manager exists before the first calc.
-	ctx.PlayBGM(audio.BGMStage2)
-	// ECL 338 opens the .msg entries; op 18 starts the boss theme and op 20
-	// clears the stage.
-	ctx.LoadMSG("stage2", audio.BGMStage2Boss)
-}
-
-func (s *Script2) Update(ctx *stage.Context) {
-	s.frame++
-	s.bgY += 2.0
-
-	if s.vm != nil {
-		s.vm.Update(ctx)
-
-		// Stage clears when the ECL main task finishes (boss defeated → main
-		// unblocks from deathWait and delete()s). The frame cap is only a
-		// safety net against a stuck VM.
-		if s.vm.MainDone() {
-			s.finished = true
-		}
-	}
-	if s.frame >= 60000 {
-		s.finished = true
-	}
-}
-
-func (s *Script2) BgDraw(field *ebiten.Image) {
-	w := float32(field.Bounds().Dx())
-	h := float32(field.Bounds().Dy())
-
-	// 暗紫色阶梯参道
-	field.Fill(color.RGBA{24, 16, 40, 255})
-
-	if s.bg1 != nil {
-		render.TileBackground(field, s.bg1, s.bgY, 1)
-	} else {
-		offset := float32(math.Mod(s.bgY, 32))
-		for y := offset - 32; y < h; y += 32 {
-			vector.StrokeLine(field, 0, y, w, y, 0.8, color.RGBA{50, 35, 70, 120}, false)
-		}
-		for y := offset - 32; y < h; y += 32 {
-			vector.FillRect(field, w*0.15, y, w*0.7, 2, color.RGBA{60, 45, 80, 80}, false)
-		}
-	}
-
-	render.TileBackground(field, s.bg2, s.bgY*0.5, 0.25)
-}
-
-func (s *Script2) Finished() bool { return s.finished }
-
-// ShakeOffset 暴露 ECL ins_337 屏幕震动给 Stage.Draw（可选接口）。
-func (s *Script2) ShakeOffset() (float64, float64) {
-	if s.vm == nil {
-		return 0, 0
-	}
-	return s.vm.ShakeOffset()
-}
-
-// BossHUD 暴露 ECL 解析的 Boss 血条/符卡数据给 Stage.Draw（可选接口）。
-func (s *Script2) BossHUD() stage.BossHUDInfo {
-	if s.vm == nil {
-		return stage.BossHUDInfo{}
-	}
-	return s.vm.BossHUD()
-}
-
-// LateUpdate 在碰撞结算后运行 ECL 中断槽检查与阶段计时（可选接口，FUN_0040dc80 后半段）。
-func (s *Script2) LateUpdate(ctx *stage.Context) {
-	if s.vm != nil {
-		s.vm.LateUpdate(ctx)
-	}
-}
-
-var _ stage.Script = (*Script2)(nil)
+var NewScript = Config.NewScript

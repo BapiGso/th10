@@ -144,11 +144,6 @@ func (m *MenuController) selectChoice() {
 	m.interrupt(int16(7 + m.Selection))
 }
 
-func menuRepeat(in *input.State, key input.Key) bool {
-	n := in.HoldFrames(key)
-	return in.JustPressed(key) || (n >= 26 && (n-26)%8 == 0) // FUN_0040ac20
-}
-
 func wrapMenu(at, n int) int {
 	if n == 0 {
 		return 0
@@ -207,10 +202,10 @@ func (m *MenuController) Calc(g *game.Game, in *input.State) MenuAction {
 		}
 	case MenuChoices:
 		old := m.Selection
-		if menuRepeat(in, input.KeyUp) {
+		if in.Menu().Move(input.MenuUp) {
 			m.Selection = wrapMenu(m.Selection-1, 3)
 		}
-		if menuRepeat(in, input.KeyDown) {
+		if in.Menu().Move(input.MenuDown) {
 			m.Selection = wrapMenu(m.Selection+1, 3)
 		}
 		if old != m.Selection {
@@ -239,10 +234,10 @@ func (m *MenuController) Calc(g *game.Game, in *input.State) MenuAction {
 		if m.Timer.Cur <= 9 {
 			break
 		}
-		if menuRepeat(in, input.KeyUp) {
+		if in.Menu().Move(input.MenuUp) {
 			m.Selection = wrapMenu(m.Selection-1, game.ReplaySlots)
 		}
-		if menuRepeat(in, input.KeyDown) {
+		if in.Menu().Move(input.MenuDown) {
 			m.Selection = wrapMenu(m.Selection+1, game.ReplaySlots)
 		}
 		if ok {
@@ -321,20 +316,20 @@ func (m *MenuController) choices() {
 }
 
 func (m *MenuController) moveName(in *input.State) {
-	if menuRepeat(in, input.KeyUp) {
+	if in.Menu().Move(input.MenuUp) {
 		m.Character = wrapMenu(m.Character-13, len(menuCharacters))
 	}
-	if menuRepeat(in, input.KeyDown) {
+	if in.Menu().Move(input.MenuDown) {
 		m.Character = wrapMenu(m.Character+13, len(menuCharacters))
 	}
-	if menuRepeat(in, input.KeyLeft) {
+	if in.Menu().Move(input.MenuLeft) {
 		delta := -1
 		if m.Character%13 == 0 {
 			delta = 12
 		}
 		m.Character = wrapMenu(m.Character+delta, len(menuCharacters))
 	}
-	if menuRepeat(in, input.KeyRight) {
+	if in.Menu().Move(input.MenuRight) {
 		delta := 1
 		if m.Character%13 == 12 {
 			delta = -12

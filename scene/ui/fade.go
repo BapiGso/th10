@@ -66,11 +66,17 @@ func (f *Fade) Draw(sv *supervisor.Supervisor) {
 	if !f.Active {
 		return
 	}
+	sv.Use(&sv.Screen)
+	sv.Fog(false)
+	f.DrawRect(sv)
+}
+
+// DrawRect submits the same native rectangle without changing plane/fog state.
+// Scene-B owns its fade lifetime and already establishes those draw states.
+func (f *Fade) DrawRect(sv *supervisor.Supervisor) {
 	rect := [4]float32{0, 0, 640, 480}
 	if f.Kind == 2 || f.Kind == 3 {
 		rect = [4]float32{32, 16, 416, 464}
 	}
-	sv.Use(&sv.Screen)
-	sv.Fog(false)
 	sv.ANM.Rect(rect, gfx.Color(uint32(f.Alpha)<<24|f.Color))
 }

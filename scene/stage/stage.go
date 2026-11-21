@@ -299,7 +299,7 @@ func loadSTD(n int, env *anm.Env) *std.VM {
 // UpdateHeadless 用调用方提供的输入快照推进一帧，不读全局键盘。
 // 供 sim 包的逐帧差分模拟使用；真实游戏走 Update。
 func (s *Stage) UpdateHeadless(in *input.State) {
-	_ = s.update(in)
+	s.update(in)
 }
 
 // FinishedHeadless 报告关卡是否已结束（无头模拟的终止条件）。
@@ -354,9 +354,7 @@ func (s *Stage) Update(g *game.Game) error {
 
 	in.ApplyReplayOptions(s.ctx.State.ConfigFlags)
 
-	if err := s.update(in); err != nil {
-		return err
-	}
+	s.update(in)
 
 	// 关卡结束/Game Over 时切换场景
 	ctx := s.ctx
@@ -415,7 +413,7 @@ func (s *Stage) goGameOver(g *game.Game) {
 }
 
 // update 推进一帧世界状态。不涉及场景切换，供 Update 与无头模拟共用。
-func (s *Stage) update(in *input.State) error {
+func (s *Stage) update(in *input.State) {
 	ctx := s.ctx
 	if ctx.State.Recording != nil {
 		ctx.State.Recording.Append(in.ReplayRecord(), ctx.ReplaySlowSample)
@@ -475,7 +473,7 @@ func (s *Stage) update(in *input.State) error {
 	// 0x10 freeze bit. The play-time counter and faith tail are skipped.
 	if ctx.Menu != nil && ctx.Menu.Active() {
 		s.cleanEnemies()
-		return nil
+		return
 	}
 	ctx.State.RecordPlayFrame() // FUN_00418190, original score-object play-time counter
 
@@ -487,8 +485,6 @@ func (s *Stage) update(in *input.State) error {
 
 	// 9. 清理
 	s.cleanEnemies()
-
-	return nil
 }
 
 // faithGate is the test FUN_00418190 makes before FUN_00418a00 (0x418751..

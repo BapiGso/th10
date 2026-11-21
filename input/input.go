@@ -110,17 +110,6 @@ func (s *State) JustPressed(k Key) bool { return s.pressed[k] && !s.prev[k] }
 // HoldFrames 连续按住了多少帧
 func (s *State) HoldFrames(k Key) int { return s.hold[k] }
 
-// Snapshot 返回当前按键位掩码快照，用于 Replay 记录
-func (s *State) Snapshot() uint16 {
-	var bits uint16
-	for k := Key(0); k < keyCount; k++ {
-		if s.pressed[k] {
-			bits |= 1 << k
-		}
-	}
-	return bits
-}
-
 // Restore 从快照恢复按键状态，用于 Replay 回放
 func (s *State) Restore(bits uint16) {
 	s.fromReplay = false

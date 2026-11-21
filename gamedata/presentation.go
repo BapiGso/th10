@@ -1,6 +1,7 @@
 package gamedata
 
 import (
+	"bytes"
 	"strings"
 
 	"th10/anm"
@@ -11,8 +12,8 @@ import (
 // The patch changes pictures, not the GUI's FUN_0043ee30 timelines.
 func PresentationANM(name string) (*anm.File, error) {
 	p := "anm/" + strings.TrimSuffix(name, ".anm") + ".ant"
-	if data, err := ReadFile(p); err == nil {
-		return anm.Load(data)
+	if data, err := readANM(p); err == nil {
+		return anm.Load(bytes.Clone(data))
 	}
 	return ANM(name)
 }

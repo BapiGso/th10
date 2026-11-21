@@ -673,9 +673,7 @@ func (vm *VM) execSystemOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		vm.storeVar(t, in.Params[0], floatVal(normAngle(v)))
 		t.pc++
 	default:
-		if !vm.execStackMath(t, in) {
-			// Unknown system op: no-op, keep flow alive.
-		}
+		_ = vm.execStackMath(t, in) // Unknown system op remains a no-op.
 		t.pc++
 	}
 }
@@ -1001,15 +999,6 @@ func (vm *VM) loadVarFloat(t *eclTask, p Param) float32 {
 		return vm.specialFloat(t, id)
 	}
 	return math.Float32frombits(vm.frameWord(t, p.VarID()))
-}
-
-// aimAngleAt returns atan2(player - (x,y)) like FUN_004073e0: exactly pi/2
-// (down) when there is no player or the fire origin coincides with the player.
-func (vm *VM) aimAngleAt(x, y float64) float64 {
-	if !vm.hasPlayer || (vm.playerX == x && vm.playerY == y) {
-		return math.Pi / 2
-	}
-	return math.Atan2(vm.playerY-y, vm.playerX-x)
 }
 
 // rngRaw, randSigned and randFloat draw from the game RNG (zun.RNG).

@@ -136,38 +136,31 @@ func (c *TitleController) SetState(page TitlePage) {
 }
 func (c *TitleController) SetSubstate(state int32) { c.Substate = state; c.Timer.Reset() }
 
+func (c *TitleController) animations() TitleAnimations {
+	return TitleAnimations{World: c.World, Env: c.Env, File: c.File, Roots: c.Roots}
+}
+
 func (c *TitleController) Root(script int) *anm.VM {
-	vm := c.Roots[script]
-	if !c.World.Contains(vm) {
-		c.Roots[script] = nil
-		return nil
-	}
-	return vm
+	return c.animations().Root(script)
 }
 
 // Spawn is FUN_0042c670: tail insertion, initial layer 15, StartKeep.
 func (c *TitleController) Spawn(script int) *anm.VM {
-	vm := c.World.SpawnTail(c.File, script, 15, c.Env)
-	c.Roots[script] = vm
-	return vm
+	return c.animations().Spawn(script)
 }
 
 // LeaveScript is FUN_0042c6d0: interrupt 1 and clear the root handle.
 func (c *TitleController) LeaveScript(script int) {
-	c.World.Interrupt(c.Root(script), 1)
-	c.Roots[script] = nil
+	c.animations().Leave(script)
 }
 func (c *TitleController) Interrupt(script int, label int16) {
-	c.World.Interrupt(c.Root(script), label)
+	c.animations().Interrupt(script, label)
 }
 func (c *TitleController) Child(root, script int) *anm.VM {
-	return c.World.FindChild(c.Root(root), script)
+	return c.animations().Child(root, script)
 }
 func (c *TitleController) InterruptChild(root, script int, label int16) {
-	c.World.Interrupt(c.Child(root, script), label)
-}
-func (c *TitleController) RestartChild(root, script, next int) {
-	c.World.Restart(c.Child(root, script), next, c.Env)
+	c.animations().InterruptChild(root, script, label)
 }
 
 // SetChildSprite is FUN_00449670, distinct from script restart 0x4496d0.
@@ -207,7 +200,7 @@ func (c *TitleController) Calc(g *game.Game, in *input.State) error {
 	for _, fade := range c.Fades {
 		fade.Calc(c.Env.GameSpeed, false, 0)
 	}
-	c.World.Run(c.Env) // FUN_00448860, calc 0x1a
+	c.animations().Run(nil) // Title-A retains its existing ANM-91 no-op.
 	return nil
 }
 

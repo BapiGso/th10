@@ -13,6 +13,8 @@ package trace
 
 import (
 	"bufio"
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -26,6 +28,9 @@ const FormatVersion = 2 // 2: game-space positions, manager-order enemies
 // Frame is one sampled frame of game state.
 type Frame struct {
 	Index int // frame number since run start (1-based)
+	// Half is present only when the sampler could not confirm a complete
+	// frame. Such a block is diagnostic data, never a comparison sample.
+	Half *HalfRow
 
 	// Player
 	PX, PY     float64
@@ -51,6 +56,15 @@ type Frame struct {
 	B []BulletRow
 	// The playing .msg entry, nil without one
 	MSG *MSGRow
+	// Ext and the full item/laser rows are opt-in; nil preserves v2 bytes.
+	Ext *Extended
+	I   []ItemRow
+	L   []LaserRow
+
+	extCommitted bool
+	extSpell     bool
+	extItems     int
+	extLasers    int
 }
 
 // EnemyRow is one enemy's sampled state.
@@ -87,8 +101,14 @@ const (
 
 // Writer emits trace text.
 type Writer struct {
-	w   *bufio.Writer
-	err error
+	w       *bufio.Writer
+	err     error
+	direct  io.Writer
+	block   bytes.Buffer
+	capture *CaptureHeader
+	frames  int
+	last    int
+	ended   bool
 }
 
 // NewWriter wraps w.
@@ -101,6 +121,20 @@ func (tw *Writer) WriteFrame(f *Frame) {
 	if tw.err != nil {
 		return
 	}
+	if tw.ended {
+		tw.err = fmt.Errorf("trace: frame after capture footer")
+		return
+	}
+	if tw.capture != nil {
+		if err := validateCaptureInput(f, tw.capture, tw.last); err != nil {
+			tw.err = err
+			return
+		}
+	}
+	if tw.direct != nil {
+		tw.block.Reset()
+		tw.w.Reset(&tw.block)
+	}
 	_, tw.err = fmt.Fprintf(tw.w,
 		"F %d p %.3f %.3f life %d power %d faith %d score %d graze %d state %d invinc %d bomb %d | e %d b %d i %d pb %d\n",
 		f.Index, f.PX, f.PY, f.PLife, f.PPower, f.PFaith, f.PScore, f.PGraze,
@@ -108,6 +142,17 @@ func (tw *Writer) WriteFrame(f *Frame) {
 		f.Enemies, f.Bullets, f.Items, f.PBullets)
 	if tw.err != nil {
 		return
+	}
+	if h := f.Half; h != nil {
+		if _, tw.err = fmt.Fprintf(tw.w, "H %s attempts %d before %d after %d\n",
+			h.Reason, h.Attempts, h.Before, h.After); tw.err != nil {
+			return
+		}
+	}
+	if f.Ext != nil {
+		if tw.err = writeExtendedHeader(tw.w, f); tw.err != nil {
+			return
+		}
 	}
 	if m := f.MSG; m != nil {
 		if _, tw.err = fmt.Fprintf(tw.w, "M %d clock %d wait %d signal %d at %d op %d\n",
@@ -129,14 +174,30 @@ func (tw *Writer) WriteFrame(f *Frame) {
 			return
 		}
 	}
+	if f.Ext != nil {
+		tw.err = writeExtendedRows(tw.w, f)
+	} else if tw.capture != nil {
+		tw.err = writeCommit(tw.w, f)
+	}
+	if tw.direct != nil && tw.err == nil {
+		if tw.err = tw.w.Flush(); tw.err == nil {
+			tw.err = tw.commit(tw.block.Bytes())
+		}
+	}
+	if tw.err == nil {
+		tw.frames++
+		tw.last = f.Index
+	}
 }
 
 // Flush flushes buffered output and returns the first write error.
 func (tw *Writer) Flush() error {
-	if tw.err != nil {
-		return tw.err
+	err := tw.w.Flush()
+	if f, ok := tw.direct.(interface{ Flush() error }); ok {
+		err = errors.Join(err, f.Flush())
 	}
-	return tw.w.Flush()
+	tw.err = errors.Join(tw.err, err)
+	return tw.err
 }
 
 func boolInt(b bool) int {
@@ -148,10 +209,13 @@ func boolInt(b bool) int {
 
 // Reader parses trace text.
 type Reader struct {
-	s    *bufio.Scanner
-	err  error
-	held *Frame // frame parsed from the current "F" line, not yet returned
-	done bool
+	s            *bufio.Scanner
+	held         *Frame // frame parsed from the current "F" line, not yet returned
+	done         bool
+	capture      *CaptureHeader
+	frames, last int
+	endSeen      bool
+	finalErr     error
 }
 
 // NewReader wraps r.
@@ -176,6 +240,15 @@ func (tr *Reader) Next() (*Frame, error) {
 				return nil, nil
 			}
 			tr.done = true
+			if err := tr.validateFrame(tr.held); err != nil {
+				return nil, err
+			}
+			if tr.capture != nil && !tr.endSeen {
+				return nil, fmt.Errorf("trace: incomplete capture: missing Q footer")
+			}
+			if tr.finalErr != nil {
+				return nil, tr.finalErr
+			}
 			return tr.held, nil
 		}
 		line := tr.s.Text()
@@ -186,13 +259,30 @@ func (tr *Reader) Next() (*Frame, error) {
 		if len(fields) == 0 {
 			continue
 		}
+		if tr.endSeen && !strings.HasPrefix(fields[0], "#") {
+			return nil, fmt.Errorf("trace: data after capture footer")
+		}
+		if tr.held != nil && tr.held.extCommitted {
+			switch fields[0] {
+			case "E", "B", "M", "H":
+				return nil, fmt.Errorf("trace: frame %d: row after Z commit", tr.held.Index)
+			}
+		}
 		switch fields[0] {
 		case "F":
 			prev := tr.held
+			if err := tr.validateFrame(prev); err != nil {
+				return nil, err
+			}
 			f := &Frame{}
 			if err := parseFrameLine(f, fields); err != nil {
 				return nil, err
 			}
+			if tr.capture != nil && (f.Index <= tr.last || f.Index < 1) {
+				return nil, fmt.Errorf("trace: non-increasing capture frame %d", f.Index)
+			}
+			tr.frames++
+			tr.last = f.Index
 			tr.held = f
 			if prev != nil {
 				return prev, nil
@@ -224,6 +314,45 @@ func (tr *Reader) Next() (*Frame, error) {
 				return nil, err
 			}
 			tr.held.MSG = &m
+		case "H":
+			if tr.held == nil || tr.held.Half != nil {
+				return nil, fmt.Errorf("trace: unexpected H line")
+			}
+			h, err := parseHalfLine(fields)
+			if err != nil {
+				return nil, fmt.Errorf("trace: frame %d: %w", tr.held.Index, err)
+			}
+			tr.held.Half = h
+		case "C":
+			if tr.capture != nil || tr.frames != 0 {
+				return nil, fmt.Errorf("trace: unexpected C header")
+			}
+			h, err := parseCaptureHeader(fields)
+			if err != nil {
+				return nil, err
+			}
+			tr.capture = h
+		case "Q":
+			if err := tr.readCaptureEnd(fields); err != nil {
+				return nil, err
+			}
+			if tr.held != nil {
+				f := tr.held
+				tr.held = nil
+				return f, nil
+			}
+		case "Z":
+			if tr.capture != nil && tr.held != nil && tr.held.Ext == nil {
+				if err := readCommit(tr.held, fields); err != nil {
+					return nil, err
+				}
+			} else if err := readExtendedLine(tr.held, fields); err != nil {
+				return nil, err
+			}
+		case "X", "I", "L", "S":
+			if err := readExtendedLine(tr.held, fields); err != nil {
+				return nil, err
+			}
 		}
 	}
 }
@@ -239,6 +368,13 @@ func parseFrameLine(f *Frame, t []string) error {
 	i := 1
 	nextInt := func() int {
 		v, e := strconv.Atoi(get(&i))
+		if e != nil && err == nil {
+			err = e
+		}
+		return v
+	}
+	nextInt64 := func() int64 {
+		v, e := strconv.ParseInt(get(&i), 10, 64)
 		if e != nil && err == nil {
 			err = e
 		}
@@ -260,9 +396,9 @@ func parseFrameLine(f *Frame, t []string) error {
 	i++ // "power"
 	f.PPower = nextInt()
 	i++ // "faith"
-	f.PFaith = int64(nextInt())
+	f.PFaith = nextInt64()
 	i++ // "score"
-	f.PScore = int64(nextInt())
+	f.PScore = nextInt64()
 	i++ // "graze"
 	f.PGraze = nextInt()
 	i++ // "state"

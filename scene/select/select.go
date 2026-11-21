@@ -1,9 +1,7 @@
 package selector
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
 	"th10/game"
-	"th10/input"
 	"th10/scene/ending"
 	"th10/scene/stage"
 	"th10/scene/stage/extra"
@@ -13,71 +11,7 @@ import (
 	"th10/scene/stage/stage4"
 	"th10/scene/stage/stage5"
 	"th10/scene/stage/stage6"
-	sceneui "th10/scene/ui"
-	"th10/supervisor"
 )
-
-// Select preserves the public entry points while the actual selection
-// pages are FUN_00430320/004306a0/00430a60/00430ff0 in one TitleController.
-type Select struct {
-	Controller      *sceneui.TitleController
-	back            game.Scene
-	extra, practice bool
-}
-
-func New(back game.Scene) *Select         { return &Select{back: back} }
-func NewExtra(back game.Scene) *Select    { return &Select{back: back, extra: true} }
-func NewPractice(back game.Scene) *Select { return &Select{back: back, practice: true} }
-func (*Select) SceneMode() game.SceneID   { return game.SceneTitle }
-func (s *Select) SceneEnter(g *game.Game) error {
-	if s.Controller != nil {
-		return nil
-	}
-	c := sceneui.NewTitleController(g, 1)
-	s.Controller = c
-	c.Practice = s.practice
-	if s.extra {
-		c.BeginExtra()
-	}
-	c.SetState(sceneui.TitleDifficulty)
-	c.Selector.Count = 8
-	c.Selector.Set(c.Difficulty)
-	if s.extra {
-		c.Selector.Set(0)
-	}
-	c.Spawn(0x5b)
-	c.SetRunHooks(func(g *game.Game, state *game.GameState) error { return Launch(g, state, s.back) }, nil)
-	return nil
-}
-func (s *Select) SceneLeave(g *game.Game, _ game.SceneID) {
-	if s.Controller != nil {
-		s.Controller.Remember(g)
-		s.Controller.Dispose()
-		s.Controller = nil
-	}
-}
-func (s *Select) Update(g *game.Game) error {
-	if err := s.SceneEnter(g); err != nil {
-		return err
-	}
-	if err := s.Controller.Calc(g, &input.Global); err != nil {
-		return err
-	}
-	if s.Controller.State == sceneui.TitleMain {
-		g.GoTo(s.back)
-	}
-	return nil
-}
-func (s *Select) Draw(screen *ebiten.Image) {
-	if s.Controller != nil {
-		s.Controller.Draw(screen)
-	}
-}
-func (s *Select) DrawPorted(sv *supervisor.Supervisor) {
-	if s.Controller != nil {
-		s.Controller.DrawPorted(sv)
-	}
-}
 
 // Launch delays the native scene-7 constructor until the request is consumed.
 // Existing OnContinue, NextScene and post-ending menu callbacks stay intact.

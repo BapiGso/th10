@@ -2,11 +2,7 @@ package main
 
 import (
 	"fmt"
-	"image"
-	"image/png"
 	"math"
-	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,61 +43,4 @@ func parseFrameList(s string) ([]int32, error) {
 		}
 	}
 	return out[:n], nil
-}
-
-// shotJob is one captured client area waiting to be written. before and after
-// are the frame counter read just before and just after the screen copy.
-type shotJob struct {
-	img           *image.RGBA
-	before, after int32
-}
-
-// shotWriter encodes and writes captures on its own goroutine, so the sampling
-// loop only pays for the screen copy.
-type shotWriter struct {
-	dir  string
-	jobs chan shotJob
-	done chan struct{}
-}
-
-func newShotWriter(dir string) *shotWriter {
-	w := &shotWriter{dir: dir, jobs: make(chan shotJob, 8), done: make(chan struct{})}
-	go w.loop()
-	return w
-}
-
-// Queue hands a capture to the writer. It blocks only when eight captures are
-// already waiting.
-func (w *shotWriter) Queue(j shotJob) {
-	w.jobs <- j
-}
-
-// Close writes everything still queued and returns once every file is on disk.
-func (w *shotWriter) Close() {
-	close(w.jobs)
-	<-w.done
-}
-
-func (w *shotWriter) loop() {
-	defer close(w.done)
-	for j := range w.jobs {
-		path := filepath.Join(w.dir, fmt.Sprintf("f%d-%d.png", j.before, j.after))
-		if err := writePNG(path, j.img); err != nil {
-			fmt.Fprintln(os.Stderr, "th10probe: shot:", err)
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "shot f%d-%d -> %s\n", j.before, j.after, path)
-	}
-}
-
-func writePNG(path string, img *image.RGBA) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	if err := png.Encode(f, img); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
 }
