@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"image/color"
 	"sync"
+	"th10/render"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 // startGate is a host gate, not a scene. No original calc/draw runs while
@@ -142,7 +142,7 @@ func (g *gatedGame) Draw(screen *ebiten.Image) {
 	if g.debugEnabled() && screen != nil {
 		m := g.stats.view()
 		text := fmt.Sprintf("WASM | %.1f TPS / %.1f FPS | 60 logic ticks/s\nUpdate %.3f ms | mean %.3f | max %.3f\nDraw   %.3f ms | mean %.3f | max %.3f\nGo heap %.1f MiB | F3: hide | F: fullscreen", m.TPS, m.FPS, m.UpdateMS, m.UpdateMeanMS, m.UpdateMaxMS, m.DrawMS, m.DrawMeanMS, m.DrawMaxMS, float64(m.HeapBytes)/(1<<20))
-		ebitenutil.DebugPrintAt(screen, text, 8, 8)
+		render.DebugPrintAt(screen, text, 8, 8)
 	}
 }
 

@@ -36,7 +36,11 @@ func chooseWebTexture(t *anm.Texture, lossless []byte, p *textureProduct) ([]byt
 			break
 		}
 	}
-	if len(colors) <= 4096 || smoothGradient(img) {
+	// Few distinct colors only predicts a cheap lossless encoding when the
+	// colors are spatially coherent; dithered RGB565 illustrations (the ending
+	// CGs) have ~500 colors yet still deflate poorly, so the earlier size
+	// ratio test decides instead of the color count.
+	if (len(colors) <= 4096 && float64(len(lossless))/float64(len(t.Pixels)) < 0.2) || smoothGradient(img) {
 		return lossless, nil
 	}
 	best := lossless

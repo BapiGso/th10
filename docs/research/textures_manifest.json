@@ -2,7 +2,7 @@
   "version": 1,
   "logical_bytes": 790168,
   "lossless_pack_bytes": 16223947,
-  "web_pack_bytes": 11976760,
+  "web_pack_bytes": 9422989,
   "textures": [
     {
       "id": "0052268405a3a5fbd373f97c5f753c53ec477e1bbedbe496c2e1a6b4fa78104c",
@@ -100,8 +100,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 206192,
       "lossless_codec": "flate",
-      "web_bytes": 206192,
-      "web_codec": "flate"
+      "web_bytes": 94293,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.21007198625867,
+      "all_psnr": 34.21007198625867,
+      "edge_psnr": 100
     },
     {
       "id": "0603866aade41e8ce24bec7077c6bb8b245d78d9cd3f79e9169ab19c62e744ba",
@@ -169,8 +173,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 186613,
       "lossless_codec": "flate",
-      "web_bytes": 186613,
-      "web_codec": "flate"
+      "web_bytes": 81309,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.06932493211885,
+      "all_psnr": 35.06932493211885,
+      "edge_psnr": 100
     },
     {
       "id": "0c18a60aaa9c40ebf2f7c4da25b5171e0649cbbaf2516980e836fb648fc33821",
@@ -184,8 +192,12 @@
       "raw_bytes": 262144,
       "lossless_bytes": 67093,
       "lossless_codec": "flate",
-      "web_bytes": 67093,
-      "web_codec": "flate"
+      "web_bytes": 14853,
+      "web_codec": "jpeg-rgb-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 35.8545674308104,
+      "all_psnr": 35.8545674308104,
+      "edge_psnr": 100
     },
     {
       "id": "0ca2fc07e24e7e73fcbe00bc90ac5a24410804deb01cc7924d83175958c6aa8a",
@@ -345,8 +357,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 185309,
       "lossless_codec": "flate",
-      "web_bytes": 185309,
-      "web_codec": "flate"
+      "web_bytes": 51961,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 85,
+      "visible_psnr": 34.20454099312137,
+      "all_psnr": 34.20454099312137,
+      "edge_psnr": 100
     },
     {
       "id": "1def62188f60c9ea1037cdfd75ba18eab64a0f490e97341596344081463ebab4",
@@ -533,8 +549,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 187472,
       "lossless_codec": "flate",
-      "web_bytes": 187472,
-      "web_codec": "flate"
+      "web_bytes": 80646,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.03917092878609,
+      "all_psnr": 35.03917092878609,
+      "edge_psnr": 100
     },
     {
       "id": "2e8abb7a116e57a706b96747004266bb937a54ead19bad8311def26bc4d9390a",
@@ -1255,8 +1275,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 186352,
       "lossless_codec": "flate",
-      "web_bytes": 186352,
-      "web_codec": "flate"
+      "web_bytes": 81651,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.13381180206536,
+      "all_psnr": 35.13381180206536,
+      "edge_psnr": 100
     },
     {
       "id": "5d175d35171119bb234c8f58dff2d8e4f17d3a3520b0703cee24f42bb612b643",
@@ -1270,8 +1294,12 @@
       "raw_bytes": 262144,
       "lossless_bytes": 90403,
       "lossless_codec": "png",
-      "web_bytes": 90403,
-      "web_codec": "png"
+      "web_bytes": 19450,
+      "web_codec": "jpeg-rgb-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 34.163855899372486,
+      "all_psnr": 34.163855899372486,
+      "edge_psnr": 100
     },
     {
       "id": "5d4f31d006f0081ab3babf0c4eefe7cb35be06f832351870ac5f94af3dc01b65",
@@ -1402,8 +1430,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 191601,
       "lossless_codec": "flate",
-      "web_bytes": 191601,
-      "web_codec": "flate"
+      "web_bytes": 79218,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.215899170074486,
+      "all_psnr": 35.215899170074486,
+      "edge_psnr": 100
     },
     {
       "id": "63934657077a5388e9a0b30abe8d6cb8c6eb89d0382af499f4e26a7b3e0dfc28",
@@ -1547,8 +1579,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 191750,
       "lossless_codec": "flate",
-      "web_bytes": 191750,
-      "web_codec": "flate"
+      "web_bytes": 81001,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.06586485422571,
+      "all_psnr": 35.06586485422571,
+      "edge_psnr": 100
     },
     {
       "id": "6b14b4253468c55d714b58c1b5780c5fae78b822366547ecb17666cc77c83537",
@@ -1794,8 +1830,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 163862,
       "lossless_codec": "flate",
-      "web_bytes": 163862,
-      "web_codec": "flate"
+      "web_bytes": 31776,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 75,
+      "visible_psnr": 34.21703045263796,
+      "all_psnr": 34.21703045263796,
+      "edge_psnr": 100
     },
     {
       "id": "7a7ca3e6bab2fbe230abfa8f89c859017420aeecc90e0a3c7ca6d39c33f2f20b",
@@ -1886,8 +1926,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 206865,
       "lossless_codec": "flate",
-      "web_bytes": 206865,
-      "web_codec": "flate"
+      "web_bytes": 94563,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.19253521887949,
+      "all_psnr": 34.19253521887949,
+      "edge_psnr": 100
     },
     {
       "id": "81c932d46b7c110f18724edf59cd86f1ed8d1731a3f3c4cdbe942411067ef2f7",
@@ -2075,8 +2119,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 98976,
       "lossless_codec": "palette-png",
-      "web_bytes": 98976,
-      "web_codec": "palette-png"
+      "web_bytes": 17018,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 55,
+      "visible_psnr": 34.35508160242592,
+      "all_psnr": 34.35508160242592,
+      "edge_psnr": 100
     },
     {
       "id": "8962f77f27e6ca49a24d4c8516301ad45ba9ff561dafc6ba858e0b0ca6eba76f",
@@ -2145,8 +2193,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 188362,
       "lossless_codec": "flate",
-      "web_bytes": 188362,
-      "web_codec": "flate"
+      "web_bytes": 79608,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.17694397870325,
+      "all_psnr": 35.17694397870325,
+      "edge_psnr": 100
     },
     {
       "id": "8cc536a57a4ac81f2a7519263d236c90d1dd622be169d26d9f1acdf67e82a211",
@@ -2199,8 +2251,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 192196,
       "lossless_codec": "flate",
-      "web_bytes": 192196,
-      "web_codec": "flate"
+      "web_bytes": 82939,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.91612052043736,
+      "all_psnr": 34.91612052043736,
+      "edge_psnr": 100
     },
     {
       "id": "8e8ae568d73766f86d8be4ccd7fe3663e71cd2bd888addb87f020484151d6889",
@@ -2270,8 +2326,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 201945,
       "lossless_codec": "flate",
-      "web_bytes": 201945,
-      "web_codec": "flate"
+      "web_bytes": 91400,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.45425568435249,
+      "all_psnr": 34.45425568435249,
+      "edge_psnr": 100
     },
     {
       "id": "9019944552f1bb4c65ec605c1d95fd5d9ad20688e9642856876059f305c1fc68",
@@ -2360,8 +2420,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 184104,
       "lossless_codec": "flate",
-      "web_bytes": 184104,
-      "web_codec": "flate"
+      "web_bytes": 51195,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 85,
+      "visible_psnr": 34.21896511422652,
+      "all_psnr": 34.21896511422652,
+      "edge_psnr": 100
     },
     {
       "id": "94431639da2ba8fe8fb3f66e1a8c709fb86503c7ebcc3147cff4b5769a45fdc4",
@@ -2390,8 +2454,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 183881,
       "lossless_codec": "flate",
-      "web_bytes": 183881,
-      "web_codec": "flate"
+      "web_bytes": 79417,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.23952351318628,
+      "all_psnr": 35.23952351318628,
+      "edge_psnr": 100
     },
     {
       "id": "9648c5cd5417ed8eea0365123af46345c0086f5ee2ee1b0b1b1e08d7118074c2",
@@ -2705,8 +2773,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 187822,
       "lossless_codec": "flate",
-      "web_bytes": 187822,
-      "web_codec": "flate"
+      "web_bytes": 81571,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.95193805075935,
+      "all_psnr": 34.95193805075935,
+      "edge_psnr": 100
     },
     {
       "id": "ad86e951dd4fc0a8734459687f30996c7db130e7e026b6af6121c223040c414e",
@@ -2859,8 +2931,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 205885,
       "lossless_codec": "flate",
-      "web_bytes": 205885,
-      "web_codec": "flate"
+      "web_bytes": 94283,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.21701203371009,
+      "all_psnr": 34.21701203371009,
+      "edge_psnr": 100
     },
     {
       "id": "b86764b01616499814bd59b24818517c0c52e9938719f18c2693688d8c2d573d",
@@ -2889,8 +2965,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 190613,
       "lossless_codec": "flate",
-      "web_bytes": 190613,
-      "web_codec": "flate"
+      "web_bytes": 84190,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.88900680362277,
+      "all_psnr": 34.88900680362277,
+      "edge_psnr": 100
     },
     {
       "id": "b9efadf1311a5ae22ac1bf9820c5b53aea15656b8f704af036a51dffc502291b",
@@ -3184,8 +3264,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 192630,
       "lossless_codec": "flate",
-      "web_bytes": 192630,
-      "web_codec": "flate"
+      "web_bytes": 84111,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.84268228848613,
+      "all_psnr": 34.84268228848613,
+      "edge_psnr": 100
     },
     {
       "id": "c899a18f20bf372ebc4e79423a546f18ea85812bf03ba19dc83ae284c5f7a9ed",
@@ -3542,8 +3626,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 187321,
       "lossless_codec": "flate",
-      "web_bytes": 187321,
-      "web_codec": "flate"
+      "web_bytes": 78797,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.16920887332937,
+      "all_psnr": 35.16920887332937,
+      "edge_psnr": 100
     },
     {
       "id": "db33eff0d05497c58390ec6688863b8eaf253afcb0cd547fd92295aaf89e2961",
@@ -3602,8 +3690,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 186824,
       "lossless_codec": "flate",
-      "web_bytes": 186824,
-      "web_codec": "flate"
+      "web_bytes": 80811,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 35.13352170077521,
+      "all_psnr": 35.13352170077521,
+      "edge_psnr": 100
     },
     {
       "id": "e176f65c8692aa1227ccc27b2e7a1984c286acee19693b3da4884379c04e6d6d",
@@ -3641,8 +3733,12 @@
       "raw_bytes": 491520,
       "lossless_bytes": 190441,
       "lossless_codec": "flate",
-      "web_bytes": 190441,
-      "web_codec": "flate"
+      "web_bytes": 84680,
+      "web_codec": "jpeg-alpha",
+      "jpeg_quality": 92,
+      "visible_psnr": 34.81182244744611,
+      "all_psnr": 34.81182244744611,
+      "edge_psnr": 100
     },
     {
       "id": "e1ee88dd609641a17b2f6949462f4532aa0b62ee4755cd5cc424466f16dd361a",

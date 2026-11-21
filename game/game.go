@@ -7,13 +7,13 @@ import (
 	thaudio "th10/audio"
 	"th10/input"
 	"th10/pacing"
+	"th10/render"
 	"th10/supervisor"
 	"th10/zun"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 )
 
 const (
@@ -200,7 +200,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		fps += mode
 		x = ScreenWidth - 200
 	}
-	ebitenutil.DebugPrintAt(screen, fps, x, ScreenHeight-16)
+	render.DebugPrintAt(screen, fps, x, ScreenHeight-16)
 }
 
 // keepAliveDot is the 1x1 image keepAlive draws; it is created on first use.
