@@ -22,6 +22,16 @@ globalThis.crypto ??= require("node:crypto").webcrypto;
 
 if (process.env.TH10_WASM_FAKE_IDB === "1") require("./testdata/indexeddb.cjs");
 if (process.env.TH10_WASM_HEADLESS === "1") require("./headless.cjs");
+// th10web asset packs: serve fetch(relative URL) from a built dist directory.
+if (process.env.TH10_WASM_ASSET_DIR) {
+    const root = path.resolve(process.env.TH10_WASM_ASSET_DIR);
+    globalThis.fetch = async url => {
+        const file = path.resolve(root, String(url).split("?")[0]);
+        if (!file.startsWith(root + path.sep) || !fs.existsSync(file)) return { ok: false, status: 404 };
+        const data = fs.readFileSync(file);
+        return { ok: true, status: 200, arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) };
+    };
+}
 
 const goroot = process.env.GOROOT || execFileSync("go", ["env", "GOROOT"], { encoding: "utf8" }).trim();
 const runtime = ["lib", "misc"].map(dir => path.join(goroot, dir, "wasm", "wasm_exec.js")).find(file => fs.existsSync(file));

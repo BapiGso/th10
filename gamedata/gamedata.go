@@ -27,7 +27,7 @@ func ReadFile(name string) ([]byte, error) {
 		data, err := readANM(name)
 		return bytes.Clone(data), err // preserve embed.FS.ReadFile's private-copy contract
 	}
-	data, err := assets.Assets.ReadFile(name)
+	data, err := assets.ReadFile(name)
 	if err == nil && path.Ext(name) == ".wav" && len(data) >= 4 && string(data[:4]) == "ZSE1" {
 		return compactWAV(data)
 	}
@@ -78,7 +78,7 @@ func readANM(name string) ([]byte, error) {
 	value, _ := anmFiles.LoadOrStore(name, &loadedANM{})
 	file := value.(*loadedANM)
 	file.once.Do(func() {
-		file.data, file.err = assets.Assets.ReadFile(name)
+		file.data, file.err = assets.ReadFile(name)
 		if file.err == nil && anm.IsPacked(file.data) {
 			file.data, file.err = anm.Restore(file.data, assets.ReadTexture)
 		}
@@ -94,7 +94,7 @@ var (
 func textureIndex() map[string]string {
 	texOnce.Do(func() {
 		texIndex = map[string]string{}
-		if data, err := assets.Assets.ReadFile("anm/texture_index.json"); err == nil {
+		if data, err := assets.ReadFile("anm/texture_index.json"); err == nil {
 			_ = json.Unmarshal(data, &texIndex)
 		}
 	})

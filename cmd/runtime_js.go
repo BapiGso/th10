@@ -7,6 +7,7 @@ import (
 	"io"
 	goruntime "runtime"
 	"syscall/js"
+	"th10/assets"
 	thaudio "th10/audio"
 	"th10/game"
 	"time"
@@ -15,6 +16,21 @@ import (
 )
 
 func preparePlatform() error {
+	// The th10web release fetches asset packs: wait for the boot pack here,
+	// before game.New reads any resource; the rest prefetch in the background.
+	if err := assets.Start(func(p assets.Progress) {
+		event := map[string]any{"pack": p.Pack, "bytes": p.Bytes, "loadedBytes": p.LoadedBytes, "totalBytes": p.TotalBytes,
+			"loadedPacks": p.LoadedPacks, "totalPacks": p.TotalPacks}
+		if p.Err != nil {
+			event["error"] = p.Err.Error()
+		} else {
+			js.Global().Get("console").Call("info", fmt.Sprintf("[TH10] asset pack %s loaded (%d/%d, %d bytes)", p.Pack, p.LoadedPacks, p.TotalPacks, p.Bytes))
+		}
+		platformMessage("th10AssetProgress", event)
+	}); err != nil {
+		platformMessage("th10Fatal", err.Error())
+		return err
+	}
 	if err := game.InitBrowserStorage(); err != nil {
 		platformMessage("th10Fatal", err.Error())
 		return err

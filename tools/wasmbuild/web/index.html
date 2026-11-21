@@ -35,7 +35,7 @@
         .storage-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 12px 0; }
         .storage-controls button { font-size: 13px; }
         select { padding: 8px; font: 12px var(--mono); background: var(--deep); color: var(--paper); border: 1px solid var(--line); }
-        #storage-status { color: var(--muted); line-height: 1.7; }
+        #storage-status, #asset-status { color: var(--muted); line-height: 1.7; }
         @media (max-width: 700px) { main { padding: 16px 12px; overflow-x: auto; } header { align-items: start; flex-direction: column; } h1 small { display: block; margin: 9px 0 0; } .download { min-width: 300px; } }
         @media (prefers-reduced-motion: no-preference) { header { animation: arrive .6s ease-out; } @keyframes arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } } }
     </style>
@@ -60,6 +60,7 @@
             <button id="export-replay" type="button" disabled>导出槽位</button>
             <button id="persist" type="button">请求保留网站数据</button>
         </div>
+        <p id="asset-status">资源包：等待游戏初始化。</p>
         <p id="storage-status">导入只允许在“点击开始”之前；游戏内按原保存检查点提交，不逐帧写入。刷新后使用同一浏览器、网址与端口读取。</p>
         <input id="score-file" type="file" accept=".dat" hidden><input id="replay-file" type="file" accept=".rpy" hidden>
     </details>

@@ -33,8 +33,9 @@ func previewHandler(dir string) (http.Handler, error) {
 			name = "index.html"
 		}
 		plain := strings.TrimSuffix(name, ".gz")
+		pack := isPackName(plain)
 		// Only release artifacts are public; never expose directory listings or the module.
-		if !allowed[plain] || strings.ContainsAny(name, "/\\") {
+		if !pack && (!allowed[plain] || strings.ContainsAny(name, "/\\")) {
 			http.NotFound(w, r)
 			return
 		}
@@ -65,7 +66,11 @@ func previewHandler(dir string) (http.Handler, error) {
 		}
 		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasSuffix(plain, ".pak") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable") // content-hashed name
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		w.Header().Set("Vary", "Accept-Encoding")
 		if encoded {
 			w.Header().Set("Content-Encoding", "gzip")
@@ -73,6 +78,15 @@ func previewHandler(dir string) (http.Handler, error) {
 		}
 		http.ServeContent(w, r, plain, info.ModTime(), f)
 	}), nil
+}
+
+// isPackName accepts assets/manifest.json and assets/<pack>.<hash>.pak only.
+func isPackName(name string) bool {
+	rest, ok := strings.CutPrefix(name, "assets/")
+	if !ok || rest == "" || strings.ContainsAny(rest, "/\\") || strings.HasPrefix(rest, ".") || strings.Contains(rest, "..") {
+		return false
+	}
+	return rest == "manifest.json" || strings.HasSuffix(rest, ".pak")
 }
 
 func acceptsGzip(header string) bool {

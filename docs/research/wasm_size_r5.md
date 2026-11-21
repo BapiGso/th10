@@ -34,3 +34,41 @@ js 构建的 `./cmd` 依赖中已不再包含：ebitenui（及 bbcode、x/exp）
 - 字体 W7（797 KB）无运行时调用者，但现有像素参考测试覆盖 Bold 路径；删除需同时改测试。
 - x/text 日文／GBK 解码表约 0.3 MB（桌面代码），可换成按固定语料生成的子集表；回放名等用户数据需保留后备。
 - 发布工具改用 brotli 预压缩、加 wasm-opt，属于传输层。
+
+## 第 5 項：js 發佈版漸進加載資源（2026-11-21）
+
+只有 wasmbuild 產出的發佈版（build tag `th10web`）不嵌資源。桌面版和預設 `GOOS=js` 構建（th10sim wasm、wasmcheck）照舊全嵌，邏輯與 trace 不受影響。
+
+- `assets.ReadFile` / `assets.ReadTexture`：嵌入版在 `assets_embed.go`（`!th10web`）；網頁版在 `assets_web.go`（`js && th10web`）。gamedata 只走這兩個入口。
+- 包格式和分包規則在 `assets/pack.go`，無 build tag，運行時和 wasmbuild 共用。
+  - 包格式：`TAP1` + 條目，每條是 文件或貼圖 / 名字 / 數據。
+  - `PackOf`：boot 是 sig、ascii、title、title_v、text、bullet 的 ANM，加全部 SE、misc、thbgm.fmt 和標題曲；stageNN 是該面的 ANM、ECL、STD、MSG；ending 是 e*/staff；每首 BGM 單獨一包；其餘歸 common。
+  - `PackOrder`：common → 依通關順序每面的 stage 包、道中曲、Boss 曲 → ending → Extra。
+- 運行時（cmd/runtime_js.go 的 `preparePlatform`）：
+  - 先 fetch `assets/manifest.json` 和 boot 包（核對大小與 SHA-256，失敗重試 3 次），再建遊戲。
+  - 其餘包在後台按 PackOrder 預取。
+  - 讀到未到齊的包時，遊戲線程阻塞等待，並在 console 打印 `… waited N ms for asset pack X`。
+  - 進度通過 `th10AssetProgress` 傳到頁面的「资源包」一行。
+- wasmbuild：
+  - 構建時帶 `-tags=th10web`。
+  - 產出 `dist/assets/<pack>.<sha16>.pak` 和 `manifest.json`；gzip 省不到 5% 的包（Ogg）不發 .gz。
+  - 預覽服務器只放行 `assets/manifest.json` 和 `assets/*.pak`；pak 帶 `immutable` 長緩存。
+
+| 項目 | 之前（全嵌） | 現在 |
+|---|---|---|
+| th10.wasm | 56.08 MB / gzip 39.19 MB | 17.89 MiB / gzip 4.35 MiB |
+| 首次加載（wasm + boot） | gzip 39.19 MB | 4.35 + 4.20 = **約 8.6 MiB gzip** |
+| 全部資源包 | — | 27 包，37.5 MB（多數是已壓縮的 Ogg） |
+
+- 跨包重複的貼圖約 0.33 MB，主要是 stage07 複用前幾面的貼圖。按設計允許重複。
+- boot 包 4.9 MB 裡：標題曲 0.8 MB，SE 約 2 MB（音頻管理器創建時預載全部 SE，保持原行為），其餘是標題/子彈貼圖。
+
+驗收：
+- rules §6 全套（build、vet、test 42 包、gofmt、non-tools WASM、full smoke）全綠。
+- 六章 trace 全部 SAME。
+- `GOOS=js go build -tags th10web ./cmd` 和 vet 通過。
+- 新增測試：
+  - `assets/pack_test.go`：格式往返和截斷、BGM 表對照 thbgm.fmt、分包規則。
+  - `tools/wasmbuild/packs_test.go`：每個嵌入文件逐字節進唯一一包，manifest 哈希正確，預覽服務器路徑白名單和緩存頭正確。
+  - `assets/assets_web_test.go`（th10web 版，Node 下用 `TH10_WASM_ASSET_DIR` 偽 fetch）：202 個文件經真實 fetch 路徑讀回一致，全部 ANM 都能還原。
+- 無頭 Chrome 實測：boot 包到齊，Vorbis 預熱完成，runtime-ready；其餘 26 包隨後在後台全部到齊，無錯誤。

@@ -26,6 +26,11 @@ window.th10Started = () => {
     post({ type: "started" });
 };
 window.th10Metrics = metrics => post({ type: "metrics", metrics });
+window.th10AssetProgress = event => {
+    if (event.error) { report(`资源包 ${event.pack} 下载失败：${event.error}`, true); return; }
+    post({ type: "assets", event });
+    if (!ready) document.getElementById("boot-text").textContent = `载入资源包 ${event.pack}…`;
+};
 function toggleDebug() {
     if (!ready) return;
     const enabled = window.th10?.toggleDebug();

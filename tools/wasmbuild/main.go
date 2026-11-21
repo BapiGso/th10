@@ -65,6 +65,13 @@ func run(ctx context.Context, args []string) error {
 		}
 		fmt.Printf("%s\nth10.wasm: %d bytes (%.2f MiB)\nth10.wasm.gz: %d bytes (%.2f MiB)\nGo: %s\n",
 			dir, m.WASMBytes, float64(m.WASMBytes)/(1<<20), m.GzipBytes, float64(m.GzipBytes)/(1<<20), m.GoVersion)
+		packs, err := buildPacks(root, dir)
+		if err != nil {
+			return err
+		}
+		for _, p := range packs {
+			fmt.Printf("assets/%s: %d bytes, gzip %d\n", p.File, p.Bytes, p.GzipBytes)
+		}
 	}
 	if *serve == "" {
 		return nil
@@ -127,7 +134,7 @@ func goToolchain(ctx context.Context, root string) (string, string, error) {
 }
 
 func buildWASM(ctx context.Context, root, output string) error {
-	command := exec.CommandContext(ctx, "go", "build", "-trimpath", "-ldflags=-s -w", "-o", output, "./cmd")
+	command := exec.CommandContext(ctx, "go", "build", "-trimpath", "-tags=th10web", "-ldflags=-s -w", "-o", output, "./cmd")
 	command.Dir = root
 	// Preserve the caller's sandbox/cache settings, but do not inherit a host target.
 	for _, entry := range os.Environ() {

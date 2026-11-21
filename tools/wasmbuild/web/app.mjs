@@ -13,6 +13,7 @@ let busy = false;
 let limits = { scoreLimit: 2 * 1048576, replayLimit: 16 * 1048576 };
 const dataButtons = ["import-score", "export-score", "export-cfg", "import-replay", "export-replay"];
 const storageStatus = document.getElementById("storage-status");
+const assetStatus = document.getElementById("asset-status");
 const slot = document.getElementById("slot");
 for (let n = 1; n <= 25; n++) slot.add(new Option(String(n).padStart(2, "0"), String(n)));
 
@@ -52,7 +53,7 @@ function launch() {
     if (!playerReady || !downloaded) return;
     const buffer = downloaded.buffer;
     downloaded = null;
-    report("下载完成，初始化 WASM 与嵌入资源…");
+    report("下载完成，初始化 WASM 并载入启动资源包…");
     frame.contentWindow.postMessage({ type: "wasm", buffer }, location.origin, [buffer]);
 }
 
@@ -79,6 +80,12 @@ window.addEventListener("message", event => {
         if (e.error) { storageStatus.textContent = `存储失败，未确认保存：${e.error}`; report(storageStatus.textContent, true); }
         else if (e.operation === "write") storageStatus.textContent = `已提交 ${e.key}（${e.bytes} 字节）；同一网址重新载入可读取。请定期导出备份。`;
         else if (e.operation === "open") storageStatus.textContent = "IndexedDB 已连接。导入只允许在点击开始前；请选择槽位后导入／导出回放。";
+    }
+    else if (message?.type === "assets") {
+        const e = message.event;
+        assetStatus.textContent = e.loadedPacks >= e.totalPacks
+            ? `资源包全部就绪（${e.totalPacks} 个，${mebibytes(e.totalBytes)} MiB）`
+            : `资源包 ${e.loadedPacks}/${e.totalPacks} · ${mebibytes(e.loadedBytes)} / ${mebibytes(e.totalBytes)} MiB（后台预取，最近：${e.pack}）`;
     }
     else if (message?.type === "debug-state") { document.getElementById("debug").setAttribute("aria-pressed", String(Boolean(message.enabled))); }
     else if (message?.type === "metrics") {
