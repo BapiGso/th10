@@ -29,6 +29,10 @@ const Layers = 19
 type World struct {
 	list   []*VM
 	layers [Layers][]*VM
+	// cursor is Run's position in list while walking is set, so AddFront
+	// during the walk keeps the walk on the same object.
+	cursor  int
+	walking bool
 }
 
 // Add appends vm (FUN_004489d0) and records w as its world. Use it as
@@ -39,11 +43,15 @@ func (w *World) Add(vm *VM) {
 }
 
 // AddFront is FUN_00448a50: Add, but at the head of the list, so vm runs
-// before every object already there. Not for use while Run walks the list
-// (no ANM op calls it).
+// before every object already there. Ops 91/92 call it while Run walks the
+// list; as in the original linked list, the walk continues from the current
+// object's successor, so the new head first runs next frame.
 func (w *World) AddFront(vm *VM) {
 	vm.world = w
 	w.list = slices.Insert(w.list, 0, vm)
+	if w.walking {
+		w.cursor++
+	}
 }
 
 // SpawnFront is FUN_00448e30, which ECL's enemy sprite ops use: a new object
@@ -172,11 +180,12 @@ func (w *World) Run(env *Env) {
 		w.layers[i] = w.layers[i][:0]
 	}
 	dead := false
-	for i := 0; i < len(w.list); i++ {
-		vm := w.list[i]
-		last := i == len(w.list)-1
+	w.walking = true
+	for w.cursor = 0; w.cursor < len(w.list); w.cursor++ {
+		vm := w.list[w.cursor]
+		last := w.cursor == len(w.list)-1
 		if vm.Flags&FlagDelete != 0 || vm.Run(env) {
-			w.list[i] = nil
+			w.list[w.cursor] = nil // AddFront during vm.Run moved the cursor with vm
 			vm.world = nil
 			dead = true
 		} else if l := vm.Layer; l >= 0 && l < Layers {
@@ -186,6 +195,7 @@ func (w *World) Run(env *Env) {
 			break
 		}
 	}
+	w.walking = false
 	if dead {
 		n := 0
 		for _, vm := range w.list {

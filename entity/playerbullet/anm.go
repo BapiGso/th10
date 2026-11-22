@@ -1,9 +1,6 @@
 package playerbullet
 
-import (
-	"th10/anm"
-	"th10/zun"
-)
+import "th10/anm"
 
 // AttachAnm gives the shot records their original World/file association
 // (P+0x10, FUN_00427e90). Nil disables only the animation paths.
@@ -56,7 +53,9 @@ func (p *Pool) prep(b *Bullet) {
 		b.ExtraVM = nil
 	}
 	if b.VM.Flags&anm.FlagAutoRotate != 0 {
-		b.VM.Rot[2] = zun.AddAngle(float32(b.Angle), zun.HalfPi) // 0x428568
+		// 0x428568..0x42856e copies record +0x30 (the heading, which the homing
+		// callback writes at 0x428c01) unchanged: player shot sprites point +x.
+		b.VM.Rot[2] = float32(b.Angle)
 		b.VM.Flags |= anm.FlagRotDirty
 	}
 }

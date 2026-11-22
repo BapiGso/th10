@@ -2,14 +2,17 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -28,7 +31,10 @@ type packInfo struct {
 // file, byte for byte, grouped by assets.PackOf, plus the web texture blobs
 // each ANM references. File names carry a content hash so browsers may cache
 // packs indefinitely; manifest.json is the only mutable name.
-func buildPacks(root, out string) ([]packInfo, error) {
+//
+// Without story (the th10nostory release) dialogue and ending resources are
+// left out, and the text of the stage .msg scripts that remain is blanked.
+func buildPacks(root, out string, story bool) ([]packInfo, error) {
 	webPack, err := os.ReadFile(filepath.Join(root, "assets", "textures", "web.tpk"))
 	if err != nil {
 		return nil, err
@@ -54,9 +60,17 @@ func buildPacks(root, out string) ([]packInfo, error) {
 		if err != nil || d.IsDir() {
 			return err
 		}
+		if !story && storyOnly(name) {
+			return nil
+		}
 		data, err := assets.Assets.ReadFile(name)
 		if err != nil {
 			return err
+		}
+		if !story && strings.HasPrefix(name, "msg/") {
+			if data, err = blankMSGText(data); err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
 		}
 		packName := assets.PackOf(name)
 		add(packName, assets.PackEntry{Kind: assets.PackFile, Name: name, Data: data})
@@ -135,7 +149,7 @@ func buildPacks(root, out string) ([]packInfo, error) {
 		infos = append(infos, packInfo{Name: name, File: file, Bytes: len(data), GzipBytes: gzipBytes})
 	}
 	for _, name := range assets.PackOrder() {
-		if _, ok := manifest.Packs[name]; !ok && !strings.HasPrefix(name, "bgm-") {
+		if _, ok := manifest.Packs[name]; !ok && !strings.HasPrefix(name, "bgm-") && (story || name != "ending") {
 			return nil, fmt.Errorf("prefetch order names pack %q, but no runtime file maps to it", name)
 		}
 	}
@@ -147,4 +161,56 @@ func buildPacks(root, out string) ([]packInfo, error) {
 		return nil, err
 	}
 	return infos, gzipFile(filepath.Join(dir, "manifest.json"))
+}
+
+// storyOnly reports the resources a th10nostory build never reads: ending and
+// staff-roll ANM/MSG and the localized .mst texts. Portrait sheets stay: pl0N
+// is also the player and stgenm0N the spell cut-ins.
+func storyOnly(name string) bool {
+	base := path.Base(name)
+	stem := strings.TrimSuffix(base, path.Ext(base))
+	switch {
+	case path.Ext(name) == ".mst":
+		return true
+	case strings.HasPrefix(name, "msg/") || strings.HasPrefix(name, "anm/"):
+		return stem == "staff" || len(stem) == 3 && stem[0] == 'e' && stem[1] >= '0' && stem[1] <= '9'
+	}
+	return false
+}
+
+// blankMSGText rewrites a stage .msg so its text ops (14, 15, 16) decrypt to
+// NULs: the same layout and offsets, with no dialogue in the bytes.
+func blankMSGText(data []byte) ([]byte, error) {
+	if len(data) < 4 {
+		return nil, errors.New("short msg")
+	}
+	out := slices.Clone(data)
+	count := int(binary.LittleEndian.Uint32(out))
+	if count <= 0 || 4+count*8 > len(out) {
+		return nil, errors.New("bad msg header")
+	}
+	for i := range count {
+		p := int(binary.LittleEndian.Uint32(out[4+i*8:]))
+		end := len(out)
+		if i+1 < count {
+			end = int(binary.LittleEndian.Uint32(out[4+(i+1)*8:]))
+		}
+		if p > end || end > len(out) {
+			return nil, errors.New("bad msg offsets")
+		}
+		for p+4 <= end {
+			op, n := out[p+2], int(out[p+3])
+			args := out[p+4 : min(p+4+n, end)]
+			if op >= 14 && op <= 16 {
+				key, step := byte(0x77), byte(7) // thtk util_xor(0x77, 7, 0x10)
+				for j := range args {
+					args[j] = key
+					key += step
+					step += 0x10
+				}
+			}
+			p += 4 + n
+		}
+	}
+	return out, nil
 }

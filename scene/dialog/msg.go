@@ -66,7 +66,9 @@ func parseMSGStream(data []byte, p, end int, dec interface {
 		args := data[argOff : argOff+length]
 		switch in.Op {
 		case msgLine1, msgLine2, msgText:
-			in.Text = decodeMSGText(args, dec)
+			if gamedata.Story {
+				in.Text = decodeMSGText(args, dec)
+			}
 		default:
 			if len(args) >= 4 {
 				in.Arg = int32(binary.LittleEndian.Uint32(args))
@@ -141,7 +143,9 @@ func LoadStage(stage string, character int) *StageMSG {
 	if data, err := gamedata.ReadFile(path); err == nil {
 		if entries := ParseMSG(data); len(entries) > 0 {
 			sm = &StageMSG{Entries: entries, Stage: stageNum}
-			if localized, err := gamedata.ReadFile(fmt.Sprintf("msg/st%02d_%02d.mst", stageNum, character&1)); err == nil {
+			if !gamedata.Story {
+				// th10nostory: no text is shown, and the .mst is not shipped.
+			} else if localized, err := gamedata.ReadFile(fmt.Sprintf("msg/st%02d_%02d.mst", stageNum, character&1)); err == nil {
 				attachDisplayTexts(entries, localized)
 			}
 		}

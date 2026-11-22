@@ -175,7 +175,10 @@ func (m *MenuController) capture(sv *supervisor.Supervisor) {
 	tex.Image.SubImage(image.Rect(0, 0, w, h)).(*ebiten.Image).WritePixels(pixels)
 	m.backdrop.File = f
 	m.backdrop.SetSprite(231)
-	m.backdrop.Pos = [3]float32{224, 240, 0}
+	// FUN_00422ab0/FUN_00424480 never position the backdrop (no write to its
+	// +0x334/+0x340), and ascii script 0 anchors it bottom-centre (op 65 0,2),
+	// so at Pos 0,0 the capture lies above the screen; the frozen stage stays
+	// visible underneath the menu as drawn by its own chain.
 	m.backdrop.Flags |= anm.FlagVisible | anm.FlagDraw
 }
 

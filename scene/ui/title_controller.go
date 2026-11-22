@@ -163,7 +163,7 @@ func (c *TitleController) Calc(g *game.Game, in *input.State) error {
 	for _, fade := range c.Fades {
 		fade.Calc(c.Env.GameSpeed, false, 0)
 	}
-	c.animations().Run(nil) // Title-A retains its existing ANM-91 no-op.
+	c.animations().Run()
 	return nil
 }
 

@@ -775,8 +775,15 @@ func (vm *VM) exec(in Instr) execResult {
 		vm.Flags = vm.Flags&^flagRealtime | uint32(vm.readI(in, 0))<<29&flagRealtime
 	case 87:
 		vm.Flags = vm.Flags&^FlagAltRNG | uint32(uint8(in.Arg(0)))<<30&FlagAltRNG
-	case 88:
-		vm.spawnChild(int(vm.readI(in, 0)))
+	case 88, 90:
+		// 0x43ef06/0x43ef61: FUN_00448d00 and FUN_00448f60 differ only in
+		// the list they append to (world +0x72dad4 or UI +0x72dadc); each
+		// Go World is already one manager list, so both use Env.Spawn.
+		vm.spawnChild(int(vm.readI(in, 0)), false)
+	case 91, 92:
+		// 0x43ef32/0x43efe6: FUN_00448e30/FUN_00449090, the same child put
+		// at the head of the list (FUN_00448a50/FUN_00448b40).
+		vm.spawnChild(int(vm.readI(in, 0)), true)
 	case 89:
 		vm.Flags = vm.Flags&^0x80000000 | uint32(in.Arg(0))<<31
 	}
@@ -786,10 +793,11 @@ func (vm *VM) exec(in Instr) execResult {
 	return execNext
 }
 
-// spawnChild is op 88 (FUN_00448d00 + FUN_00449870): a child of the same
-// file on the parent's layer, flagged for the alternate RNG and started
-// without a reset, so the flag survives its first frame.
-func (vm *VM) spawnChild(id int) {
+// spawnChild is ops 88/90-92 (FUN_00448d00 + FUN_00449870 and its three
+// twins): a child of the same file on the parent's layer, flagged for the
+// alternate RNG and started without a reset, so the flag survives its first
+// frame. front puts it at the head of the parent's list instead of the tail.
+func (vm *VM) spawnChild(id int, front bool) {
 	if vm.File.Scripts[id] == nil {
 		return
 	}
@@ -800,7 +808,9 @@ func (vm *VM) spawnChild(id int) {
 	c.StartKeep(vm.File, id, vm.env)
 	c.Pos2 = vm.Pos
 	c.Offset = vm.Offset
-	if vm.env.Spawn != nil {
+	if front && vm.world != nil {
+		vm.world.AddFront(c)
+	} else if vm.env.Spawn != nil {
 		vm.env.Spawn(c)
 	}
 	root := vm

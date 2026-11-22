@@ -18,7 +18,6 @@ type nativeMenu struct {
 	title, text, ascii *anm.File
 	positions          map[*anm.VM]*zun.Interp
 	loading            *anm.VM
-	loadingEmitter     sceneui.LoadingEmitter
 	fade               *sceneui.Fade
 }
 
@@ -47,7 +46,6 @@ func (m *nativeMenu) init(g *game.Game, background, heading int) error {
 	m.spawnTitle(background)
 	m.spawnTitle(heading)
 	m.loading = m.world.SpawnTail(m.ascii, 8, 15, &m.env) // FUN_004315c0/00431ee0/00433ef0
-	m.loadingEmitter = sceneui.LoadingEmitter{Parent: m.loading, File: m.ascii}
 	return nil
 }
 
@@ -86,7 +84,7 @@ func (m *nativeMenu) calc() {
 			m.fade = nil
 		}
 	}
-	m.animations().Run(&m.loadingEmitter)
+	m.animations().Run()
 	for v, p := range m.positions {
 		if !m.world.Contains(v) {
 			delete(m.positions, v)

@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"th10/assets"
+	"th10/scene/dialog"
 )
 
 // Every embedded file reaches exactly one pack byte for byte, and every
@@ -24,7 +26,7 @@ func TestBuildPacksCoversAssets(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(out, "index.html"), []byte("<html></html>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	infos, err := buildPacks(root, out)
+	infos, err := buildPacks(root, out, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,5 +94,71 @@ func TestBuildPacksCoversAssets(t *testing.T) {
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/assets/"+boot, nil))
 	if response.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
 		t.Fatal("content-hashed pack is not cacheable")
+	}
+}
+
+// The default (th10nostory) release ships no ending, staff, portrait or .mst
+// file, and the stage .msg scripts it keeps carry no text.
+func TestBuildPacksWithoutStory(t *testing.T) {
+	root, err := moduleRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := t.TempDir()
+	if _, err := buildPacks(root, out, false); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "assets", "manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m assets.Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.Packs["ending"]; ok {
+		t.Fatal("ending pack published without story")
+	}
+	msgs := 0
+	for _, p := range m.Packs {
+		raw, err := os.ReadFile(filepath.Join(out, "assets", p.File))
+		if err != nil {
+			t.Fatal(err)
+		}
+		entries, err := assets.DecodePack(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if e.Kind != assets.PackFile {
+				continue
+			}
+			if storyOnly(e.Name) {
+				t.Fatalf("%s published without story", e.Name)
+			}
+			if !strings.HasPrefix(e.Name, "msg/") {
+				continue
+			}
+			msgs++
+			want, _ := assets.Assets.ReadFile(e.Name)
+			if len(want) != len(e.Data) {
+				t.Fatalf("%s: blanking changed the layout", e.Name)
+			}
+			ops := 0
+			for _, entry := range dialog.ParseMSG(e.Data) {
+				for _, in := range entry {
+					if in.Text != "" {
+						t.Fatalf("%s keeps text %q", e.Name, in.Text)
+					}
+					ops++
+				}
+			}
+			if ops == 0 {
+				t.Fatalf("%s lost its script", e.Name)
+			}
+		}
+	}
+	if msgs != 14 {
+		t.Fatalf("%d stage msg files, want 14", msgs)
 	}
 }

@@ -4,6 +4,12 @@
 
 发布形态是浏览器 WASM，桌面版同源构建。各子系统的还原程度见 `docs/fidelity.md`。
 
+## 原作与许可
+
+- 原作：「东方风神录 ～ Mountain of Faith.」，作者 **上海爱丽丝幻乐团**（上海アリス幻樂団／Team Shanghai Alice）。游戏设计、程序原型、图像、音乐、剧情等全部版权属于原作者。
+- 本项目是非官方的爱好者移植，与上海爱丽丝幻乐团无关，未获其认可。请遵守原作官网公布的二次创作指引；指引中列有「原作ゲームのエンディングを公開する行為」，因此**对外发布时须用 `th10nostory` 构建**（见下文），去掉对话和结局。
+- 本仓库的源代码按 [PolyForm Noncommercial License 1.0.0](LICENSE) 授权，**仅限非营利用途**。该许可只覆盖本项目编写的代码，不覆盖 `assets/` 中来自原作的数据及原作的其他任何内容。
+
 ## 运行（桌面）
 
 ```bash
@@ -25,6 +31,7 @@ go run ./tools/wasmbuild -serve :8080    # 构建并在 127.0.0.1:8080 预览
 go run ./tools/wasmbuild -skip-build -serve :8080
 ```
 
+- wasmbuild 默认加 build tag `th10nostory`：不播放关内对话（MSG 脚本照常运行，信号、Boss BGM、通关等效果不变，只是不显示、不等待按键），不播放结局与 Staff Roll（第 6 面通关直接进入结算菜单），资源包里不含 `e??`／`staff` 的 ANM 与 MSG、`.mst` 文本，关卡 `.msg` 内的文字清空。`-story` 可构建完整版，但只限本地使用。桌面版同样可以 `go build -tags th10nostory ./cmd`。`th10nostory` 构建里对话时序与原作不同，与原作及未加 tag 构建的回放不互通。
 - 发布版带 build tag `th10web`：wasm 不嵌资源，资源按 `assets/pack.go` 的规则分成 `dist/assets/<pack>.<sha16>.pak`，先取 `manifest.json` 与 boot 包，其余后台预取。
 - 默认 `GOOS=js GOARCH=wasm go build`（不带 `th10web`）仍把全部资源嵌入，供 Node 下的 `th10sim`、`wasmcheck` 使用。
 - js 构建使用有损贴图包，桌面使用无损贴图包；浏览器存档在 IndexedDB。体积、运行时与持久化细节见 `docs/research/wasm.md`。

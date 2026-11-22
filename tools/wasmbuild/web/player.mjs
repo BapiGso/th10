@@ -1,6 +1,7 @@
 import { preventGameDefault, isStartKey } from "./helpers.mjs";
 
 const boot = document.getElementById("boot");
+const GAME_CANVAS = "canvas:not(#loading)"; // Ebiten's canvas, not the loading screen's
 const start = document.getElementById("start");
 let launched = false;
 let ready = false;
@@ -13,23 +14,24 @@ window.th10StorageEvent = event => post({ type: "storage", event });
 window.th10Fatal = text => report(`运行时错误：${text}`, true);
 window.th10RuntimeReady = limits => {
     ready = true;
-    document.getElementById("boot-text").textContent = "音频需要一次真实点击或松键";
+    document.getElementById("boot-text").textContent = "";
     document.getElementById("boot-note").textContent = "点击开始前可导入存档；此时游戏尚未运行第一帧。";
     start.disabled = false;
-    document.querySelector("canvas")?.addEventListener("pointerdown", event => event.target.focus({ preventScroll: true }));
+    boot.classList?.add("ready");
+    document.querySelector(GAME_CANVAS)?.addEventListener("pointerdown", event => event.target.focus({ preventScroll: true }));
     post({ type: "runtime-ready", limits });
 };
 window.th10Started = () => {
     running = true;
     boot.hidden = true;
-    document.querySelector("canvas")?.focus({ preventScroll: true });
+    document.querySelector(GAME_CANVAS)?.focus({ preventScroll: true });
     post({ type: "started" });
 };
 window.th10Metrics = metrics => post({ type: "metrics", metrics });
 window.th10AssetProgress = event => {
     if (event.error) { report(`资源包 ${event.pack} 下载失败：${event.error}`, true); return; }
     post({ type: "assets", event });
-    if (!ready) document.getElementById("boot-text").textContent = `载入资源包 ${event.pack}…`;
+    if (!ready) document.getElementById("boot-text").textContent = `资源 ${event.pack}…`;
 };
 function toggleDebug() {
     if (!ready) return;
@@ -43,7 +45,7 @@ function requestStart() {
     if (error) report(`暂不能开始：${error}`, true);
     else document.getElementById("boot-note").textContent = "等待音频 resume；若仍停在这里，请再次点击或按键。";
 }
-start.addEventListener("click", requestStart);
+boot.addEventListener("click", requestStart); // #start's clicks bubble here too // the whole loading screen; browsers need one real gesture for audio
 document.addEventListener("keyup", event => {
     if (ready && !running && isStartKey(event)) requestStart();
 });
@@ -67,12 +69,12 @@ window.addEventListener("message", async event => {
     if (event.source !== parent || event.origin !== location.origin) return;
     if (event.data?.type === "hello") { post({ type: "player-ready" }); return; }
     if (event.data?.type === "debug") { toggleDebug(); return; }
-    if (event.data?.type === "focus") { document.querySelector("canvas")?.focus({ preventScroll: true }); return; }
+    if (event.data?.type === "focus") { document.querySelector(GAME_CANVAS)?.focus({ preventScroll: true }); return; }
     if (event.data?.type !== "wasm" || launched) return;
     launched = true;
     try {
         if (!(event.data.buffer instanceof ArrayBuffer)) throw new Error("Missing WASM bytes");
-        document.getElementById("boot-text").textContent = "初始化游戏与 IndexedDB…";
+        document.getElementById("boot-text").textContent = "初始化…";
         const go = new Go();
         go.exit = code => {
             ready = false;

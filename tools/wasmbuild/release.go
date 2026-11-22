@@ -60,6 +60,9 @@ func buildRelease(ctx context.Context, options releaseOptions, build wasmBuilder
 			return nil, err
 		}
 	}
+	if err := buildBootImages(options.Out); err != nil {
+		return nil, err
+	}
 	if err := copyFile(glue, filepath.Join(options.Out, "wasm_exec.js")); err != nil {
 		return nil, err
 	}

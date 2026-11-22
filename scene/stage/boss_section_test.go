@@ -1,3 +1,7 @@
+//go:build !th10nostory
+
+// Dialogue/ending behaviour; th10nostory removes it (gamedata.Story).
+
 package stage
 
 import (

@@ -2,7 +2,6 @@ package selector
 
 import (
 	"th10/game"
-	"th10/scene/ending"
 	"th10/scene/stage"
 	stagescript "th10/scene/stage/script"
 )
@@ -39,15 +38,15 @@ func buildStage(g *game.Game, state *game.GameState, back game.Scene) *stage.Sta
 			if st.Stage != game.StageExtra {
 				g.MarkClear(st)
 			}
-			e := ending.New(st, st.Stage == game.StageExtra, back)
+			var after func(*game.Game) game.Scene
 			if st.Stage == game.StageCount {
-				e.After = func(g *game.Game) game.Scene {
+				after = func(g *game.Game) game.Scene {
 					s.NextScene = func(*game.Game, *game.GameState) game.Scene { return back }
 					s.OpenCompletion(g)
 					return s
 				}
 			}
-			return game.NumberScene(game.SceneEnding, e) // preserve e.After while numbering request 14
+			return playEnding(g, st, back, after)
 		}
 		st.Stage, st.Frame = next, 0
 		st.BeginStageTransition()

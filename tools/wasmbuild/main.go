@@ -17,10 +17,10 @@ import (
 	"time"
 )
 
-//go:embed web/index.html web/game.html web/app.mjs web/player.mjs web/helpers.mjs
+//go:embed web/index.html web/game.html web/app.mjs web/player.mjs web/loading.mjs web/helpers.mjs web/embed.html web/embed.mjs
 var webFiles embed.FS
 
-var webNames = []string{"index.html", "game.html", "app.mjs", "player.mjs", "helpers.mjs"}
+var webNames = []string{"index.html", "game.html", "app.mjs", "player.mjs", "loading.mjs", "helpers.mjs", "embed.html", "embed.mjs"}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -36,6 +36,7 @@ func run(ctx context.Context, args []string) error {
 	out := flags.String("out", "dist", "output directory (relative to the module root)")
 	serve := flags.String("serve", "", "preview address, e.g. :8080 (bare ports bind loopback only)")
 	skip := flags.Bool("skip-build", false, "serve an existing release without rebuilding")
+	story := flags.Bool("story", false, "include dialogue and endings (omitted by default: th10nostory)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -59,13 +60,15 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		m, err := buildRelease(ctx, releaseOptions{Root: root, Out: dir, GoRoot: goroot, GoVersion: version}, buildWASM)
+		m, err := buildRelease(ctx, releaseOptions{Root: root, Out: dir, GoRoot: goroot, GoVersion: version}, func(ctx context.Context, root, output string) error {
+			return buildWASM(ctx, root, output, *story)
+		})
 		if err != nil {
 			return err
 		}
 		fmt.Printf("%s\nth10.wasm: %d bytes (%.2f MiB)\nth10.wasm.gz: %d bytes (%.2f MiB)\nGo: %s\n",
 			dir, m.WASMBytes, float64(m.WASMBytes)/(1<<20), m.GzipBytes, float64(m.GzipBytes)/(1<<20), m.GoVersion)
-		packs, err := buildPacks(root, dir)
+		packs, err := buildPacks(root, dir, *story)
 		if err != nil {
 			return err
 		}
@@ -133,8 +136,14 @@ func goToolchain(ctx context.Context, root string) (string, string, error) {
 	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1]), nil
 }
 
-func buildWASM(ctx context.Context, root, output string) error {
-	command := exec.CommandContext(ctx, "go", "build", "-trimpath", "-tags=th10web", "-ldflags=-s -w", "-o", output, "./cmd")
+// buildWASM builds the release; without story it adds th10nostory, which
+// removes dialogue and endings (see gamedata.Story).
+func buildWASM(ctx context.Context, root, output string, story bool) error {
+	tags := "-tags=th10web,th10nostory"
+	if story {
+		tags = "-tags=th10web"
+	}
+	command := exec.CommandContext(ctx, "go", "build", "-trimpath", tags, "-ldflags=-s -w", "-o", output, "./cmd")
 	command.Dir = root
 	// Preserve the caller's sandbox/cache settings, but do not inherit a host target.
 	for _, entry := range os.Environ() {

@@ -19,7 +19,7 @@ func previewHandler(dir string) (http.Handler, error) {
 		return nil, fmt.Errorf("release is missing index.html: %w", err)
 	}
 	allowed := map[string]bool{"wasm_exec.js": true, "th10.wasm": true, "release.json": true}
-	for _, name := range webNames {
+	for _, name := range append(webNames, bootImages...) {
 		allowed[name] = true
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

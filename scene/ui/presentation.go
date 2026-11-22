@@ -59,42 +59,10 @@ func (a TitleAnimations) InterruptChild(root, script int, label int16) {
 	a.InterruptVM(a.Child(root, script), label)
 }
 
-// Run keeps FUN_00448860's list walk before ANM-91 front-child emission.
-// A nil emitter retains callers whose common VM still treats 91 as a no-op.
-func (a TitleAnimations) Run(emitter *LoadingEmitter) {
-	var before int32
-	if emitter != nil && emitter.Parent != nil {
-		before = emitter.Parent.T.Cur
-	}
+// Run is FUN_00448860's list walk. The common VM now emits ascii script 8's
+// ANM-91 front children itself (0x43ef32), so no scene-side emitter remains.
+func (a TitleAnimations) Run() {
 	a.World.Run(a.Env)
-	if emitter != nil {
-		emitter.afterRun(a, before)
-	}
-}
-
-// LoadingEmitter is the existing ascii.anm script-8 subset of FUN_0043ee30
-// at 0x43ef55/0x43f00d: sixteen front children, then one every three frames.
-// It is deliberately opt-in; enabling it on title-A would change that scene.
-type LoadingEmitter struct {
-	Parent *anm.VM
-	File   *anm.File
-	Burst  bool
-}
-
-func (e *LoadingEmitter) afterRun(a TitleAnimations, before int32) {
-	if !a.World.Contains(e.Parent) {
-		return
-	}
-	count := 0
-	if !e.Burst && before == 1 && e.Parent.T.Cur == 2 {
-		count, e.Burst = 16, true
-	} else if before == 4 && e.Parent.T.Cur == 2 {
-		count = 1
-	}
-	for range count {
-		v := a.World.SpawnFront(e.File, 7, e.Parent.Layer, a.Env)
-		v.Pos2, v.Offset = e.Parent.Pos, e.Parent.Offset
-	}
 }
 
 // GlyphTextFile is FUN_00401760's native small-font pass. Keeping the file

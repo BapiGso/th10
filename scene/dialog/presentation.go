@@ -6,6 +6,7 @@ package dialog
 
 import (
 	"th10/anm"
+	"th10/gamedata"
 	"th10/render"
 )
 
@@ -35,6 +36,9 @@ type Presentation struct {
 // 0/1 and font height 16. Their first frame runs now, but parks invisible.
 func NewPresentation(c PresentationConfig) *Presentation {
 	p := &Presentation{c: c}
+	if !gamedata.Story {
+		return p // th10nostory: no text boxes; Apply keeps only non-dialogue effects
+	}
 	for i := range p.Lines {
 		p.Lines[i] = c.World.SpawnTail(c.Text, i, 15, c.Env)
 	}
@@ -52,6 +56,19 @@ func (p *Presentation) Apply(m *MSG, in Instr) {
 		return
 	}
 	w := p.c.World
+	if !gamedata.Story {
+		// th10nostory keeps the boss-music title and the stage-clear banner,
+		// which are not dialogue; portraits, boxes, text and name plates go.
+		switch in.Op {
+		case msgBossBGM:
+			p.spawn(p.c.Logo, 2)
+		case msgStageClear:
+			if p.c.Stage <= 5 && p.c.StageClear != nil {
+				p.c.StageClear()
+			}
+		}
+		return
+	}
 	switch in.Op {
 	case msgShowPlayer:
 		p.Player = p.spawn(p.c.Player, 0x1d) // 0x4160cf..0x416126

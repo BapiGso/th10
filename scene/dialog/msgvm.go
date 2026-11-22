@@ -1,6 +1,9 @@
 package dialog
 
-import "th10/zun"
+import (
+	"th10/gamedata"
+	"th10/zun"
+)
 
 // The MSG interpreter (FUN_00415e90): one .msg entry plays on its own clock
 // while the game keeps running. ECL 338 opens it, op 11 lets ECL 339 go on,
@@ -127,6 +130,12 @@ func (m *MSG) Update(advance, skip bool) bool {
 	if m.Signal > 0 {
 		m.Signal--
 	}
+	if !gamedata.Story {
+		// th10nostory: every line is advanced and skipped at once, so the
+		// script's side effects (op 11 signal, boss BGM, stage clear, BGM
+		// fade) still happen in order while nothing is shown or waited for.
+		advance, skip = true, true
+	}
 	// Ctrl jumps the clock to the next instruction.
 	if m.skip && skip && m.pc < len(m.code) {
 		m.clock = int(m.code[m.pc].Time)
@@ -174,7 +183,7 @@ func (m *MSG) Update(advance, skip bool) bool {
 				if !skip {
 					return true
 				}
-			} else if m.hooks.SE != nil {
+			} else if m.hooks.SE != nil && gamedata.Story {
 				m.hooks.SE(0)
 			}
 			m.wait, m.lines = 0, 0

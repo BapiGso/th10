@@ -28,46 +28,31 @@ func TestSharedTitleAnimationsKeepOptionalRootOwnership(t *testing.T) {
 	c.Dispose()
 }
 
-func TestSharedLoadingEmitterStaysOptInAndSkipsBirthPass(t *testing.T) {
-	for _, enabled := range []bool{false, true} {
-		g := &game.Game{}
-		w := &anm.World{}
-		env := &anm.Env{GameSpeed: 1, Alt: g.AlternateRNG(), Spawn: w.Add}
-		file := titleASCII()
-		parent := w.SpawnTail(file, 8, 15, env)
-		a := TitleAnimations{World: w, Env: env, File: file}
-		var emitter *LoadingEmitter
-		if enabled {
-			emitter = &LoadingEmitter{Parent: parent, File: file}
-		}
-		a.Run(emitter)
-		count := 0
+func TestLoadingParticlesAreFrontBornAndSkipBirthPass(t *testing.T) {
+	g := &game.Game{}
+	w := &anm.World{}
+	env := &anm.Env{GameSpeed: 1, Alt: g.AlternateRNG(), Spawn: w.Add}
+	file := titleASCII()
+	w.SpawnTail(file, 8, 15, env)
+	a := TitleAnimations{World: w, Env: env, File: file}
+	count := func() int {
+		n := 0
 		for l := range anm.Layers {
 			w.Each(l, func(v *anm.VM) {
 				if v.File == file && v.ScriptID == 7 {
-					count++
+					n++
 				}
 			})
 		}
-		if count != 0 {
-			t.Fatal("front-born particles were visited on their birth pass")
-		}
-		a.Run(emitter)
-		count = 0
-		for l := range anm.Layers {
-			w.Each(l, func(v *anm.VM) {
-				if v.File == file && v.ScriptID == 7 {
-					count++
-				}
-			})
-		}
-		want := 0
-		if enabled {
-			want = 16
-		}
-		if count != want {
-			t.Fatalf("enabled=%v loader particles=%d, want %d", enabled, count, want)
-		}
-		w.Clear()
+		return n
 	}
+	a.Run() // SpawnTail ran frame 0; frame 1 puts sixteen op-91 children at the list head
+	if count() != 0 || w.Len() != 17 {
+		t.Fatalf("front-born particles visited on their birth pass (drawn %d, live %d)", count(), w.Len())
+	}
+	a.Run()
+	if count() != 16 {
+		t.Fatalf("loader particles=%d, want 16", count())
+	}
+	w.Clear()
 }

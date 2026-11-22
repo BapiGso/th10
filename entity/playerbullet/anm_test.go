@@ -52,7 +52,7 @@ func TestShotWorldTailAndRotation(t *testing.T) {
 			t.Fatalf("shot VM %+v", b.VM)
 		}
 		want := [3]float32{float32(b.X), float32(b.Y), 0}
-		if b.VM.Offset != want || b.VM.Rot[2] != zun.AddAngle(float32(b.Angle), zun.HalfPi) {
+		if b.VM.Offset != want || b.VM.Rot[2] != float32(b.Angle) { // 0x428568: heading as is, no quarter turn
 			t.Fatalf("offset %v rotation %v", b.VM.Offset, b.VM.Rot)
 		}
 	}
