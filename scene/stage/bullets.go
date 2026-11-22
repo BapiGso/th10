@@ -5,10 +5,7 @@ package stage
 // side of hits and grazes.
 
 import (
-	"sync"
-
 	"th10/anm"
-	"th10/audio"
 	"th10/entity/bullet"
 	"th10/entity/enemy"
 	"th10/entity/item"
@@ -26,13 +23,7 @@ const (
 )
 
 // bulletFile is bullet.anm, the manager's sprites and sparks (+0x3e0b50).
-var bulletFile = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.ANM("bullet.anm")
-	if err != nil {
-		panic("stage: embedded bullet.anm: " + err.Error())
-	}
-	return f
-})
+func bulletFile() *anm.File { return gamedata.MustANM(gamedata.SharedANM("bullet.anm")) }
 
 // hitboxSize is the side of the player's hitbox by character (0x476fb8).
 var hitboxSize = [...]float32{2, 3.5}
@@ -205,7 +196,7 @@ func (c *Context) hitPlayer() {
 	p.Hit()
 	// FUN_00426cf0 has the same timer > 59 failure writes as FUN_00405500.
 	c.Spell.Bombed()
-	c.PlaySE(audio.SEDead)
+	c.PlaySEID(4) // 0x426e65: EDI = 4, table 0x4749c8 entry 4 is se_pldead00.wav
 }
 
 // laserKill is the player side of a laser hit (FUN_004267f0, FUN_00426cf0):

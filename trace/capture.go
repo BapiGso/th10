@@ -143,23 +143,28 @@ func validateCaptureInput(f *Frame, h *CaptureHeader, last int) error {
 	return nil
 }
 
-func readCommit(f *Frame, t []string) error {
-	if f == nil || f.extCommitted {
-		return fmt.Errorf("trace: unexpected Z commit")
+// readCommit reads frame f's Z line, which closes its rows. A capture
+// commits every frame; outside a capture only an extended (X) frame does.
+func readCommit(f *Frame, t []string, capture bool) error {
+	if f == nil {
+		return fmt.Errorf("trace: Z line without a frame")
+	}
+	fail := func(err error) error { return fmt.Errorf("trace: frame %d: %w", f.Index, err) }
+	if f.extCommitted {
+		return fail(fmt.Errorf("row after Z commit"))
+	}
+	if f.Ext == nil && !capture {
+		return fail(fmt.Errorf("Z line without X extension"))
 	}
 	var index, e, b, items, lasers, spell int
 	if err := parseShape(t, commitShape, &index, &e, &b, &items, &lasers, &spell); err != nil {
-		return err
+		return fail(err)
 	}
-	s := 0
-	if f.Ext != nil && f.Ext.Spell != nil {
-		s = 1
-	}
-	if index != f.Index || e != len(f.E) || b != len(f.B) || items != len(f.I) || lasers != len(f.L) || spell != s {
-		return fmt.Errorf("trace: frame %d: invalid Z counts", f.Index)
+	if index != f.Index || e != len(f.E) || b != len(f.B) || items != len(f.I) || lasers != len(f.L) || spell != boolInt(f.Ext != nil && f.Ext.Spell != nil) {
+		return fail(fmt.Errorf("z commit row counts do not match"))
 	}
 	f.extCommitted = true
-	return nil
+	return validateExtended(f)
 }
 
 func (tr *Reader) validateFrame(f *Frame) error {

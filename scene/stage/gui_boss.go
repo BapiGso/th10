@@ -3,7 +3,6 @@ package stage
 import (
 	"math"
 	"strings"
-	"sync"
 
 	"th10/anm"
 	"th10/anm/anmdraw"
@@ -14,21 +13,10 @@ import (
 	"golang.org/x/text/encoding/japanese"
 )
 
-var asciiFile = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.ANM("ascii.anm")
-	if err != nil {
-		panic("stage: embedded ascii.anm: " + err.Error())
-	}
-	return f
-})
+func asciiFile() *anm.File { return gamedata.MustANM(gamedata.SharedANM("ascii.anm")) }
 
-var textFile = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.ANM("text.anm")
-	if err != nil {
-		panic("stage: embedded text.anm: " + err.Error())
-	}
-	return f.OrdinalScripts() // FUN_00447470's table; stored IDs are -73..-1
-})
+// textFile is FUN_00447470's table; stored IDs are -73..-1.
+func textFile() *anm.File { return gamedata.MustANM(gamedata.SharedOrdinalANM("text.anm", false)) }
 
 var (
 	guiHPRise     = math.Float32frombits(0x3ccccccd) // DAT_00470cf8: 0.025

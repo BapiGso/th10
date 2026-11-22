@@ -9,31 +9,12 @@ import (
 
 	"th10/replay"
 	"th10/scene/stage"
-	"th10/scene/stage/stage1"
-	"th10/scene/stage/stage2"
-	"th10/scene/stage/stage3"
-	"th10/scene/stage/stage4"
-	"th10/scene/stage/stage5"
-	"th10/scene/stage/stage6"
+	stagescript "th10/scene/stage/script"
 	"th10/trace"
 )
 
-func alternateFactory(n int) stage.Script {
-	switch n {
-	case 1:
-		return stage1.NewScript()
-	case 2:
-		return stage2.NewScript()
-	case 3:
-		return stage3.NewScript()
-	case 4:
-		return stage4.NewScript()
-	case 5:
-		return stage5.NewScript()
-	default:
-		return stage6.NewScript()
-	}
-}
+// alternateFactory keeps the old fallback of stage numbers above 6 to stage 6.
+func alternateFactory(n int) stage.Script { return stagescript.New(min(max(n, 1), 6)) }
 
 func alternateHeadless(t *testing.T, cfg Config, ch replay.Chapter, seed uint16) *headless {
 	t.Helper()

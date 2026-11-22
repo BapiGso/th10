@@ -132,7 +132,7 @@ func (vm *VM) interrupt(e *enemy.Enemy, a *eclActor, name string) {
 	if t == nil {
 		return
 	}
-	t.sub = vm.prog.SubByName[name]
+	t.sub = vm.prog.subByName[name]
 	t.pc, t.clock, t.done, t.blocked = 0, 0, false, false
 	if t.sub != nil {
 		t.frame = newFrame(t.sub, nil)

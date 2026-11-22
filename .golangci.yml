@@ -1,0 +1,22 @@
+version: "2"
+
+run:
+  concurrency: 2
+  timeout: 10m
+  modules-download-mode: readonly
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - unused
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: false
+
+output:
+  formats:
+    text:
+      colors: false

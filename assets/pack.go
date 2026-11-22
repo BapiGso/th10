@@ -119,12 +119,12 @@ func PackOf(name string) string {
 			return BootPack
 		}
 		return "bgm-" + stem
-	case strings.HasPrefix(name, "wav/"), strings.HasPrefix(name, "misc/"), name == "anm/texture_index.json":
+	case strings.HasPrefix(name, "wav/"), strings.HasPrefix(name, "misc/"):
 		return BootPack
 	case strings.HasPrefix(name, "anm/"):
 		switch stem {
 		case "sig", "ascii", "title", "title_v", "text", "bullet":
-			return BootPack // bullet: sprite.Load reads etama during loading
+			return BootPack
 		case "staff":
 			return "ending"
 		}

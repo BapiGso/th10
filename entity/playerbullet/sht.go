@@ -1,8 +1,6 @@
 package playerbullet
 
 import (
-	"math"
-
 	"th10/game"
 	"th10/zun"
 )
@@ -67,8 +65,8 @@ func (p *Pool) updateSHT(b *Bullet) {
 	b.VX, b.VY = float64(vx), float64(vy)
 	// FUN_0044c2a0 uses velocity without multiplying game speed; only the
 	// record's Timer uses DAT_00476f78 (0x428577-0x4285c0).
-	b.pos[0] = shotGrid(b.pos[0] + vx)
-	b.pos[1] = shotGrid(b.pos[1] + vy)
+	b.pos[0] = zun.Round01(b.pos[0] + vx) // FUN_0044c2a0 -> FUN_00452ff0
+	b.pos[1] = zun.Round01(b.pos[1] + vy)
 	b.pos[2] = b.Z
 	b.X, b.Y = gameOriginX+float64(b.pos[0]), gameOriginY+float64(b.pos[1])
 	if p.anmAttached() {
@@ -83,11 +81,6 @@ func (p *Pool) updateSHT(b *Bullet) {
 	}
 	b.timer.Tick(p.gameSpeed())
 	b.Age = int(b.timer.Cur)
-}
-
-// shotGrid is FUN_0044c2a0 -> FUN_00452ff0: floor(float32(v*100))*0.01f.
-func shotGrid(v float32) float32 {
-	return float32(float32(math.Floor(float64(float32(v*100)))) * 0.01)
 }
 
 // shotOverlap is the rectangle/top-edge part of FUN_00428630. Ordinary

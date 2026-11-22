@@ -2,7 +2,6 @@ package stage
 
 import (
 	"th10/game"
-	resultscene "th10/scene/result"
 )
 
 // GUIController is the controller portion of DAT_0047770c. Logic-only
@@ -120,13 +119,9 @@ func (s *Stage) deliverSceneRequest(g *game.Game) {
 	}
 	switch s.ctx.GUIController.SceneRequest {
 	case 0xb, 0xe:
-		if s.NextScene != nil {
-			next := s.NextScene(g, state) // t8's existing callback runs at the request, unchanged
-			request := game.SceneID(s.ctx.GUIController.SceneRequest)
-			g.GoToFactory(request, func(*game.Game) (game.Scene, error) { return next, nil })
-		} else {
-			g.GoTo(resultscene.New(state, resultscene.ModeStageClear, nil))
-		}
+		next := s.NextScene(g, state) // t8's existing callback runs at the request, unchanged
+		request := game.SceneID(s.ctx.GUIController.SceneRequest)
+		g.GoToFactory(request, func(*game.Game) (game.Scene, error) { return next, nil })
 	default: // native 4 (replay exit) or system override 2
 		if s.ctx.GUIController.SceneRequest == 2 {
 			g.RequestScene(game.SceneExitSystem)

@@ -53,13 +53,11 @@ type GameState struct {
 	MaxPower         int
 	Point            int   // 得点
 	Faith            int64 // 信仰值（影响得分倍率）
-	MaxFaith         int64 // 信仰值上限
 	Difficulty       int   // 0=Easy 1=Normal 2=Hard 3=Lunatic 4=Extra
 	Character        int   // 0=灵梦 1=魔理沙
 	ShotType         int   // 0=A 1=B 2=C
 	Stage            int   // 当前关卡编号（1~6, 7=Extra）
 	StartStage       int   // DAT_00474c80: initially requested stage; 0x4175e0 advances only the current stage
-	Continued        bool  // host restart result; RunFlags bit 8 is the original transient flag
 	Frame            int   // 当前关卡已运行帧数
 	Paused           bool
 	ExtraUnlocked    bool
@@ -113,7 +111,6 @@ func NewState(character, shotType, difficulty int) *GameState {
 		Power:        0,
 		MaxPower:     PowerMax,
 		Faith:        50000,
-		MaxFaith:     999990, // 99999 in the binary
 		Difficulty:   difficulty,
 		Character:    character,
 		ShotType:     shotType,
@@ -123,23 +120,6 @@ func NewState(character, shotType, difficulty int) *GameState {
 	}
 	s.ResetRank(false)
 	return s
-}
-
-// AddScore 加分（受信仰倍率影响）
-func (s *GameState) AddScore(v int64) {
-	if v > 0 {
-		v = int64(float64(v)*s.FaithMultiplier() + 0.5)
-	}
-	s.AddScoreRaw(v)
-}
-
-// AddScoreRaw adds an already-valued reward without applying the legacy faith
-// multiplier. Point items use faith as their value, not as a second multiplier.
-func (s *GameState) AddScoreRaw(v int64) {
-	s.Score += v
-	if !s.scoreControllerBound && s.Score > s.HiScore {
-		s.HiScore = s.Score
-	}
 }
 
 // AddPoints is FUN_00409d90: a tenth of n to the stored score, which shows
@@ -205,17 +185,6 @@ func (s *GameState) AlternateRNG() *zun.RNG {
 	return s.alternateRNG
 }
 
-// AddFaith 增加信仰值
-func (s *GameState) AddFaith(v int64) {
-	s.Faith += v
-	if s.Faith < 0 {
-		s.Faith = 0
-	}
-	if s.Faith > s.MaxFaith {
-		s.Faith = s.MaxFaith
-	}
-}
-
 // Faith gauge constants. faithHoldCap is FUN_00412ff0's cap on the hold timer
 // (0x82 = 130). faithDecayFloor is the stored floor of the decay (FUN_00418a00,
 // 0x1388 = 5000). faithRateMin is the rate's floor once a decay step has run
@@ -278,16 +247,6 @@ func (s *GameState) TickFaith() {
 		s.FaithRate = faithRateMin
 	}
 	s.Faith = max(stored, faithDecayFloor) * 10
-}
-
-// FaithMultiplier 信仰倍率（用于得分计算）
-func (s *GameState) FaithMultiplier() float64 {
-	return float64(s.Faith) / 50000.0
-}
-
-// IsExtraUnlocked 是否解锁 Extra 面（需通关 Normal 以上）
-func (s *GameState) IsExtraUnlocked() bool {
-	return s.ExtraUnlocked
 }
 
 // NextStage 返回下一关编号，Stage 6 之后返回 0 表示通关

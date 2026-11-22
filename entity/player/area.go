@@ -1,10 +1,6 @@
 package player
 
-import (
-	"math"
-
-	"th10/zun"
-)
+import "th10/zun"
 
 // damageArea is one of the player's 32 damage areas (+0x350c, 0x6c bytes
 // each). Only the circle the respawn leaves is ported; the rectangles the
@@ -42,19 +38,13 @@ func (p *Player) updateAreas(gs float32) {
 		if !a.active {
 			continue
 		}
-		a.pos[0], a.pos[1] = round01(a.pos[0]), round01(a.pos[1])
+		a.pos[0], a.pos[1] = zun.Round01(a.pos[0]), zun.Round01(a.pos[1])
 		a.radius += a.growth
 		a.timer.Add(-1, gs)
 		if a.timer.Cur <= 0 {
 			a.active = false
 		}
 	}
-}
-
-// round01 snaps a coordinate down to the 0.01 grid: floor(v*100) * 0.01
-// (FUN_00452ff0, as FUN_0044c2a0 applies it to the ECL positions).
-func round01(v float32) float32 {
-	return float32(float32(math.Floor(float64(float32(v*100)))) * 0.01)
 }
 
 // AreaDamage is the area half of FUN_00428630: the damage the areas deal to

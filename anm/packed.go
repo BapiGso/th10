@@ -4,7 +4,6 @@ package anm
 import (
 	"bytes"
 	"compress/flate"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -18,7 +17,8 @@ import (
 
 const (
 	textureHeaderSize = 16
-	maxPackedBytes    = 128 << 20
+	// MaxPackedBytes bounds a packed ANM, a decoded texture and a texture pack.
+	MaxPackedBytes = 128 << 20
 )
 
 // PixelRange locates one complete THTX pixel block in the original ANM.
@@ -56,58 +56,6 @@ func PixelRanges(data []byte) ([]PixelRange, error) {
 	return ranges, nil
 }
 
-// TextureID includes format and dimensions as well as every original pixel
-// byte, including RGB under alpha zero. A web variant retains this source ID.
-func TextureID(t *Texture) string {
-	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "%d/%d/%d/", t.Format, t.W, t.H)
-	_, _ = h.Write(t.Pixels)
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// Split removes only THTX pixels. ANP1 stores the original file length, then
-// {offset, length, SHA-256} records and concatenated non-pixel byte ranges.
-// It does not rebase or rewrite ANM headers, instructions or sprite tables.
-func Split(data []byte) ([]byte, map[string]*Texture, error) {
-	ranges, err := PixelRanges(data)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(data) > maxPackedBytes {
-		return nil, nil, fmt.Errorf("anm: file too large")
-	}
-	textures := map[string]*Texture{}
-	metaSize, previous := len(data), 0
-	for _, r := range ranges {
-		if r.Offset < previous || r.Offset+len(r.Texture.Pixels) > len(data) {
-			return nil, nil, fmt.Errorf("anm: overlapping pixel ranges")
-		}
-		metaSize -= len(r.Texture.Pixels)
-		previous = r.Offset + len(r.Texture.Pixels)
-	}
-	out := make([]byte, 12+len(ranges)*40, 12+len(ranges)*40+metaSize)
-	copy(out, "ANP1")
-	binary.LittleEndian.PutUint32(out[4:], uint32(len(data)))
-	binary.LittleEndian.PutUint32(out[8:], uint32(len(ranges)))
-	previous = 0
-	for i, r := range ranges {
-		id := TextureID(r.Texture)
-		hash, err := hex.DecodeString(id)
-		if err != nil {
-			return nil, nil, err
-		}
-		at := 12 + i*40
-		binary.LittleEndian.PutUint32(out[at:], uint32(r.Offset))
-		binary.LittleEndian.PutUint32(out[at+4:], uint32(len(r.Texture.Pixels)))
-		copy(out[at+8:], hash)
-		out = append(out, data[previous:r.Offset]...)
-		previous = r.Offset + len(r.Texture.Pixels)
-		textures[id] = r.Texture
-	}
-	out = append(out, data[previous:]...)
-	return out, textures, nil
-}
-
 // IsPacked reports whether data is a split ANM container, not a raw ANM.
 func IsPacked(data []byte) bool { return len(data) >= 4 && string(data[:4]) == "ANP1" }
 
@@ -119,7 +67,7 @@ func Restore(data []byte, readTexture func(string) ([]byte, error)) ([]byte, err
 		return nil, fmt.Errorf("anm: invalid packed header")
 	}
 	size, count := uint64(binary.LittleEndian.Uint32(data[4:])), uint64(binary.LittleEndian.Uint32(data[8:]))
-	if size < headerSize || size > maxPackedBytes || count > uint64((len(data)-12)/40) {
+	if size < headerSize || size > MaxPackedBytes || count > uint64((len(data)-12)/40) {
 		return nil, fmt.Errorf("anm: invalid packed size")
 	}
 	meta, previous, pixelBytes := 12+int(count)*40, 0, uint64(0)
@@ -191,9 +139,9 @@ func DecodeTexture(data []byte) (*Texture, error) {
 		Format: int(data[5]), W: int(binary.LittleEndian.Uint16(data[6:])), H: int(binary.LittleEndian.Uint16(data[8:])),
 	}
 	size := uint64(binary.LittleEndian.Uint32(data[12:]))
-	bpp := bytesPerPixel(t.Format)
+	bpp := BytesPerPixel(t.Format)
 	expectedSize := uint64(t.W) * uint64(t.H) * uint64(bpp)
-	if bpp == 0 || t.W == 0 || t.H == 0 || expectedSize == 0 || size < expectedSize || size > maxPackedBytes {
+	if bpp == 0 || t.W == 0 || t.H == 0 || expectedSize == 0 || size < expectedSize || size > MaxPackedBytes {
 		return nil, fmt.Errorf("anm: invalid texture pack layout")
 	}
 	expected := int(expectedSize)
@@ -256,7 +204,8 @@ func inflateExact(data []byte, size int) ([]byte, error) {
 	return out, nil
 }
 
-func paeth(a, b, c byte) byte {
+// Paeth is the PNG Paeth predictor that filtered texture blobs use.
+func Paeth(a, b, c byte) byte {
 	p := int(a) + int(b) - int(c)
 	pa, pb, pc := abs(p-int(a)), abs(p-int(b)), abs(p-int(c))
 	if pa <= pb && pa <= pc {
@@ -303,7 +252,7 @@ func unfilterTexture(filtered []byte, stride, height, bpp int) ([]byte, error) {
 			case 3:
 				row[x] += byte((int(left) + int(up)) / 2)
 			case 4:
-				row[x] += paeth(left, up, upperLeft)
+				row[x] += Paeth(left, up, upperLeft)
 			}
 		}
 	}
@@ -319,7 +268,7 @@ func ImagePixels(img image.Image, format int) []byte {
 
 func imagePixels(img image.Image, format int, nearest bool) []byte {
 	b := img.Bounds()
-	bpp := bytesPerPixel(format)
+	bpp := BytesPerPixel(format)
 	out := make([]byte, b.Dx()*b.Dy()*bpp)
 	nrgba, direct := img.(*image.NRGBA)
 	for y := b.Min.Y; y < b.Max.Y; y++ {
@@ -466,37 +415,6 @@ func decodeRGBJPEGAlpha(payload []byte, t *Texture) ([]byte, error) {
 		}
 	}
 	return imagePixels(out, t.Format, true), nil
-}
-
-// BuildTexturePack stores blobs once, sorted by their source SHA-256. TPK1's
-// index holds {SHA-256, absolute offset, length}; lookup does not decode any
-// texture or build a startup map. It is also deterministic after regeneration.
-func BuildTexturePack(blobs map[string][]byte) ([]byte, error) {
-	ids := make([]string, 0, len(blobs))
-	total := 8 + len(blobs)*40
-	for id, blob := range blobs {
-		ids = append(ids, id)
-		total += len(blob)
-	}
-	if total > maxPackedBytes {
-		return nil, fmt.Errorf("anm: texture pack too large")
-	}
-	sort.Strings(ids)
-	out := make([]byte, 8+len(ids)*40, total)
-	copy(out, "TPK1")
-	binary.LittleEndian.PutUint32(out[4:], uint32(len(ids)))
-	for i, id := range ids {
-		hash, err := hex.DecodeString(id)
-		if err != nil || len(hash) != 32 {
-			return nil, fmt.Errorf("anm: invalid texture ID %q", id)
-		}
-		at, blob := 8+i*40, blobs[id]
-		copy(out[at:], hash)
-		binary.LittleEndian.PutUint32(out[at+32:], uint32(len(out)))
-		binary.LittleEndian.PutUint32(out[at+36:], uint32(len(blob)))
-		out = append(out, blob...)
-	}
-	return out, nil
 }
 
 // TextureBlob finds an immutable blob without copying the containing pack.

@@ -37,26 +37,6 @@ func TestLoaderParsesEnemyAnm(t *testing.T) {
 	}
 }
 
-// TestSpriteResolverScript0 verifies the clock-walked sprite timeline: script0
-// is ins_3(sprite0..3) each held 5 frames, looping every 20 via ins_4.
-func TestSpriteResolverScript0(t *testing.T) {
-	f := loadEnemyAnm(t)
-	sc := f.Scripts[0]
-	if sc == nil {
-		t.Fatal("script0 missing")
-	}
-	cases := []struct {
-		age, want int
-	}{
-		{0, 0}, {4, 0}, {5, 1}, {6, 1}, {12, 2}, {16, 3}, {20, 0}, {26, 1},
-	}
-	for _, c := range cases {
-		if got := sc.SpriteAt(c.age); got != c.want {
-			t.Errorf("SpriteAt(%d)=%d want %d", c.age, got, c.want)
-		}
-	}
-}
-
 // TestEnemyTexture checks the THTX block decodes to the entry's picture.
 func TestEnemyTexture(t *testing.T) {
 	f := loadEnemyAnm(t)

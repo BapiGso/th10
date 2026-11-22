@@ -4,7 +4,11 @@ package ecl
 // FUN_0044fdb0 (int), with the enemy's own getters behind them (FUN_0043db60
 // and friends). Ids not listed read 0.
 
-import "math"
+import (
+	"math"
+
+	"th10/zun"
+)
 
 // actorOf is the actor running t, or nil (tests drive bare tasks).
 func (vm *VM) actorOf(t *eclTask) *eclActor {
@@ -20,7 +24,7 @@ func (vm *VM) aim(pos [3]float32) float32 {
 	dx := vm.playerECL[0] - pos[0]
 	dy := vm.playerECL[1] - pos[1]
 	if dx == 0 && dy == 0 {
-		return halfPi32
+		return zun.HalfPi
 	}
 	return float32(math.Atan2(float64(dy), float64(dx)))
 }
@@ -40,7 +44,7 @@ func (vm *VM) specialFloat(t *eclTask, id int32) float32 {
 	case -9999:
 		return vm.randFloat()
 	case -9998:
-		return float32(vm.randSigned() * pi32)
+		return float32(vm.randSigned() * zun.Pi)
 	case -9987:
 		return vm.randSigned()
 	case -9991, -9965:

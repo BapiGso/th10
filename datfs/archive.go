@@ -84,7 +84,7 @@ func New(r io.ReaderAt, size int64) (*Archive, error) {
 	if _, err := r.ReadAt(hdr, 0); err != nil {
 		return nil, err
 	}
-	decrypt(hdr, 0x1b, 0x37, headerSize, headerSize)
+	Decrypt(hdr, 0x1b, 0x37, headerSize, headerSize)
 	if string(hdr[:4]) != "THA1" {
 		return nil, errors.New("datfs: not a THA1 archive")
 	}
@@ -99,7 +99,7 @@ func New(r io.ReaderAt, size int64) (*Archive, error) {
 	if _, err := r.ReadAt(zlist, size-listZSize); err != nil {
 		return nil, err
 	}
-	decrypt(zlist, 0x3e, 0x9b, 0x80, int(listZSize))
+	Decrypt(zlist, 0x3e, 0x9b, 0x80, int(listZSize))
 	list, err := unlzss(zlist, int(listSize))
 	if err != nil {
 		return nil, fmt.Errorf("datfs: file list: %w", err)
@@ -191,7 +191,7 @@ func (a *Archive) read(e *entry) ([]byte, error) {
 		return nil, err
 	}
 	p := cryptParamsFor(e.name)
-	decrypt(z, p.key, p.step, p.block, p.limit)
+	Decrypt(z, p.key, p.step, p.block, p.limit)
 	if e.zsize == e.size {
 		return z, nil
 	}

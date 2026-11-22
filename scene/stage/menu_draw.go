@@ -7,6 +7,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"th10/anm"
@@ -27,7 +28,7 @@ var rankingStage = [...]string{"test   ", "Stage 1", "Stage 2", "Stage 3", "Stag
 // It does not use system fonts or the legacy back buffer.
 func glyphText(sv *supervisor.Supervisor, text string, x, y float32, colour uint32) {
 	vm := anm.New()
-	vm.File = menuASCIIFile()
+	vm.File = asciiFile()
 	vm.Flags = vm.Flags&0xffd7ffff | 0x140001
 	vm.Color = [3]uint8{uint8(colour >> 16), uint8(colour >> 8), uint8(colour)}
 	vm.Alpha = uint8(colour >> 24)
@@ -137,33 +138,42 @@ func (m *MenuController) drawName(sv *supervisor.Supervisor, x, y float32) {
 	}
 }
 
+// FUN_004231d0 / FUN_00423370 capture 32,16,384,448.
+const menuCaptureW, menuCaptureH = 384, 448
+
+// menuCaptureFile is ascii.anm with entry 0 replaced by FUN_00424480's
+// 512x512 render target (zero texels, like an "@" entry) and sprite 231 cut
+// from its top left. One file serves every pause, so its sheet and GPU
+// texture are made once and capture rewrites the texels in place.
+var menuCaptureFile = sync.OnceValue(func() *anm.File {
+	f := *asciiFile()
+	f.Entries = slices.Clone(f.Entries)
+	f.Sprites = maps.Clone(f.Sprites)
+	f.Entries[0] = anm.Entry{Name: "@menu-capture", Width: 512, Height: 512, Format: anm.FormatBGRA8888}
+	f.Sprites[231] = anm.Sprite{ID: 231, Entry: 0, W: menuCaptureW, H: menuCaptureH}
+	return &f
+})
+
 // capture adapts FUN_00424480's queued back-buffer-to-texture copy. Ebiten
-// has no D3D StretchRect, so copy opaque RGBA pixels into a BGRA THTX block,
-// then draw that sprite through sv.ANM like every other object.
+// has no D3D StretchRect, so copy the opaque pixels into the capture
+// texture, then draw that sprite through sv.ANM like every other object.
 func (m *MenuController) capture(sv *supervisor.Supervisor) {
 	if !m.capturePending || m.backdrop == nil {
 		return
 	}
 	m.capturePending = false
-	const w, h = 384, 448 // FUN_004231d0 / FUN_00423370, 32,16,384,448
-	pixels := make([]byte, 512*512*4)
+	const w, h = menuCaptureW, menuCaptureH
+	pixels := make([]byte, w*h*4) // no frame: zero, as a fresh render target
 	if sv.Frame != nil {
-		rgba := make([]byte, w*h*4)
-		sv.Frame.SubImage(image.Rect(32, 16, 416, 464)).(*ebiten.Image).ReadPixels(rgba)
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				src, dst := (y*w+x)*4, (y*512+x)*4
-				pixels[dst], pixels[dst+1], pixels[dst+2], pixels[dst+3] = rgba[src+2], rgba[src+1], rgba[src], 255
-			}
+		sv.Frame.SubImage(image.Rect(32, 16, 416, 464)).(*ebiten.Image).ReadPixels(pixels)
+		for i := 3; i < len(pixels); i += 4 {
+			pixels[i] = 255
 		}
 	}
-	f := *menuASCIIFile()
-	f.Entries = slices.Clone(f.Entries)
-	f.Sprites = maps.Clone(f.Sprites)
-	f.Entries[0] = anm.Entry{Name: "@menu-capture", Width: 512, Height: 512, Format: anm.FormatBGRA8888,
-		Texture: &anm.Texture{Format: anm.FormatBGRA8888, W: 512, H: 512, Pixels: pixels}}
-	f.Sprites[231] = anm.Sprite{ID: 231, Entry: 0, W: w, H: h}
-	m.backdrop.File = &f
+	f := menuCaptureFile()
+	tex := sv.ANM.Sheet(f).Sprites[231].Tex
+	tex.Image.SubImage(image.Rect(0, 0, w, h)).(*ebiten.Image).WritePixels(pixels)
+	m.backdrop.File = f
 	m.backdrop.SetSprite(231)
 	m.backdrop.Pos = [3]float32{224, 240, 0}
 	m.backdrop.Flags |= anm.FlagVisible | anm.FlagDraw

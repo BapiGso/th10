@@ -11,7 +11,6 @@ import (
 )
 
 func TestScreenEffectDrawRangesInterleaveStaticChain(t *testing.T) {
-	t.Setenv("TH10_LEGACY_BG", "")
 	state := game.NewState(0, 0, game.DiffNormal)
 	state.Stage = 1
 	s := NewHeadless(state, &recordScript{})

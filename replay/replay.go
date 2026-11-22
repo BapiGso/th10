@@ -28,6 +28,8 @@ import (
 	"math"
 	"strings"
 
+	"th10/datfs"
+
 	"golang.org/x/text/encoding/japanese"
 )
 
@@ -234,9 +236,9 @@ func Parse(data []byte) (*Replay, error) {
 	payload := make([]byte, h.Compressed)
 	copy(payload, data[0x24:0x24+h.Compressed])
 	// FUN_0042a200: two block-wise XOR passes, then ZUN LZSS.
-	xorTransform(payload, 0xe1, 0x400, 0xaa)
-	xorTransform(payload, 0x7a, 0x80, 0x3d)
-	raw := lzssDecompress(payload, int(h.Decompressed))
+	DecryptBlocks(payload, 0xe1, 0x400, 0xaa)
+	DecryptBlocks(payload, 0x7a, 0x80, 0x3d)
+	raw := datfs.Unlzss(payload, int(h.Decompressed))
 	if len(raw) != int(h.Decompressed) {
 		return nil, fmt.Errorf("replay: decompressed %d bytes, want %d", len(raw), h.Decompressed)
 	}
@@ -438,107 +440,4 @@ func decodeTrailerText(b []byte) string {
 		return string(clean)
 	}
 	return s
-}
-
-// xorTransform ports FUN_0044b0d0. The source is read sequentially from a copy
-// while writes walk odd block positions descending, then even ones descending,
-// XORing with a key byte that advances by keyInc per write.
-func xorTransform(data []byte, keyInc byte, modulus int, initKey byte) {
-	n := len(data)
-	if n == 0 {
-		return
-	}
-	rem := n % modulus
-	corr := 0
-	if rem < modulus/4 {
-		corr = rem
-	}
-	toDo := n - ((n & 1) + corr)
-	if toDo <= 0 {
-		return
-	}
-	src := make([]byte, n)
-	copy(src, data)
-	key := initKey
-	pos, read := 0, 0
-	for toDo > 0 {
-		size := modulus
-		if toDo < size {
-			size = toDo
-		}
-		for i := size - 1; i >= 0; i -= 2 {
-			data[pos+i] = src[read] ^ key
-			key += keyInc
-			read++
-		}
-		for i := size - 2; i >= 0; i -= 2 {
-			data[pos+i] = src[read] ^ key
-			key += keyInc
-			read++
-		}
-		pos += size
-		toDo -= size
-	}
-}
-
-// lzssDecompress ports FUN_00435dc0: ZUN's LZSS with an 8 KB ring window.
-// Flags are read MSB-first; a 1 bit emits one literal byte, a 0 bit emits a
-// 13-bit window offset and a 4-bit length (copy = length+3 bytes). Offset 0
-// terminates the stream.
-func lzssDecompress(src []byte, outLen int) []byte {
-	out := make([]byte, 0, outLen)
-	var window [0x2000]byte
-	winPos := 1
-	bitPos := byte(0x80)
-	var cur byte
-	pos := 0
-	nextBit := func() int {
-		if bitPos == 0x80 {
-			if pos < len(src) {
-				cur = src[pos]
-				pos++
-			} else {
-				cur = 0
-			}
-		}
-		b := 0
-		if cur&bitPos != 0 {
-			b = 1
-		}
-		bitPos >>= 1
-		if bitPos == 0 {
-			bitPos = 0x80
-		}
-		return b
-	}
-	for len(out) < outLen {
-		if nextBit() != 0 {
-			b := byte(0)
-			for i := 0; i < 8; i++ {
-				b = b<<1 | byte(nextBit())
-			}
-			out = append(out, b)
-			window[winPos] = b
-			winPos = (winPos + 1) & 0x1fff
-			continue
-		}
-		off := 0
-		for i := 0; i < 13; i++ {
-			off = off<<1 | nextBit()
-		}
-		if off == 0 {
-			break
-		}
-		ln := 0
-		for i := 0; i < 4; i++ {
-			ln = ln<<1 | nextBit()
-		}
-		for i := 0; i <= ln+2 && len(out) < outLen; i++ {
-			b := window[(off+i)&0x1fff]
-			out = append(out, b)
-			window[winPos] = b
-			winPos = (winPos + 1) & 0x1fff
-		}
-	}
-	return out
 }

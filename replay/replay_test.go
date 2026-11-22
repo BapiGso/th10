@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"th10/datfs"
 )
 
 // Official demo replays shipped inside th10.dat. The test data lives in the
@@ -92,11 +94,11 @@ func TestDecompressLength(t *testing.T) {
 		}
 		comp := make([]byte, binary.LittleEndian.Uint32(raw[0x1c:]))
 		copy(comp, raw[0x24:])
-		xorTransform(comp, 0xe1, 0x400, 0xaa)
-		xorTransform(comp, 0x7a, 0x80, 0x3d)
+		DecryptBlocks(comp, 0xe1, 0x400, 0xaa)
+		DecryptBlocks(comp, 0x7a, 0x80, 0x3d)
 		// Read the declared output length straight from the file header.
 		want := int(binary.LittleEndian.Uint32(raw[0x20:]))
-		out := lzssDecompress(comp, want)
+		out := datfs.Unlzss(comp, want)
 		if len(out) != want {
 			t.Errorf("%s: decompressed %d bytes, want %d", name, len(out), want)
 		}

@@ -12,8 +12,7 @@ import (
 
 func TestDesktopReplayStoreOriginalFilenameAndOverwrite(t *testing.T) {
 	root := t.TempDir()
-	s := &fileReplayStore{dir: filepath.Join(root, "replay")}
-	g := &Game{Replays: s}
+	g := &Game{Replays: binaryReplayStore{store: dirStore(root)}}
 	r := storedReplay()
 	if err := g.SaveReplay(5, r); err != nil {
 		t.Fatal(err)
@@ -31,11 +30,11 @@ func TestDesktopReplayStoreOriginalFilenameAndOverwrite(t *testing.T) {
 	if err := g.SaveReplay(5, r); err != nil {
 		t.Fatal("overwrite failed:", err)
 	}
-	roundtrip, err := (&Game{Replays: &fileReplayStore{dir: s.dir}}).LoadReplay(5)
+	roundtrip, err := (&Game{Replays: binaryReplayStore{store: dirStore(root)}}).LoadReplay(5)
 	if err != nil || roundtrip.Global.User != "NEXT" {
 		t.Fatal("fresh store did not read overwritten slot")
 	}
-	files, err := os.ReadDir(s.dir)
+	files, err := os.ReadDir(filepath.Join(root, "replay"))
 	if err != nil || len(files) != 1 || files[0].Name() != "th10_05.rpy" {
 		t.Fatal("temporary files leaked")
 	}
@@ -57,9 +56,9 @@ func TestDesktopReplayStoreRespectsDataDirectory(t *testing.T) {
 }
 
 func TestDesktopReplayStoreReadFailureDoesNotTruncate(t *testing.T) {
-	root := t.TempDir()
-	s := &fileReplayStore{dir: root}
-	if err := os.Mkdir(filepath.Join(root, "th10_01.rpy"), 0o755); err != nil {
+	root := filepath.Join(t.TempDir(), "replay")
+	s := binaryReplayStore{store: dirStore(filepath.Dir(root))}
+	if err := os.MkdirAll(filepath.Join(root, "th10_01.rpy"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Write(1, []byte("data")); err == nil {

@@ -34,12 +34,23 @@ func (b *bitReader) read(n uint) int {
 	return int(b.acc>>b.bits) & (1<<n - 1)
 }
 
-// unlzss decodes ZUN's LZSS: a 1 bit is followed by a literal byte, a 0 bit by
+// unlzss is Unlzss that reports a stream ending before size bytes.
+func unlzss(src []byte, size int) ([]byte, error) {
+	out := Unlzss(src, size)
+	if len(out) < size {
+		return nil, errLZSSShort
+	}
+	return out, nil
+}
+
+// Unlzss decodes ZUN's LZSS: a 1 bit is followed by a literal byte, a 0 bit by
 // a 13-bit dictionary offset and a 4-bit length (+3). Offset 0 ends the
-// stream. The 8 KiB dictionary starts zeroed with the write head at 1.
+// stream. The 8 KiB dictionary starts zeroed with the write head at 1. It
+// returns at most size bytes, fewer when the stream ends first. This is also
+// th10.exe's FUN_00435dc0 (package replay's .rpy and scoreth10.dat payloads).
 //
 // Port of th_unlzss (thtk/thlzss.c).
-func unlzss(src []byte, size int) ([]byte, error) {
+func Unlzss(src []byte, size int) []byte {
 	out := make([]byte, 0, size+18)
 	var dict [lzssDictSize]byte
 	head := 1
@@ -64,8 +75,8 @@ func unlzss(src []byte, size int) ([]byte, error) {
 			head = (head + 1) & lzssDictMask
 		}
 	}
-	if len(out) < size {
-		return nil, errLZSSShort
+	if len(out) > size {
+		out = out[:size]
 	}
-	return out[:size], nil
+	return out
 }

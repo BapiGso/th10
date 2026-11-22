@@ -10,6 +10,7 @@ import (
 	"th10/scene/menus"
 	selector "th10/scene/select"
 	"th10/scene/stage"
+	stagescript "th10/scene/stage/script"
 	sceneui "th10/scene/ui"
 	"th10/supervisor"
 )
@@ -18,50 +19,38 @@ import (
 // page uses Controller's single world and selector stack.
 type Title struct {
 	Controller *sceneui.TitleController
-	Pages      map[sceneui.TitlePage]sceneui.TitlePageHooks
 }
 
 func New() *Title                      { return &Title{} }
 func (*Title) SceneMode() game.SceneID { return game.SceneTitle }
-func (t *Title) SetPageHooks(page sceneui.TitlePage, hooks sceneui.TitlePageHooks) {
-	if t.Pages == nil {
-		t.Pages = make(map[sceneui.TitlePage]sceneui.TitlePageHooks)
-	}
-	t.Pages[page] = hooks
-	if t.Controller != nil {
-		t.Controller.Hooks[page] = hooks
-	}
-}
 func (t *Title) SceneEnter(g *game.Game) error {
 	if t.Controller != nil {
 		return nil
 	}
 	c := sceneui.NewTitleController(g, g.TitleEntry)
 	t.Controller = c
-	for page, hooks := range t.Pages {
-		c.Hooks[page] = hooks
-	}
-	// Temporary adapters keep t11's existing public scenes usable. A
-	// registered native page hook replaces its adapter, without a scene switch.
+	// The replay, player data and music room pages run as their own scenes
+	// (t11's public menus), entered through scene request 4.
 	for _, page := range []sceneui.TitlePage{sceneui.TitleReplay, sceneui.TitlePlayerData, sceneui.TitleMusicRoom, sceneui.TitlePlayerDataDetail, sceneui.TitlePlayerDataCards} {
-		if c.Hooks[page].Calc == nil {
-			c.Hooks[page] = sceneui.TitlePageHooks{Calc: func(_ *sceneui.TitleController, g *game.Game, _ *input.State) error {
-				g.GoToFactory(game.SceneTitle, func(g *game.Game) (game.Scene, error) {
-					switch page {
-					case sceneui.TitleReplay:
-						return menus.NewReplay(t), nil
-					case sceneui.TitleMusicRoom:
-						return menus.NewMusicRoom(t), nil
-					default:
-						return menus.NewPlayerData(g.Save, t), nil
-					}
-				})
-				return nil
-			}}
-		}
+		c.Hooks[page] = sceneui.TitlePageHooks{Calc: func(_ *sceneui.TitleController, g *game.Game, _ *input.State) error {
+			g.GoToFactory(game.SceneTitle, func(g *game.Game) (game.Scene, error) { return t.pageScene(g, page), nil })
+			return nil
+		}}
 	}
 	c.SetRunHooks(func(g *game.Game, state *game.GameState) error { return selector.Launch(g, state, t) }, t.startDemo)
 	return nil
+}
+
+// pageScene is the scene of a title page that runs as its own scene.
+func (t *Title) pageScene(g *game.Game, page sceneui.TitlePage) game.Scene {
+	switch page {
+	case sceneui.TitleReplay:
+		return menus.NewReplay(t)
+	case sceneui.TitleMusicRoom:
+		return menus.NewMusicRoom(t)
+	default:
+		return menus.NewPlayerData(g.Save, t)
+	}
 }
 func (t *Title) SceneLeave(g *game.Game, _ game.SceneID) {
 	if t.Controller != nil {
@@ -107,7 +96,7 @@ func (t *Title) startDemo(g *game.Game, index int) error {
 		return fmt.Errorf("title: demo%d has no populated chapter", number)
 	}
 	g.GoToFactory(game.ScenePlayback, func(g *game.Game) (game.Scene, error) {
-		return stage.NewDemoPlayback(g, r, first, selector.ReplayScript, t)
+		return stage.NewDemoPlayback(g, r, first, stagescript.New, t)
 	})
 	return nil
 }

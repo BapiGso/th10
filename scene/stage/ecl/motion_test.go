@@ -3,6 +3,8 @@ package ecl
 import (
 	"math"
 	"testing"
+
+	"th10/zun"
 )
 
 // The float32 constants must carry the exact .rdata bit patterns.
@@ -12,9 +14,9 @@ func TestMotionConstantBits(t *testing.T) {
 		v    float32
 		bits uint32
 	}{
-		{"pi (DAT_00470b18)", pi32, 0x40490fdb},
-		{"2pi (DAT_00470b14)", twoPi32, 0x40c90fdb},
-		{"pi/2 (DAT_00470b94)", halfPi32, 0x3fc90fdb},
+		{"pi (DAT_00470b18)", zun.Pi, 0x40490fdb},
+		{"2pi (DAT_00470b14)", zun.TwoPi, 0x40c90fdb},
+		{"pi/2 (DAT_00470b94)", zun.HalfPi, 0x3fc90fdb},
 		{"pi/3 (DAT_00470d50)", thirdPi32, 0x3f860a92},
 		{"1/3 (DAT_00470cc4)", third32, 0x3eaaaaab},
 	} {
@@ -25,21 +27,21 @@ func TestMotionConstantBits(t *testing.T) {
 }
 
 func TestNormAngle(t *testing.T) {
-	if got := normAngle(pi32); got != pi32 {
-		t.Errorf("normAngle(pi) = %v, want pi unchanged", got)
+	if got := zun.NormAngle(zun.Pi); got != zun.Pi {
+		t.Errorf("zun.NormAngle(pi) = %v, want pi unchanged", got)
 	}
-	if got, want := normAngle(4), float32(4)-twoPi32; got != want {
-		t.Errorf("normAngle(4) = %v, want %v", got, want)
+	if got, want := zun.NormAngle(4), float32(4)-zun.TwoPi; got != want {
+		t.Errorf("zun.NormAngle(4) = %v, want %v", got, want)
 	}
-	if got, want := normAngle(-4), float32(-4)+twoPi32; got != want {
-		t.Errorf("normAngle(-4) = %v, want %v", got, want)
+	if got, want := zun.NormAngle(-4), float32(-4)+zun.TwoPi; got != want {
+		t.Errorf("zun.NormAngle(-4) = %v, want %v", got, want)
 	}
-	if got := normAngle(100); got < -pi32 || got > pi32 {
-		t.Errorf("normAngle(100) = %v, outside [-pi, pi]", got)
+	if got := zun.NormAngle(100); got < -zun.Pi || got > zun.Pi {
+		t.Errorf("zun.NormAngle(100) = %v, outside [-pi, pi]", got)
 	}
 	// FUN_0044bc70 gives up after 34 turns.
-	if got := normAngle(1000); got <= pi32 {
-		t.Errorf("normAngle(1000) = %v, want the 34-turn cap to leave it above pi", got)
+	if got := zun.NormAngle(1000); got <= zun.Pi {
+		t.Errorf("zun.NormAngle(1000) = %v, want the 34-turn cap to leave it above pi", got)
 	}
 }
 
@@ -50,19 +52,19 @@ func TestRound01(t *testing.T) {
 		{-0.001, float32(float32(-1) * 0.01)}, // floor, not truncation
 		{0, 0},
 	} {
-		if got := round01(c.in); got != c.want {
-			t.Errorf("round01(%v) = %v, want %v", c.in, got, c.want)
+		if got := zun.Round01(c.in); got != c.want {
+			t.Errorf("zun.Round01(%v) = %v, want %v", c.in, got, c.want)
 		}
 	}
 }
 
 func TestEase(t *testing.T) {
 	for _, m := range []int32{0, 1, 2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14} {
-		if got := ease(m, 0, 10); got != 0 {
-			t.Errorf("ease(%d) at 0 = %v, want 0", m, got)
+		if got := zun.Ease(m, 0, 10); got != 0 {
+			t.Errorf("zun.Ease(%d) at 0 = %v, want 0", m, got)
 		}
-		if got := ease(m, 10, 10); got != 1 {
-			t.Errorf("ease(%d) at 1 = %v, want 1", m, got)
+		if got := zun.Ease(m, 10, 10); got != 1 {
+			t.Errorf("zun.Ease(%d) at 1 = %v, want 1", m, got)
 		}
 	}
 	for _, c := range []struct {
@@ -79,17 +81,17 @@ func TestEase(t *testing.T) {
 		{15, 1, 2, 0},
 		{16, 1, 2, 1},
 	} {
-		if got := ease(c.mode, c.num, c.den); got != c.want {
-			t.Errorf("ease(%d, %v/%v) = %v, want %v", c.mode, c.num, c.den, got, c.want)
+		if got := zun.Ease(c.mode, c.num, c.den); got != c.want {
+			t.Errorf("zun.Ease(%d, %v/%v) = %v, want %v", c.mode, c.num, c.den, got, c.want)
 		}
 	}
 }
 
 func TestPosBlockAdvanceRounds(t *testing.T) {
 	b := posBlock{pos: [3]float32{10, 20, 0}}
-	b.delta[0], b.delta[1] = polar(0, 1.239)
+	b.delta[0], b.delta[1] = zun.Polar(0, 1.239)
 	b.advance()
-	if want := round01(11.239); b.pos[0] != want || b.pos[1] != 20 {
+	if want := zun.Round01(11.239); b.pos[0] != want || b.pos[1] != 20 {
 		t.Errorf("pos = %v, want (%v, 20)", b.pos, want)
 	}
 }

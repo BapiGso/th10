@@ -129,23 +129,6 @@ func (f *File) OptionOffsets(power int, focused bool) []Offset {
 	return f.Options[mode][start : start+count]
 }
 
-// ValidateReimuA rejects unsupported semantics instead of silently emitting
-// straight bullets when a different SHT file or callback is wired by mistake.
-func (f *File) ValidateReimuA() error {
-	for g, shots := range f.Groups {
-		for _, s := range shots {
-			want := [4]uint32{}
-			if s.Source != 0 {
-				want = [4]uint32{1, 1, 0, 0}
-			}
-			if s.Kind != 0 || s.Callbacks != want || s.Source > g%5 {
-				return fmt.Errorf("unsupported Reimu A shot semantics in group %d", g)
-			}
-		}
-	}
-	return nil
-}
-
 // ValidateTH10 checks the six shipped SHTs against FUN_00426520's tables:
 // init 0/1 at 0x47476c, update 0/1/2 at 0x474778. The two later tables
 // (0x491bf4/0x491bf8) are single zero entries in .bss, have no writer in

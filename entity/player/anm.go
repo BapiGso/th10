@@ -2,7 +2,6 @@ package player
 
 import (
 	"math"
-	"sync"
 
 	"th10/anm"
 	"th10/gamedata"
@@ -11,17 +10,8 @@ import (
 
 // FUN_004247f0, 0x4247f8-0x42481c: the animation depends only on the
 // character, not the shot type. Each embedded file is parsed once per process.
-var playerFiles = [...]func() *anm.File{
-	sync.OnceValue(func() *anm.File { return loadPlayerAnm("pl00.anm") }),
-	sync.OnceValue(func() *anm.File { return loadPlayerAnm("pl01.anm") }),
-}
-
-func loadPlayerAnm(name string) *anm.File {
-	f, err := gamedata.ANM(name)
-	if err != nil {
-		panic("player: embedded " + name + ": " + err.Error())
-	}
-	return f
+func playerFile(character int) *anm.File {
+	return gamedata.MustANM(gamedata.SharedANM([...]string{"pl00.anm", "pl01.anm"}[character]))
 }
 
 // AttachAnm connects the embedded VM and world handles. A nil world or

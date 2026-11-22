@@ -17,14 +17,14 @@ func spellDisplayNames(originalPath string, original *Program) map[string]string
 	if err != nil {
 		return nil
 	}
-	localized, err := LoadProgram(data)
+	localized, err := loadProgram(data)
 	if err != nil {
 		return nil
 	}
 	out := map[string]string{}
 	jp, zh := japanese.ShiftJIS.NewDecoder(), simplifiedchinese.GBK.NewDecoder()
-	for name, sub := range original.SubByName {
-		other := localized.SubByName[name]
+	for name, sub := range original.subByName {
+		other := localized.subByName[name]
 		if other == nil {
 			continue
 		}
@@ -48,7 +48,7 @@ func declarationNames(s *Sub) (out []string) {
 		switch in.Opcode {
 		case opSpellBg, opSpellAlt, opSpell, opSpell2, opSpell3:
 			if len(in.Params) >= 4 {
-				out = append(out, in.Params[3].Str)
+				out = append(out, in.Params[3].str)
 			}
 		}
 	}

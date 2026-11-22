@@ -2,7 +2,6 @@ package stage
 
 import (
 	"strings"
-	"sync"
 	"time"
 
 	"th10/anm"
@@ -49,21 +48,7 @@ const (
 // blank, backspace and finish glyphs (0x81, 0x7f, 0x80).
 const menuCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-=.,!?@:;[]()_/{}|~^#$%&*   "
 
-var menuFrontFile = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.ANM("front.anm")
-	if err != nil {
-		panic("stage menu: embedded front.anm: " + err.Error())
-	}
-	return f
-})
-
-var menuASCIIFile = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.ANM("ascii.anm")
-	if err != nil {
-		panic("stage menu: embedded ascii.anm: " + err.Error())
-	}
-	return f
-})
+func menuFrontFile() *anm.File { return gamedata.MustANM(gamedata.SharedANM("front.anm")) }
 
 // MenuController ports the 0x2c8-byte DAT_00477830 controller. World ANM
 // objects draw in layers 15/16; only ranking/name/slot text draws in 0x2e.
@@ -118,7 +103,7 @@ func (m *MenuController) open(g *game.Game, clear bool) {
 	m.Timer.Set(0)
 	m.priorSpeed = m.stage.ctx.Anm.GameSpeed
 	m.stage.ctx.Anm.GameSpeed = 1 // 0x42335f / 0x4234ff
-	m.backdrop = m.world.SpawnFront(menuASCIIFile(), 0, 15, m.env)
+	m.backdrop = m.world.SpawnFront(asciiFile(), 0, 15, m.env)
 	id := 0x80
 	if clear {
 		id = 0x81

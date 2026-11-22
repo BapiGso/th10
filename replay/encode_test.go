@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"th10/datfs"
 )
 
 func originalReplayPaths() []string {
@@ -68,7 +70,7 @@ func TestLZSSCompress(t *testing.T) {
 					src[i] = byte(rng.Uint32())
 				}
 			}
-			got := lzssDecompress(lzssCompress(src), len(src))
+			got := datfs.Unlzss(lzssCompress(src), len(src))
 			if !bytes.Equal(got, src) {
 				t.Fatalf("size %d kind %d: compressed roundtrip differs", size, kind)
 			}
@@ -85,7 +87,7 @@ func TestXOREncryptInverse(t *testing.T) {
 			}
 			got := bytes.Clone(src)
 			xorEncrypt(got, 0x7a, modulus, 0x3d)
-			xorTransform(got, 0x7a, modulus, 0x3d)
+			DecryptBlocks(got, 0x7a, modulus, 0x3d)
 			if !bytes.Equal(got, src) {
 				t.Fatalf("modulus %#x size %d", modulus, n)
 			}

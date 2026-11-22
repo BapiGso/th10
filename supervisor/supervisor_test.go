@@ -335,17 +335,6 @@ func TestEndFrame(t *testing.T) {
 	eqCalls(t, "next frame", draws(d.Take()), []string{"draw 4 6", "tex B", "draw 4 6"})
 }
 
-func TestLegacy(t *testing.T) {
-	s, d, f := fixture(t)
-	s.BeginFrame()
-	s.ANM.Draw(obj(f, 0, 0))
-	d.Take()
-	if got := s.Legacy(); got != s.Frame {
-		t.Errorf("Legacy returned %p, want Frame %p", got, s.Frame)
-	}
-	eqCalls(t, "Legacy", d.Take(), []string{"draw 4 6", "flush"})
-}
-
 func TestSheetCache(t *testing.T) {
 	s, d, f := fixture(t)
 	s.BeginFrame()

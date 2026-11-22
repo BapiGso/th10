@@ -1,8 +1,6 @@
 package menus
 
 import (
-	"sync"
-
 	"th10/anm"
 	"th10/game"
 	"th10/gamedata"
@@ -24,26 +22,11 @@ type nativeMenu struct {
 	fade               *sceneui.Fade
 }
 
-var menuFiles = struct {
-	sync.Mutex
-	files map[string]*anm.File
-}{files: map[string]*anm.File{}}
-
 func menuAnimation(name string) (*anm.File, error) {
-	menuFiles.Lock()
-	defer menuFiles.Unlock()
-	if f := menuFiles.files[name]; f != nil {
-		return f, nil
-	}
-	f, err := gamedata.PresentationANM(name)
-	if err != nil {
-		return nil, err
-	}
 	if name == "text.anm" {
-		f = f.OrdinalScripts() // FUN_00447470, labels -73..-1 are not caller IDs
+		return gamedata.SharedOrdinalANM(name, true) // FUN_00447470, labels -73..-1 are not caller IDs
 	}
-	menuFiles.files[name] = f
-	return f, nil
+	return gamedata.SharedPresentationANM(name)
 }
 
 func (m *nativeMenu) init(g *game.Game, background, heading int) error {

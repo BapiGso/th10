@@ -29,7 +29,7 @@ func (m *MenuController) OpenPause(g *game.Game) {
 	m.stage.ctx.Anm.GameSpeed, m.env.GameSpeed = 1, 1
 	m.stage.sceneFlags |= 0x10 // 0x422b21
 	m.stage.ctx.State.Paused = true
-	m.backdrop = m.world.SpawnTail(menuASCIIFile(), 0, 15, m.env)
+	m.backdrop = m.world.SpawnTail(asciiFile(), 0, 15, m.env)
 	m.heading = m.world.SpawnTail(menuFrontFile(), 0x79, 15, m.env)
 	m.capturePending = true
 	m.pauseSelector = sceneui.Selector{Wrap: true}

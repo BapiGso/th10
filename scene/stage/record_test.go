@@ -5,16 +5,13 @@ import (
 	"th10/game"
 	"th10/input"
 	"th10/replay"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type recordScript struct{}
 
-func (*recordScript) Init(*Context)        {}
-func (*recordScript) Update(*Context)      {}
-func (*recordScript) BgDraw(*ebiten.Image) {}
-func (*recordScript) Finished() bool       { return false }
+func (*recordScript) Init(*Context)   {}
+func (*recordScript) Update(*Context) {}
+func (*recordScript) Finished() bool  { return false }
 
 func TestRecordingModes(t *testing.T) {
 	for _, mode := range []struct {

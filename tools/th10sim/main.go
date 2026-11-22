@@ -14,13 +14,7 @@ import (
 	"th10/gamedata"
 	"th10/replay"
 	"th10/scene/stage"
-	"th10/scene/stage/extra"
-	"th10/scene/stage/stage1"
-	"th10/scene/stage/stage2"
-	"th10/scene/stage/stage3"
-	"th10/scene/stage/stage4"
-	"th10/scene/stage/stage5"
-	"th10/scene/stage/stage6"
+	stagescript "th10/scene/stage/script"
 	"th10/sim"
 	"th10/trace"
 )
@@ -166,7 +160,7 @@ func simulateChapter(o simOptions, rp *replay.Replay, index int, cfg sim.Config,
 			result = errors.Join(result, file.Close())
 		}
 	}()
-	runner := sim.New(cfg, scriptFactory)
+	runner := sim.New(cfg, stagescript.New)
 	if o.Ext {
 		runner.TraceFrame = extendedFrame
 	}
@@ -203,24 +197,4 @@ func simulateChapter(o simOptions, rp *replay.Replay, index int, cfg sim.Config,
 	}
 	status = "complete"
 	return endHi, endContinues, nil
-}
-func scriptFactory(stageNum int) stage.Script {
-	switch stageNum {
-	case 1:
-		return stage1.NewScript()
-	case 2:
-		return stage2.NewScript()
-	case 3:
-		return stage3.NewScript()
-	case 4:
-		return stage4.NewScript()
-	case 5:
-		return stage5.NewScript()
-	case 6:
-		return stage6.NewScript()
-	case 7:
-		return extra.NewScript()
-	default:
-		return stage1.NewScript()
-	}
 }

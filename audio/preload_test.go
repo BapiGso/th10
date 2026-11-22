@@ -19,13 +19,9 @@ func TestSEPreloadKeepsPCMAndPlaybackCache(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := m.loadSEPCM(name)
-		if err != nil || !bytes.Equal(got, want) || len(got)%pcmBytesPerFrame != 0 {
-			t.Fatalf("%s: preloading changed stereo PCM: %v", name, err)
-		}
-		again, err := m.loadSEPCM(name)
-		if err != nil || len(got) == 0 || &got[0] != &again[0] {
-			t.Fatalf("%s: playback did not reuse loaded PCM", name)
+		got := m.seCache[name]
+		if !bytes.Equal(got, want) || len(got)%pcmBytesPerFrame != 0 {
+			t.Fatalf("%s: preloading changed stereo PCM", name)
 		}
 	}
 	delete(m.seCache, seWav[0])
@@ -33,14 +29,6 @@ func TestSEPreloadKeepsPCMAndPlaybackCache(t *testing.T) {
 	if err := next.preloadSE(44100); err != nil || next.seCache[seWav[0]] == nil {
 		t.Fatal("manager shared its mutable name map")
 	}
-}
-
-func TestUnknownSEHasSafeFallback(t *testing.T) {
-	m := NewManager(nil)
-	if _, err := m.loadSEPCM("not-an-embedded-sound.wav"); err == nil {
-		t.Fatal("unknown sound silently decoded")
-	}
-	m.PlaySE("not-an-embedded-sound.wav") // nil device: silent, never panic
 }
 
 // Length() uses Ogg's last granule. Reading to EOF also checks the actual

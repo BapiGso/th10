@@ -84,7 +84,7 @@ func TestPackLayout(t *testing.T) {
 	}
 	// Read before the title runs: loading, title, SE preload, Vorbis prewarm.
 	for _, name := range []string{"anm/sig.anm", "anm/ascii.anm", "anm/title.anm", "anm/title.ant", "anm/title_v.anm", "anm/text.anm",
-		"anm/bullet.anm", "anm/texture_index.json", "wav/se/se_ok00.wav", "wav/bgm/thbgm.fmt", "wav/bgm/th10_02.ogg", "misc/demo0.rpy"} {
+		"anm/bullet.anm", "wav/se/se_ok00.wav", "wav/bgm/thbgm.fmt", "wav/bgm/th10_02.ogg", "misc/demo0.rpy"} {
 		if PackOf(name) != BootPack {
 			t.Errorf("%s is in %s, not boot", name, PackOf(name))
 		}

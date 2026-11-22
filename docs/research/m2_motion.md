@@ -268,7 +268,7 @@ main 是第一个被创建的敌人，但**不一定在链表头部**：它首�
 | 285/287 moveVelTime(S t, S mode, f a, f s) | mode 7：未设置按 0，不做 flip。其他 mode：未设置按当前值，角度按 0x800 镜像；若 \|cur − target\| ≥ π，target ≤ cur 时 target += 2π，否则 cur += 2π。速度插值 start = (cur angle, cur speed)，end = (a, s)；零切线；重置计时；清绕圆 |
 | 288/290 moveCircle(f angle, f angVel, f radius, f radVel) | 若当前未绕圆，圆心 = 当前位置；angle = norm；[6] = angVel，[8] = radius，[9] = radVel；置绕圆标志 |
 | 289/291 moveCircleTime(S t, S mode, f angle, f angVel, f radius, f radVel) | 未设置按当前值；速度插值 (cur [7], cur [6]) → (angle, angVel)；绕圆插值 (cur [8], [9]) → (radius, radVel)；圆心 = 当前位置（总是）；置绕圆标志 |
-| 292/293 moveRand(S t, S mode, f speed) | 用最终位置对照移动边界，按四分之一带规则选角度（见 `ecl_gaps.md` §2）；速度插值 (a, speed) → (a, 0) |
+| 292/293 moveRand(S t, S mode, f speed) | 用最终位置对照移动边界，按四分之一带规则选角度（见原 `ecl_gaps.md` §2：`git show b4df88d:docs/research/ecl_gaps.md`）；速度插值 (a, speed) → (a, 0) |
 | 294 | 层 A 位置 = 0 号 Boss 槽的最终位置 |
 | 295 | 层 B 位置 = Boss 最终位置 |
 | 296/297 | 层位置 += (f0, f1, f2) |

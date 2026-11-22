@@ -25,9 +25,6 @@ func TestSTDSmoke(t *testing.T) {
 	}
 	for n := 1; n <= 7; n++ {
 		t.Run(fmt.Sprintf("stage%d", n), func(t *testing.T) {
-			if !stdConvertible[n] {
-				t.Skip("legacy background")
-			}
 			w := &anm.World{}
 			env := &anm.Env{GameSpeed: 1, RNG: &zun.RNG{}, Alt: &zun.RNG{}, Spawn: w.Add}
 			v := loadSTD(n, env)

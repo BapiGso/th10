@@ -160,28 +160,28 @@ func NewStage01VM() *VM { return NewStageVM("ecl/stage01.ecl") }
 // loader+VM drives every stage; only the danmaku/movement data differs.
 func NewStageVM(eclPath string) *VM {
 	vm := &VM{
-		prog:      &Program{SubByName: map[string]*Sub{}},
+		prog:      &Program{subByName: map[string]*Sub{}},
 		actors:    map[*enemy.Enemy]*eclActor{},
 		rng:       &zun.RNG{State: 0x1234},
 		gameSpeed: 1,
 	}
 	if data, err := gamedata.ReadFile(eclPath); err == nil {
-		if prog, perr := LoadProgram(data); perr == nil {
+		if prog, perr := loadProgram(data); perr == nil {
 			vm.prog = prog
 			vm.displayNames = spellDisplayNames(eclPath, prog)
 			// The ECLI list ("default.ecl": the Ecl_EtBreak bullet-clearing
 			// enemies, et_ofs_r) shares the stage's sub namespace; th10.exe
 			// looks every name up in one table (FUN_00450470).
-			for _, name := range prog.EcliNames {
+			for _, name := range prog.ecliNames {
 				if inc, err := gamedata.ReadFile(path.Join(path.Dir(eclPath), name)); err == nil {
-					if incProg, err := LoadProgram(inc); err == nil {
-						prog.Include(incProg)
+					if incProg, err := loadProgram(inc); err == nil {
+						prog.include(incProg)
 					}
 				}
 			}
 		}
 	}
-	if sub := vm.prog.SubByName["main"]; sub != nil {
+	if sub := vm.prog.subByName["main"]; sub != nil {
 		e := enemy.New(0, 0, 0, enemy.TypeFairy)
 		e.ECLFlags = 0x10
 		vm.main = newActor(e)
@@ -197,18 +197,6 @@ func NewStageVM(eclPath string) *VM {
 // signal (replacing the old fixed-frame cutoff).
 func (vm *VM) MainDone() bool {
 	return vm.main == nil || !vm.main.e.Active
-}
-
-// BossActive reports whether a boss-type enemy spawned by the VM is currently
-// alive. Stage wrappers use this edge to switch to the boss BGM, since the ECL
-// itself carries no music cue.
-func (vm *VM) BossActive() bool {
-	for e := range vm.actors {
-		if e != nil && e.Active && e.Type == enemy.TypeBoss {
-			return true
-		}
-	}
-	return false
 }
 
 // BossSlot0Busy reports whether boss slot 0 (DAT_00477704+0x10) holds a live
@@ -663,14 +651,14 @@ func (vm *VM) execSystemOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		// FUN_0044e1a0 reads the radius first and normalises the angle
 		// (FUN_0044bc70) before FUN_004501b0 takes its sine and cosine.
 		radius := vm.resolveFloat(t, in.Params[3])
-		angle := normAngle(vm.resolveFloat(t, in.Params[2]))
-		x, y := polar(angle, radius)
+		angle := zun.NormAngle(vm.resolveFloat(t, in.Params[2]))
+		x, y := zun.Polar(angle, radius)
 		vm.storeVar(t, in.Params[0], floatVal(x))
 		vm.storeVar(t, in.Params[1], floatVal(y))
 		t.pc++
 	case opValidRad: // 82 f: normalize angle var into (-pi, pi]
 		v := vm.loadVarFloat(t, in.Params[0])
-		vm.storeVar(t, in.Params[0], floatVal(normAngle(v)))
+		vm.storeVar(t, in.Params[0], floatVal(zun.NormAngle(v)))
 		t.pc++
 	default:
 		_ = vm.execStackMath(t, in) // Unknown system op remains a no-op.
@@ -821,7 +809,7 @@ func (vm *VM) jump(t *eclTask, in *Instr, offsetParam, timeParam Param) {
 }
 
 func (vm *VM) doCall(ctx *stage.Context, t *eclTask, in *Instr, async bool, asyncID int32) {
-	name := in.Params[0].Str
+	name := in.Params[0].str
 	// Call arguments are the trailing D params.
 	firstArg := 1
 	if in.Opcode == opCallAsyncID {
@@ -834,7 +822,7 @@ func (vm *VM) doCall(ctx *stage.Context, t *eclTask, in *Instr, async bool, asyn
 	if async {
 		// A new async context goes to the head of the owner's list.
 		if a := vm.actors[t.owner]; a != nil {
-			nt := &eclTask{sub: vm.prog.SubByName[name], owner: t.owner, async: true, asyncID: asyncID}
+			nt := &eclTask{sub: vm.prog.subByName[name], owner: t.owner, async: true, asyncID: asyncID}
 			if nt.sub != nil {
 				nt.frame = newFrame(nt.sub, args)
 			}
@@ -843,7 +831,7 @@ func (vm *VM) doCall(ctx *stage.Context, t *eclTask, in *Instr, async bool, asyn
 		t.pc++
 		return
 	}
-	callee := vm.prog.SubByName[name]
+	callee := vm.prog.subByName[name]
 	if callee == nil {
 		t.pc++
 		return
@@ -972,7 +960,7 @@ func (vm *VM) frameWord(t *eclTask, id int32) uint32 {
 }
 
 func (vm *VM) storeVar(t *eclTask, p Param, v eVal) {
-	id := p.VarID()
+	id := p.varID()
 	if id < 0 {
 		vm.storeSpecial(t, id, v)
 		return
@@ -985,20 +973,20 @@ func (vm *VM) loadVarInt(t *eclTask, p Param) int32 {
 	if !p.IsVar {
 		return p.Int()
 	}
-	if id := p.VarID(); id < -1 {
+	if id := p.varID(); id < -1 {
 		return vm.specialInt(t, id)
 	}
-	return int32(vm.frameWord(t, p.VarID()))
+	return int32(vm.frameWord(t, p.varID()))
 }
 
 func (vm *VM) loadVarFloat(t *eclTask, p Param) float32 {
 	if !p.IsVar {
 		return p.Float()
 	}
-	if id := p.VarID(); id < -1 {
+	if id := p.varID(); id < -1 {
 		return vm.specialFloat(t, id)
 	}
-	return math.Float32frombits(vm.frameWord(t, p.VarID()))
+	return math.Float32frombits(vm.frameWord(t, p.varID()))
 }
 
 // rngRaw, randSigned and randFloat draw from the game RNG (zun.RNG).

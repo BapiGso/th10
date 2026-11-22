@@ -55,7 +55,7 @@ func TestBinaryConfigRoundTripAndCommitTiming(t *testing.T) {
 		t.Fatal(err)
 	}
 	loaded, err := loadBinaryConfig(store)
-	if err != nil || len(store.writes) != 1 || loaded.BGMVolume != .65 || loaded.SEVolume != .35 || !loaded.Hint || loaded.Native.Raw[0x22] != 2 || loaded.Native.Flags() != 0x91827364 || !bytes.Equal(loaded.NativeBytes(), cfg.NativeBytes()) {
+	if err != nil || len(store.writes) != 1 || loaded.BGMVolume != .65 || loaded.SEVolume != .35 || loaded.Native.Raw[0x22] != 2 || loaded.Native.Flags() != 0x91827364 || !bytes.Equal(loaded.NativeBytes(), cfg.NativeBytes()) {
 		t.Fatalf("binary cfg did not reload: %v", err)
 	}
 	store.files[browserConfigKey] = []byte("invalid cfg")

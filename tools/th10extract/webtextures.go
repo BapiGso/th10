@@ -65,7 +65,7 @@ func chooseWebTexture(t *anm.Texture, lossless []byte, p *textureProduct) ([]byt
 			if err != nil {
 				return nil, err
 			}
-			q, err := anm.CompareTextureQuality(t, decoded)
+			q, err := CompareTextureQuality(t, decoded)
 			if err != nil {
 				return nil, err
 			}
@@ -81,7 +81,7 @@ func chooseWebTexture(t *anm.Texture, lossless []byte, p *textureProduct) ([]byt
 	}
 	for _, bits := range [][3]int{{4, 4, 4}, {4, 5, 4}, {5, 5, 5}} {
 		quantized := quantizeTexture(t, bits)
-		q, err := anm.CompareTextureQuality(t, quantized)
+		q, err := CompareTextureQuality(t, quantized)
 		if err != nil {
 			return nil, err
 		}

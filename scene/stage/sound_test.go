@@ -15,7 +15,6 @@ type panSoundRecord struct {
 	}
 }
 
-func (s *panSoundRecord) PlaySE(string)   {}
 func (s *panSoundRecord) PlayBGM(int)     {}
 func (s *panSoundRecord) StopBGM()        {}
 func (s *panSoundRecord) FadeOutBGM(int)  {}

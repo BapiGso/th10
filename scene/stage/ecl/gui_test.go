@@ -57,7 +57,7 @@ func TestSpellNamesPresentationOnly(t *testing.T) {
 		if len(vm.displayNames) == 0 {
 			t.Errorf("stage %d has no th10c.dat spell-name pairs", stageNum)
 		}
-		if vm.prog.SubByName["main"] == nil {
+		if vm.prog.subByName["main"] == nil {
 			t.Errorf("stage %d lost its original main", stageNum)
 		}
 	}

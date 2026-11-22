@@ -2,26 +2,12 @@ package loading
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
-	"sync"
 	"th10/anm"
 	"th10/game"
 	"th10/gamedata"
 	"th10/scene/title"
-	"th10/sprite"
 	"th10/supervisor"
 )
-
-var files = sync.OnceValues(func() (*anm.File, *anm.File) {
-	sig, err := gamedata.ANM("sig.anm")
-	if err != nil {
-		panic("loading: embedded sig.anm: " + err.Error())
-	}
-	ascii, err := gamedata.ANM("ascii.anm")
-	if err != nil {
-		panic("loading: embedded ascii.anm: " + err.Error())
-	}
-	return sig, ascii
-})
 
 // Loading is FUN_0041f850/0041fd00's DAT_00477820. Embedded setup is
 // synchronous; TitleGate models title initialization waiting for 300 draws.
@@ -46,10 +32,10 @@ func (l *Loading) SceneEnter(g *game.Game) error {
 	if l.ready {
 		return nil
 	}
-	l.sig, l.ascii = files()
+	l.sig = gamedata.MustANM(gamedata.SharedANM("sig.anm"))
+	l.ascii = gamedata.MustANM(gamedata.SharedANM("ascii.anm"))
 	l.world = &anm.World{}
 	l.env = &anm.Env{GameSpeed: 1, Alt: g.AlternateRNG(), Spawn: l.world.Add}
-	sprite.Load() // keep existing embedded-only legacy/debug sheets
 	l.ready = true
 	return nil
 }

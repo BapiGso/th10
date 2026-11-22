@@ -5,17 +5,14 @@ import (
 
 	"th10/entity/player"
 	"th10/input"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // stubScript does nothing and reports done when told.
 type stubScript struct{ done bool }
 
-func (s *stubScript) Init(*Context)        {}
-func (s *stubScript) Update(*Context)      {}
-func (s *stubScript) BgDraw(*ebiten.Image) {}
-func (s *stubScript) Finished() bool       { return s.done }
+func (s *stubScript) Init(*Context)   {}
+func (s *stubScript) Update(*Context) {}
+func (s *stubScript) Finished() bool  { return s.done }
 
 // TestMSGClearEndsStage: the post entry plays while the world runs and its op
 // 20 clears the stage; until then the dialog holds the script's own end back.

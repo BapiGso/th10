@@ -8,7 +8,6 @@ package stage
 import (
 	"fmt"
 	"math"
-	"sync"
 
 	"th10/anm"
 	"th10/anm/anmdraw"
@@ -19,13 +18,7 @@ import (
 	"th10/zun"
 )
 
-var frontFile = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.PresentationANM("front.anm")
-	if err != nil {
-		panic("stage: embedded front.anm: " + err.Error())
-	}
-	return f
-})
+func frontFile() *anm.File { return gamedata.MustANM(gamedata.SharedPresentationANM("front.anm")) }
 
 // DAT_00470cb8: the 38-pixel faith-hold gauge over its 130-frame cap.
 var guiHoldUnit = math.Float32frombits(0x3e95a95b)
@@ -95,11 +88,7 @@ func NewGUI(ctx *Context) *GUI {
 	}
 	g.clock.Reset()
 	if n := ctx.State.Stage; n >= 1 && n <= 7 {
-		f, err := gamedata.PresentationANM(fmt.Sprintf("st%02dlogo.anm", n))
-		if err != nil {
-			panic("stage: embedded stage logo: " + err.Error())
-		}
-		g.logo = f
+		g.logo = gamedata.MustANM(gamedata.SharedPresentationANM(fmt.Sprintf("st%02dlogo.anm", n)))
 	}
 	g.beginStage()
 	return g

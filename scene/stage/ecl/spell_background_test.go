@@ -30,7 +30,7 @@ func TestSpellBackgroundScriptsAndOwnership(t *testing.T) {
 			vm, ctx, boss, _ := visualVM(t)
 			ctx.State.Stage = tc.stage
 			ctx.SetBossSection(int32(tc.section))
-			vm.prog.AnimNames = []string{"enemy.anm", fmt.Sprintf("stgenm%02d.anm", tc.stage)}
+			vm.prog.animNames = []string{"enemy.anm", fmt.Sprintf("stgenm%02d.anm", tc.stage)}
 			vm.bossSlots[0] = boss.e
 			for i, script := range tc.background {
 				if script >= 0 {
@@ -93,7 +93,7 @@ func TestSpellExtraLeavesSecondBackgroundUntouched(t *testing.T) {
 	vm, ctx, boss, _ := visualVM(t)
 	ctx.State.Stage = 7
 	ctx.SetBossSection(23)
-	vm.prog.AnimNames = []string{"enemy.anm", "stgenm07.anm"}
+	vm.prog.animNames = []string{"enemy.anm", "stgenm07.anm"}
 	vm.bossSlots[0] = boss.e
 	v := &vm.card.Background[1]
 	v.Start(spellPlacardFile(), 1, ctx.Anm)
@@ -109,7 +109,7 @@ func TestSpellBackgroundSTDTransition(t *testing.T) {
 	vm, ctx, boss, _ := visualVM(t)
 	ctx.State.Stage = 1
 	ctx.STD = std.New(&std.File{})
-	vm.prog.AnimNames = []string{"enemy.anm", "stgenm01.anm"}
+	vm.prog.animNames = []string{"enemy.anm", "stgenm01.anm"}
 	vm.bossSlots[0] = boss.e
 	gameOp(vm, ctx, boss, opSpellBg, intParam(2), intParam(2700), intParam(0), stringParam("card"))
 	for range 60 {

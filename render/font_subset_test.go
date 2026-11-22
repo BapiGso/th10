@@ -15,7 +15,6 @@ import (
 
 	"th10/gamedata"
 
-	ebitext "github.com/hajimehoshi/ebiten/v2/text/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -134,38 +133,9 @@ func originalRasterForTest(text string, face font.Face, style TextStyle) *image.
 	return img
 }
 
-func TestFontSubsetTextV2MetricsAndFallback(t *testing.T) {
-	dir := originalFontsDirectory()
-	for _, name := range []string{"Bimini Bold.ttf", "DFYuGaSo-W3.ttc", "DFYuGaSo-W7.ttc"} {
-		for _, size := range []float64{16, 17, 20, 28} {
-			face := LoadTextFace("font/"+name, size)
-			if face == nil {
-				t.Fatalf("%s failed to load", name)
-			}
-			if dir != "" {
-				data, err := os.ReadFile(filepath.Join(dir, name))
-				if err != nil {
-					t.Fatal(err)
-				}
-				source := parseFontBytes(data)
-				if source == nil {
-					t.Fatal("original font failed to load")
-				}
-				old := &ebitext.GoTextFace{Source: source, Size: size}
-				if face.Metrics() != old.Metrics() {
-					t.Errorf("%s size %g: changed text/v2 metrics", name, size)
-				}
-				w, h := ebitext.Measure("AVATAR To Wa 0123456789", face, 0)
-				x, y := ebitext.Measure("AVATAR To Wa 0123456789", old, 0)
-				if w != x || h != y {
-					t.Errorf("%s size %g: changed text/v2 kerning/placement", name, size)
-				}
-			}
-			// Characters outside the fixed corpus resolve to the retained
-			// .notdef; they must remain safe even for imported replay names.
-			_, _ = ebitext.Measure(string(rune(0x10ffff)), face, 0)
-		}
-	}
+// Characters outside the fixed corpus resolve to the retained .notdef; they
+// must remain safe even for imported replay names.
+func TestFontSubsetNotdefFallback(t *testing.T) {
 	for _, bold := range []bool{false, true} {
 		img := RasterText(string(rune(0x10ffff)), 64, 64, TextStyle{Size: 17, Bold: bold, Color: 0xffffff})
 		if img.Bounds() != image.Rect(0, 0, 64, 64) {

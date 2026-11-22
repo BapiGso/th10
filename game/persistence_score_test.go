@@ -9,7 +9,8 @@ import (
 )
 
 func TestScoreJSONMigrationOnlyWhenAbsent(t *testing.T) {
-	store := NewMemoryScoreStore()
+	mem := memoryStore{}
+	store := binaryScoreStore{store: mem}
 	old := DefaultSaveData()
 	old.HighScore, old.TotalRuns, old.TotalClears, old.TotalExtraClears = 90000000, 7, 2, 1
 	old.LastCharacter, old.LastShotType, old.LastDifficulty = 1, 2, DiffNormal
@@ -19,7 +20,7 @@ func TestScoreJSONMigrationOnlyWhenAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store.SetLegacyJSON(legacy)
+	mem["save.json"] = legacy
 	g := &Game{Scores: store}
 	g.LoadProgress()
 	raw, err := store.Read()
@@ -29,7 +30,7 @@ func TestScoreJSONMigrationOnlyWhenAbsent(t *testing.T) {
 	if kept, err := store.LegacyJSON(); err != nil || !bytes.Equal(kept, legacy) {
 		t.Fatal("migration rewrote legacy JSON")
 	}
-	store.SetLegacyJSON([]byte(`{"high_score":9999999990,"total_runs":99}`))
+	mem["save.json"] = []byte(`{"high_score":9999999990,"total_runs":99}`)
 	fresh := &Game{Scores: store}
 	fresh.LoadProgress()
 	if fresh.Save.HighScore != old.HighScore || fresh.Save.Progress[5].Runs != 7 || fresh.Save.Rankings[5][1][0].Name != "OLD" {

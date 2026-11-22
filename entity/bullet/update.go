@@ -25,7 +25,6 @@ func (p *Pool) Calc(env *Env) {
 	for i := range p.layers {
 		p.layers[i] = p.layers[i][:0]
 	}
-	p.Count = 0
 	gs := env.gs()
 	for i := range p.Slots {
 		b := &p.Slots[i]
@@ -38,7 +37,6 @@ func (p *Pool) Calc(env *Env) {
 		if l := b.Layer; l >= 0 && l < Layers {
 			p.layers[l] = append(p.layers[l], b)
 		}
-		p.Count++
 		b.T.Tick(gs)
 		b.prep()
 	}
@@ -204,7 +202,7 @@ func (b *Bullet) accelerate(gs float32) {
 			b.Vel[k] = float32(gs*b.accelVec[k]) + b.Vel[k]
 		}
 		vx, vy := b.Vel[0], b.Vel[1]
-		if abs32(vx) > 0.0001 || abs32(vy) > 0.0001 {
+		if zun.Abs32(vx) > 0.0001 || zun.Abs32(vy) > 0.0001 {
 			b.Angle = float32(math.Atan2(float64(vy), float64(vx)))
 		}
 	} else {
@@ -363,8 +361,4 @@ func outside406160(pos [3]float32, w, h float32) bool {
 // than the margins mx, my.
 func outside4086b0(pos [3]float32, mx, my float32) bool {
 	return !(pos[0]+mx > -192 && pos[0]-mx < 192 && pos[1]+my > 0 && pos[1]-my < 448)
-}
-
-func abs32(v float32) float32 {
-	return math.Float32frombits(math.Float32bits(v) &^ (1 << 31))
 }

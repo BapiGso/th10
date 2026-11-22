@@ -36,7 +36,6 @@ func TestEndingBranches(t *testing.T) {
 				for _, continues := range []int32{0, 1, 9} {
 					s := game.NewState(character, shot, difficulty)
 					s.ReplayState90 = continues
-					s.Continued = true // the transient host bool is not DAT_00474c90
 					s.Life, s.Power, s.Score = 0, 0, 0
 					got, err := EndingIndex(s)
 					want := character*3 + shot

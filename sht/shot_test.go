@@ -20,9 +20,6 @@ func TestOriginalReimuAShotGroups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = f.ValidateReimuA(); err != nil {
-		t.Fatal(err)
-	}
 	mainDamage := []int{15, 14, 13, 11, 12}
 	for level := 0; level < 5; level++ {
 		for _, focus := range []bool{false, true} {
@@ -88,14 +85,5 @@ func TestMalformedShots(t *testing.T) {
 		if _, err := Parse(bad); err == nil {
 			t.Fatalf("accepted bad record %#x=%#x", tc.at, tc.value)
 		}
-	}
-	bad := append([]byte(nil), data...)
-	binary.LittleEndian.PutUint32(bad[0x234+0x28:], 2)
-	f, err := Parse(bad)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if f.ValidateReimuA() == nil {
-		t.Fatal("unsupported callback silently accepted")
 	}
 }

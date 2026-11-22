@@ -75,8 +75,8 @@ func (p *Player) RestoreReplayPlayer(header []byte) {
 	p.State = StateNormal
 	p.StateTimer.Reset()
 	p.initTimer.Reset()
-	if p.reimuA != nil {
-		p.reimuA.timer.Set(-1)
+	if p.shot != nil {
+		p.shot.timer.Set(-1)
 	}
 	p.world.Delete(p.hitbox) // FUN_00424d90, 0x424e78-0x424e8f
 	p.hitbox = nil

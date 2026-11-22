@@ -15,7 +15,7 @@ import (
 // newTestVM is a VM with no program, for driving ops and contexts directly.
 func newTestVM() *VM {
 	return &VM{
-		prog:      &Program{SubByName: map[string]*Sub{}},
+		prog:      &Program{subByName: map[string]*Sub{}},
 		actors:    map[*enemy.Enemy]*eclActor{},
 		rng:       &zun.RNG{State: 1},
 		gameSpeed: 1,
@@ -227,7 +227,7 @@ func floatParam(v float32) Param {
 }
 
 func stringParam(v string) Param {
-	return Param{Type: 'x', Str: v}
+	return Param{Type: 'x', str: v}
 }
 
 // TestVMStableFullStage ensures a long run never panics (bad jumps, stack
@@ -326,7 +326,7 @@ func TestAimSpecialsReferencePosition(t *testing.T) {
 	vm.playerECL = [2]float32{10, 20}
 	task := &eclTask{owner: owner}
 	want := map[int32]float32{
-		-9989: halfPi32,
+		-9989: zun.HalfPi,
 		-9956: 0,
 		-9955: float32(math.Atan2(10, 10)),
 	}

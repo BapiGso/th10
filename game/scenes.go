@@ -2,7 +2,6 @@ package game
 
 import (
 	"fmt"
-	"th10/supervisor"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -45,6 +44,7 @@ type sceneSwitcher struct {
 	current, request, previous SceneID
 	factories                  map[SceneID]SceneFactory
 	pending                    SceneFactory
+	switching                  bool // a request was made since the last switch, even to the current mode
 	err                        error
 }
 
@@ -85,16 +85,14 @@ func (g *Game) RequestScene(id SceneID) {
 		id = SceneExitSystem
 	}
 	g.initScenes()
-	g.scenes.request, g.scenes.pending = id, nil
-	g.next, g.nextSet = nil, true
+	g.scenes.request, g.scenes.pending, g.scenes.switching = id, nil, true
 }
 
 // GoToFactory is a direct request with a delayed constructor. A new
 // instance of the same numbered mode is allowed, as in requests 10..13.
 func (g *Game) GoToFactory(id SceneID, factory SceneFactory) {
 	g.initScenes()
-	g.scenes.request, g.scenes.pending = id, factory
-	g.next, g.nextSet = nil, true
+	g.scenes.request, g.scenes.pending, g.scenes.switching = id, factory, true
 }
 
 // normalizedScene is FUN_004218d0's request switch (0x421924..0x421ae8).
@@ -118,11 +116,11 @@ func (g *Game) CalcScene() error {
 	if g.scenes.err != nil {
 		return g.scenes.err
 	}
-	if g.nextSet || g.scenes.request != g.scenes.current {
+	if g.scenes.switching || g.scenes.request != g.scenes.current {
 		requested := g.scenes.request
-		factory, target := g.scenes.pending, g.next
-		g.nextSet, g.next, g.scenes.pending = false, nil, nil
-		if factory == nil && target == nil && requested == g.scenes.current {
+		factory := g.scenes.pending
+		g.scenes.switching, g.scenes.pending = false, nil
+		if factory == nil && requested == g.scenes.current {
 			if g.current != nil {
 				return g.current.Update(g) // FUN_004218d0 equal-mode early return
 			}
@@ -138,7 +136,7 @@ func (g *Game) CalcScene() error {
 			g.current = nil
 			return ebiten.Termination
 		}
-		if factory == nil && target == nil && requested != SceneUnnumbered {
+		if factory == nil && requested != SceneUnnumbered {
 			factory = g.scenes.factories[requested]
 			if factory == nil {
 				factory = g.scenes.factories[normalizedScene(requested)]
@@ -154,6 +152,7 @@ func (g *Game) CalcScene() error {
 		if requested == ScenePlayerData { // 0x4219d6..0x4219ee
 			g.TitleEntry = 3
 		}
+		var target Scene
 		if factory != nil {
 			var err error
 			target, err = factory(g)
@@ -203,12 +202,6 @@ func (s *numberedScene) SceneEnter(g *Game) error {
 func (s *numberedScene) SceneLeave(g *Game, next SceneID) {
 	if life, ok := s.Scene.(SceneLifecycle); ok {
 		life.SceneLeave(g, next)
-	}
-}
-
-func (s *numberedScene) DrawPorted(sv *supervisor.Supervisor) {
-	if draw, ok := s.Scene.(interface{ DrawPorted(*supervisor.Supervisor) }); ok {
-		draw.DrawPorted(sv)
 	}
 }
 

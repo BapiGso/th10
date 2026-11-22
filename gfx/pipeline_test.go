@@ -15,8 +15,6 @@ import (
 // are worked out by hand from the contracts in pipeline.go and shader.go,
 // picked so float32 arithmetic is exact unless a tolerance is given.
 
-func near(a, b, eps float32) bool { return float32(math.Abs(float64(a-b))) <= eps }
-
 func TestMul4(t *testing.T) {
 	m := Mat4{{1, 2, 3, 4}, {5, 6, 7, 8}, {9, 10, 11, 12}, {13, 14, 15, 16}}
 	if got := mul4(Identity, m); got != m {

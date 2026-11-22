@@ -19,10 +19,10 @@ func TestExtractOriginalAndPresentationArchives(t *testing.T) {
 			out := t.TempDir()
 			name := "e00.msg"
 			if archive == "th10.dat" {
-				err = run(dir, out, false, false, false, 4, []string{name})
+				err = runArchive(dir, archive, out, false, false, 4, []string{name})
 			} else {
 				name = "e00.mst"
-				err = runArchive(dir, archive, out, false, false, false, 4, []string{name})
+				err = runArchive(dir, archive, out, false, false, 4, []string{name})
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -42,7 +42,7 @@ func TestExtractOriginalAndPresentationArchives(t *testing.T) {
 			}
 		})
 	}
-	if err := runArchive(dir, "th10.exe", t.TempDir(), false, false, false, 4, nil); err == nil {
+	if err := runArchive(dir, "th10.exe", t.TempDir(), false, false, 4, nil); err == nil {
 		t.Fatal("non-resource archive accepted")
 	}
 }

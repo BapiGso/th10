@@ -1,12 +1,14 @@
 package datfs
 
-// decrypt undoes ZUN's block cipher in place: each block of up to `block`
+// Decrypt undoes ZUN's block cipher in place: each block of up to `block`
 // bytes is de-interleaved (second half reversed against first half) and XORed
 // with a running key. Only the first `limit` bytes (rounded up to a block
 // multiple) are encrypted, and a short tail block is left in plain text.
+// With limit = len(data) it is th10.exe's FUN_0044b0d0, which also decodes
+// .rpy and scoreth10.dat (package replay).
 //
 // Port of th_decrypt (thtk/thcrypt.c).
-func decrypt(data []byte, key, step byte, block, limit int) {
+func Decrypt(data []byte, key, step byte, block, limit int) {
 	size := len(data)
 	if size < block>>2 {
 		size = 0

@@ -9,16 +9,11 @@ import (
 	"th10/game"
 	"th10/replay"
 	"th10/scene/stage"
-	"th10/scene/stage/stage1"
+	stagescript "th10/scene/stage/script"
 	"th10/trace"
 )
 
-func testFactory(stageNum int) stage.Script {
-	if stageNum == 1 {
-		return stage1.NewScript()
-	}
-	return stage1.NewScript()
-}
+func testFactory(int) stage.Script { return stagescript.New(1) }
 
 func loadDemo(t *testing.T, name string) replay.Chapter {
 	t.Helper()

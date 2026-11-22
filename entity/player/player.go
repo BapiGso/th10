@@ -98,7 +98,7 @@ type Player struct {
 
 	// 自机子弹池引用
 	Bullets *playerbullet.Pool
-	reimuA  *shotState // common SHT runtime; retains the original Reimu A inspection name
+	shot    *shotState // common SHT runtime of all six shot types
 }
 
 // Bomber is the bomb object (DAT_004776ec) as the player drives it.
@@ -125,7 +125,7 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 		panic(fmt.Sprintf("load player SHT %s: %v", path, err))
 	}
 	p := &Player{
-		Anm: playerFiles[gs.Character](),
+		Anm: playerFile(gs.Character),
 		steps: [4]int32{int32(movement.Fast), int32(movement.Slow),
 			int32(movement.FastDiagonal), int32(movement.SlowDiagonal)},
 		HitboxRadius: 2, GrazeRadius: 16,
@@ -135,13 +135,13 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 		FieldLeft: fieldL, FieldTop: fieldT,
 		FieldRight: fieldR, FieldBottom: fieldB,
 		Bullets: playerbullet.NewPool(128), // FUN_00427e90: P+0x49c, 128 records of 0x5c
-		reimuA:  &shotState{},
+		shot:    &shotState{},
 	}
 	p.StateTimer.Reset()
 	p.initTimer.Reset()
-	p.Invinc.Set(120)      // FUN_004247f0
-	p.reimuA.timer.Set(-1) // FUN_00424d90, P+0x460
-	p.SetFixed(0, 40000)   // FUN_004247f0: (0, 400.0)
+	p.Invinc.Set(120)    // FUN_004247f0
+	p.shot.timer.Set(-1) // FUN_00424d90, P+0x460
+	p.SetFixed(0, 40000) // FUN_004247f0: (0, 400.0)
 	for i := range p.positionHistory {
 		p.positionHistory[i] = [2]int32{0, 40000} // FUN_004247f0, 0x42492c-0x424955
 	}
@@ -155,7 +155,7 @@ func New(gs *game.GameState, fieldL, fieldT, fieldR, fieldB float64) *Player {
 		return [3]float32{float32(o[0]) * 0.01, float32(o[1]) * 0.01, 0}
 	}
 	p.Bullets.OptionCount = func() int { return max(p.optionCount, 0) }
-	p.Bullets.ShotClock = func() int32 { return p.reimuA.timer.Cur }
+	p.Bullets.ShotClock = func() int32 { return p.shot.timer.Cur }
 	p.Bullets.NoAttack = func() bool { return p.NoAttack }
 	p.Bullets.HitArea = p.addArea // FUN_00428630, 0x428835-0x428863 -> FUN_00427b50
 	return p

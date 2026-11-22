@@ -13,7 +13,7 @@ func TestLosslessTexturePixelFormats(t *testing.T) {
 		for _, palette := range []bool{false, true} {
 			t.Run(fmt.Sprintf("format%d/palette%t", format, palette), func(t *testing.T) {
 				texture := &anm.Texture{Format: format, W: 17, H: 13}
-				texture.Pixels = make([]byte, texture.W*texture.H*pixelBytes(format))
+				texture.Pixels = make([]byte, texture.W*texture.H*anm.BytesPerPixel(format))
 				for i := range texture.Pixels {
 					texture.Pixels[i] = byte(i*19 + i/7)
 					if palette {

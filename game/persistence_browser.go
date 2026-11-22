@@ -58,21 +58,26 @@ func (s binaryReplayStore) Write(slot int, data []byte) error {
 
 func loadBinaryConfig(store browserstore.Store) (*Config, error) {
 	cfg := DefaultConfig()
+	return cfg, applyNativeConfig(cfg, store)
+}
+
+// applyNativeConfig sets cfg from the stored th10.cfg; a missing file
+// leaves cfg as it is.
+func applyNativeConfig(cfg *Config, store browserstore.Store) error {
 	data, err := store.Read(browserConfigKey)
 	if errors.Is(err, fs.ErrNotExist) {
-		return cfg, nil
+		return nil
 	}
 	if err != nil {
-		return cfg, err
+		return err
 	}
 	native, err := DecodeNativeConfig(data)
 	if err != nil {
-		return cfg, err
+		return err
 	}
 	cfg.Native = native
 	cfg.BGMVolume, cfg.SEVolume = float64(native.Raw[0x20])/100, float64(native.Raw[0x21])/100
-	cfg.Hint = native.Raw[0x22] != 1
-	return cfg, nil
+	return nil
 }
 
 func saveBinaryConfig(store browserstore.Store, cfg *Config) error {

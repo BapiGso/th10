@@ -235,7 +235,7 @@ func (l *Line) accelerate(gs float32) {
 			c.Vel[k] = float32(gs*l.accelVec[k]) + c.Vel[k]
 		}
 		vx, vy := c.Vel[0], c.Vel[1]
-		if abs32(vx) > 0.0001 || abs32(vy) > 0.0001 {
+		if zun.Abs32(vx) > 0.0001 || zun.Abs32(vy) > 0.0001 {
 			c.Angle = float32(math.Atan2(float64(vy), float64(vx)))
 		}
 	} else {
@@ -403,8 +403,4 @@ func (l *Line) clear(items bool, env *Env) {
 		})
 	}
 	c.State = StateDead
-}
-
-func abs32(v float32) float32 {
-	return math.Float32frombits(math.Float32bits(v) &^ (1 << 31))
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"th10/replay"
-	selector "th10/scene/select"
+	stagescript "th10/scene/stage/script"
 	"th10/sim"
 )
 
@@ -25,12 +25,12 @@ func measureLogic(path string, chapter, frames, warmup int) (*sim.Profile, error
 		return nil, err
 	}
 	for range warmup {
-		runner := sim.New(cfg, selector.ReplayScript)
+		runner := sim.New(cfg, stagescript.New)
 		if _, err := runner.Measure(r.Chapters[chapter], frames, nil); err != nil {
 			return nil, err
 		}
 	}
-	runner := sim.New(cfg, selector.ReplayScript)
+	runner := sim.New(cfg, stagescript.New)
 	profile, err := runner.Measure(r.Chapters[chapter], frames, wasmMemoryBytes)
 	return &profile, err
 }

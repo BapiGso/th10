@@ -22,7 +22,6 @@ import (
 )
 
 type fontProduct struct {
-	Name          string         `json:"name"`
 	SourceSHA256  string         `json:"source_sha256"`
 	SubsetSHA256  string         `json:"subset_sha256"`
 	OriginalBytes int            `json:"original_bytes"`
@@ -454,43 +453,28 @@ func subsetFonts(root, source string) error {
 	if err != nil {
 		return err
 	}
-	var products []fontProduct
 	var references []fontPixelReference
-	for _, name := range []string{"Bimini Bold.ttf", "DFYuGaSo-W3.ttc", "DFYuGaSo-W7.ttc"} {
+	for _, name := range []string{"DFYuGaSo-W3.ttc", "DFYuGaSo-W7.ttc"} {
 		raw, err := os.ReadFile(filepath.Join(source, name))
 		if err != nil {
 			return err
 		}
 		text := characters.Text
-		if name == "Bimini Bold.ttf" {
-			text = characters.Sources["ASCII"]
-		}
-		data, product, err := subsetFont(raw, text)
+		data, _, err := subsetFont(raw, text)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
-		product.Name = name
-		if name != "Bimini Bold.ttf" {
-			reference, err := originalFontPixels(raw, name, text)
-			if err != nil {
-				return err
-			}
-			references = append(references, reference)
+		reference, err := originalFontPixels(raw, name, text)
+		if err != nil {
+			return err
 		}
+		references = append(references, reference)
 		if err := write(filepath.Join(root, "font", name), data); err != nil {
 			return err
 		}
-		products = append(products, product)
 	}
 	project := filepath.Dir(filepath.Clean(root))
-	data, err := json.MarshalIndent(products, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := write(filepath.Join(project, "docs", "research", "font_subset.json"), append(data, '\n')); err != nil {
-		return err
-	}
-	data, err = json.Marshal(references)
+	data, err := json.Marshal(references)
 	if err != nil {
 		return err
 	}

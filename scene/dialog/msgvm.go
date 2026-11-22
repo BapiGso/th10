@@ -69,7 +69,6 @@ type View struct {
 	Speaker                 int  // MSG+0x84: 0 player, 1 boss
 	Dim                     bool // op 17 dims both portraits until the next line
 	Lines                   [2]TextLine
-	PlayerName, BossName    string
 }
 
 // MSG is a playing .msg entry: the object FUN_00415db0 builds for ECL 338.

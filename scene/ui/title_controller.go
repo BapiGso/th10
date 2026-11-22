@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"sync"
-
 	"th10/anm"
 	"th10/game"
 	"th10/gamedata"
@@ -40,38 +38,7 @@ type TitlePageHooks struct {
 	Draw func(*TitleController, *supervisor.Supervisor)
 }
 
-var titleFiles = sync.OnceValues(func() (*anm.File, *anm.File) {
-	f, err := gamedata.ANM("title.anm")
-	if err != nil {
-		panic("title: embedded title.anm: " + err.Error())
-	}
-	v, err := gamedata.ANM("title_v.anm")
-	if err != nil {
-		panic("title: embedded title_v.anm: " + err.Error())
-	}
-	return f, v
-})
-
-var titleASCII = sync.OnceValue(func() *anm.File {
-	f, err := gamedata.ANM("ascii.anm")
-	if err != nil {
-		panic("title: embedded ascii.anm: " + err.Error())
-	}
-	return f
-})
-
-var pageRegistry = struct {
-	sync.RWMutex
-	pages map[TitlePage]TitlePageHooks
-}{pages: make(map[TitlePage]TitlePageHooks)}
-
-// RegisterTitlePage lets t11's menus register their native functions
-// without importing package title (which itself imports package menus).
-func RegisterTitlePage(page TitlePage, hooks TitlePageHooks) {
-	pageRegistry.Lock()
-	defer pageRegistry.Unlock()
-	pageRegistry.pages[page] = hooks
-}
+func titleASCII() *anm.File { return gamedata.MustANM(gamedata.SharedANM("ascii.anm")) }
 
 // TitleController is DAT_0047784c, shared by the title and all menu pages.
 // Roots are the native title +0x2c4 script-indexed handles, not inline VMs.
@@ -104,16 +71,12 @@ type TitleController struct {
 // NewTitleController is FUN_0042c920 -> FUN_0042caa0. All free objects
 // use the application's alternate RNG; no run/state is created for a menu.
 func NewTitleController(g *game.Game, entry int) *TitleController {
-	f, v := titleFiles()
+	f := gamedata.MustANM(gamedata.SharedANM("title.anm"))
+	v := gamedata.MustANM(gamedata.SharedANM("title_v.anm"))
 	w := &anm.World{}
 	c := &TitleController{Game: g, World: w, File: f, VersionFile: v, entry: entry,
 		Roots: make(map[int]*anm.VM), Hooks: make(map[TitlePage]TitlePageHooks)}
 	c.Env = &anm.Env{GameSpeed: 1, Alt: g.AlternateRNG(), Spawn: w.Add}
-	pageRegistry.RLock()
-	for page, hooks := range pageRegistry.pages {
-		c.Hooks[page] = hooks
-	}
-	pageRegistry.RUnlock()
 	c.Selector.Wrap = true // 0x42cb49
 	if !g.Selection.Initialized {
 		g.Selection.Initialized, g.Selection.Difficulty = true, game.DiffNormal

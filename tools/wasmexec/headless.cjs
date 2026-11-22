@@ -32,7 +32,7 @@ globalThis.Document = Document;
 globalThis.document = new Document();
 globalThis.screen = { width: 640, height: 480, availWidth: 640, availHeight: 480 };
 globalThis.navigator ??= {};
-// Legacy ebitenui init queues touch-listener setup. Headless tools use recorded
-// input, so acknowledge that registration without ever scheduling a frame.
+// Ebiten's internal/ui (ui_js.go) looks up requestAnimationFrame at package
+// init. Headless tools never run a frame, so the stub schedules nothing.
 globalThis.requestAnimationFrame = () => 0;
 console.error("[th10 wasmexec] init-only DOM; no WebGL, RunGame, or audio device");

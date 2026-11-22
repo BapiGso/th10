@@ -30,10 +30,10 @@ import (
 
 // Program is a parsed ECL file.
 type Program struct {
-	AnimNames []string
-	EcliNames []string
-	Subs      []*Sub
-	SubByName map[string]*Sub
+	animNames []string
+	ecliNames []string
+	subs      []*Sub
+	subByName map[string]*Sub
 }
 
 // Sub is one ECL subroutine (a "void Name(...)" in thtk text).
@@ -59,7 +59,7 @@ type Param struct {
 	Type  byte   // 'S' int, 'f' float, 'm'/'x' string, 'o' offset, 't' time, 'D' typed
 	Raw   uint32 // raw 4-byte value (low 4 bytes for 'D')
 	IsVar bool   // param_mask bit: the value is a variable / stack reference
-	Str   string // decoded string for 'm'/'x'
+	str   string // decoded string for 'm'/'x'
 	DFrom byte   // 'D' only: source type 'i'/'f'
 	DTo   byte   // 'D' only: dest type 'i'/'f'
 }
@@ -70,12 +70,12 @@ func (p Param) Int() int32 { return int32(p.Raw) }
 // Float returns the raw value reinterpreted as a float32 bit pattern.
 func (p Param) Float() float32 { return math.Float32frombits(p.Raw) }
 
-// VarID returns the variable/stack id a param references (only meaningful when
+// varID returns the variable/stack id a param references (only meaningful when
 // IsVar). Float-typed params encode the id as a float bit pattern: a local
 // var at byte offset 12 is stored as 12.0f, the special "aim" var as -9998.0f.
 // Int-typed params store the id directly. id>=0 = local frame byte offset,
 // id==-1 = pop data stack, id<-1 = special/global variable.
-func (p Param) VarID() int32 {
+func (p Param) varID() int32 {
 	if p.Type == 'f' {
 		return int32(p.Float())
 	}
@@ -107,8 +107,8 @@ var (
 	errTooShort = errors.New("ecl: truncated")
 )
 
-// LoadProgram parses a raw TH10 ECL byte slice.
-func LoadProgram(data []byte) (*Program, error) {
+// loadProgram parses a raw TH10 ECL byte slice.
+func loadProgram(data []byte) (*Program, error) {
 	if len(data) < 36 {
 		return nil, errTooShort
 	}
@@ -118,7 +118,7 @@ func LoadProgram(data []byte) (*Program, error) {
 	includeOff := binary.LittleEndian.Uint32(data[8:12])
 	subCount := binary.LittleEndian.Uint32(data[16:20])
 
-	prog := &Program{SubByName: map[string]*Sub{}}
+	prog := &Program{subByName: map[string]*Sub{}}
 
 	// ANIM list.
 	off := int(includeOff)
@@ -126,7 +126,7 @@ func LoadProgram(data []byte) (*Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	prog.AnimNames = names
+	prog.animNames = names
 	off = align4(off)
 
 	// ECLI list.
@@ -134,7 +134,7 @@ func LoadProgram(data []byte) (*Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	prog.EcliNames = names
+	prog.ecliNames = names
 	off = align4(off)
 
 	// Sub offset table.
@@ -164,22 +164,22 @@ func LoadProgram(data []byte) (*Program, error) {
 		if err != nil {
 			return nil, fmt.Errorf("sub %q: %w", subNames[i], err)
 		}
-		prog.Subs = append(prog.Subs, sub)
-		prog.SubByName[sub.Name] = sub
+		prog.subs = append(prog.subs, sub)
+		prog.subByName[sub.Name] = sub
 	}
 	return prog, nil
 }
 
-// Include adds the subs of an ECLI-listed file (e.g. "default.ecl") that p
+// include adds the subs of an ECLI-listed file (e.g. "default.ecl") that p
 // does not define itself. th10.exe merges every loaded file's subs into one
 // sorted name table and binary-searches it (FUN_00450470).
-func (p *Program) Include(inc *Program) {
-	for _, sub := range inc.Subs {
-		if _, ok := p.SubByName[sub.Name]; ok {
+func (p *Program) include(inc *Program) {
+	for _, sub := range inc.subs {
+		if _, ok := p.subByName[sub.Name]; ok {
 			continue
 		}
-		p.Subs = append(p.Subs, sub)
-		p.SubByName[sub.Name] = sub
+		p.subs = append(p.subs, sub)
+		p.subByName[sub.Name] = sub
 	}
 }
 
@@ -282,7 +282,7 @@ func decodeParams(blob []byte, opcode uint16, mask uint16) ([]Param, error) {
 			if t == 'x' {
 				xorString(raw)
 			}
-			p.Str = trimNul(raw)
+			p.str = trimNul(raw)
 			pos += n
 		case 'D', 'H':
 			// thecl_sub_param_t: from(1) to(1) zero(2) val(4) = 8 bytes.

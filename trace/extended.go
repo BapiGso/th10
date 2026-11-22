@@ -205,16 +205,6 @@ func readExtendedLine(f *Frame, t []string) error {
 			return fail(err)
 		}
 		f.Ext.Spell = &v
-	case "Z":
-		var index, e, b, items, lasers, spell int
-		if err := parseShape(t, commitShape, &index, &e, &b, &items, &lasers, &spell); err != nil {
-			return fail(err)
-		}
-		if index != f.Index || e != len(f.E) || b != len(f.B) || items != len(f.I) || lasers != len(f.L) || spell != boolInt(f.Ext.Spell != nil) {
-			return fail(fmt.Errorf("z commit row counts do not match"))
-		}
-		f.extCommitted = true
-		return validateExtended(f)
 	}
 	return nil
 }

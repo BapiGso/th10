@@ -10,8 +10,6 @@ import (
 	"th10/scene/stage"
 	"th10/supervisor"
 	"th10/zun"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestScreenEffectAllKindConstructors(t *testing.T) {
@@ -281,7 +279,6 @@ func (s *effectClearScript) Update(c *stage.Context) {
 		c.OpenMSG(1)
 	}
 }
-func (*effectClearScript) BgDraw(*ebiten.Image)              {}
 func (*effectClearScript) Finished() bool                    { return false }
 func (s *effectClearScript) LateUpdate(c *stage.Context)     { s.vm.LateUpdate(c) }
 func (s *effectClearScript) ShakeOffset() (float64, float64) { return s.vm.ShakeOffset() }

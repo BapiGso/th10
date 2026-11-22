@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"slices"
 	"th10/replay"
 )
 
@@ -89,36 +88,3 @@ func (g *Game) ListReplays() []ReplaySlot {
 }
 
 func isReplayMissing(err error) bool { return errors.Is(err, fs.ErrNotExist) }
-
-// MemoryReplayStore is an injectable backend for tests and headless callers;
-// returned data never aliases stored bytes. The browser uses IndexedDB.
-type MemoryReplayStore struct{ files map[int][]byte }
-
-func NewMemoryReplayStore() *MemoryReplayStore {
-	return &MemoryReplayStore{files: make(map[int][]byte)}
-}
-
-func (s *MemoryReplayStore) Read(slot int) ([]byte, error) {
-	if _, err := ReplayFilename(slot); err != nil {
-		return nil, err
-	}
-	data, ok := s.files[slot]
-	if !ok {
-		return nil, fs.ErrNotExist
-	}
-	return slices.Clone(data), nil
-}
-
-func (s *MemoryReplayStore) Write(slot int, data []byte) error {
-	if _, err := ReplayFilename(slot); err != nil {
-		return err
-	}
-	if len(data) > maxReplayBytes {
-		return fmt.Errorf("game: replay exceeds %d bytes", maxReplayBytes)
-	}
-	if s.files == nil {
-		s.files = make(map[int][]byte)
-	}
-	s.files[slot] = slices.Clone(data)
-	return nil
-}

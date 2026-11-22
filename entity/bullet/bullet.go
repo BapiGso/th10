@@ -216,8 +216,6 @@ type Pool struct {
 	Rect struct{ X, Y, W, H float32 }
 
 	layers [Layers][]*Bullet
-	// Count is the number of bullets the last Calc kept.
-	Count int
 }
 
 // NewPool returns an empty manager.
@@ -277,14 +275,4 @@ func (p *Pool) EachLayer(l int, fn func(*Bullet)) {
 	for _, b := range p.layers[l] {
 		fn(b)
 	}
-}
-
-// Reset frees every slot and forgets the draw lists, as when a stage starts.
-func (p *Pool) Reset() {
-	p.Slots = [Slots]Bullet{}
-	p.cursor = 0
-	for i := range p.layers {
-		p.layers[i] = p.layers[i][:0]
-	}
-	p.Count = 0
 }

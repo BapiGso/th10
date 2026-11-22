@@ -290,9 +290,6 @@ type Manager struct {
 // NewManager returns an empty manager.
 func NewManager() *Manager { return &Manager{} }
 
-// Reset drops every laser and restarts the ids.
-func (m *Manager) Reset() { *m = Manager{} }
-
 // Count is the number of live lasers.
 func (m *Manager) Count() int { return m.count }
 

@@ -21,10 +21,6 @@ import (
 	"strings"
 )
 
-// FormatVersion is bumped when the schema changes; the diff tool refuses to
-// compare traces of different versions.
-const FormatVersion = 2 // 2: game-space positions, manager-order enemies
-
 // Frame is one sampled frame of game state.
 type Frame struct {
 	Index int // frame number since run start (1-based)
@@ -342,11 +338,7 @@ func (tr *Reader) Next() (*Frame, error) {
 				return f, nil
 			}
 		case "Z":
-			if tr.capture != nil && tr.held != nil && tr.held.Ext == nil {
-				if err := readCommit(tr.held, fields); err != nil {
-					return nil, err
-				}
-			} else if err := readExtendedLine(tr.held, fields); err != nil {
+			if err := readCommit(tr.held, fields, tr.capture != nil); err != nil {
 				return nil, err
 			}
 		case "X", "I", "L", "S":
@@ -357,66 +349,52 @@ func (tr *Reader) Next() (*Frame, error) {
 	}
 }
 
+// fieldParser parses whitespace-separated values at fixed positions, keeping the
+// first error. Callers check the field count before indexing.
+type fieldParser struct {
+	t   []string
+	err error
+}
+
+func (p *fieldParser) at(idx int, dst any) {
+	var err error
+	switch d := dst.(type) {
+	case *float64:
+		*d, err = strconv.ParseFloat(p.t[idx], 64)
+	case *int:
+		*d, err = strconv.Atoi(p.t[idx])
+	case *int64:
+		*d, err = strconv.ParseInt(p.t[idx], 10, 64)
+	}
+	if err != nil && p.err == nil {
+		p.err = err
+	}
+}
+
+// ints reads dst[i] from position start+2*i, the value after each label.
+func (p *fieldParser) ints(start int, dst ...*int) {
+	for i, d := range dst {
+		p.at(start+2*i, d)
+	}
+}
+
 func parseFrameLine(f *Frame, t []string) error {
 	// F <idx> p <x> <y> life <n> power <n> faith <n> score <n> graze <n>
 	//   state <n> invinc <n> bomb <n> | e <n> b <n> i <n> pb <n>
 	if len(t) < 30 {
 		return fmt.Errorf("trace: short F line %q", strings.Join(t, " "))
 	}
-	var err error
-	get := func(i *int) string { v := t[*i]; *i++; return v }
-	i := 1
-	nextInt := func() int {
-		v, e := strconv.Atoi(get(&i))
-		if e != nil && err == nil {
-			err = e
-		}
-		return v
-	}
-	nextInt64 := func() int64 {
-		v, e := strconv.ParseInt(get(&i), 10, 64)
-		if e != nil && err == nil {
-			err = e
-		}
-		return v
-	}
-	nextF := func() float64 {
-		v, e := strconv.ParseFloat(get(&i), 64)
-		if e != nil && err == nil {
-			err = e
-		}
-		return v
-	}
-	f.Index = nextInt()
-	// "p"
-	i++
-	f.PX, f.PY = nextF(), nextF()
-	i++ // "life"
-	f.PLife = nextInt()
-	i++ // "power"
-	f.PPower = nextInt()
-	i++ // "faith"
-	f.PFaith = nextInt64()
-	i++ // "score"
-	f.PScore = nextInt64()
-	i++ // "graze"
-	f.PGraze = nextInt()
-	i++ // "state"
-	f.PState = nextInt()
-	i++ // "invinc"
-	f.PInvinc = nextInt()
-	i++ // "bomb"
-	f.PBombTimer = nextInt()
-	i++ // "|"
-	i++ // "e"
-	f.Enemies = nextInt()
-	i++ // "b"
-	f.Bullets = nextInt()
-	i++ // "i"
-	f.Items = nextInt()
-	i++ // "pb"
-	f.PBullets = nextInt()
-	return err
+	p := fieldParser{t: t}
+	p.at(1, &f.Index)
+	p.at(3, &f.PX)
+	p.at(4, &f.PY)
+	p.at(6, &f.PLife)
+	p.at(8, &f.PPower)
+	p.at(10, &f.PFaith)
+	p.at(12, &f.PScore)
+	p.ints(14, &f.PGraze, &f.PState, &f.PInvinc, &f.PBombTimer)
+	p.ints(23, &f.Enemies, &f.Bullets, &f.Items, &f.PBullets)
+	return p.err
 }
 
 func parseEnemyLine(e *EnemyRow, t []string) error {
@@ -424,31 +402,13 @@ func parseEnemyLine(e *EnemyRow, t []string) error {
 	if len(t) < 9 {
 		return fmt.Errorf("trace: short E line %q", strings.Join(t, " "))
 	}
-	var err error
 	var act int
-	parseAt := func(idx int, dst any) {
-		switch d := dst.(type) {
-		case *float64:
-			v, e := strconv.ParseFloat(t[idx], 64)
-			if e != nil && err == nil {
-				err = e
-			}
-			*d = v
-		case *int:
-			v, e := strconv.Atoi(t[idx])
-			if e != nil && err == nil {
-				err = e
-			}
-			*d = v
-		}
-	}
-	parseAt(1, &e.X)
-	parseAt(2, &e.Y)
-	parseAt(4, &e.HP)
-	parseAt(6, &act)
-	parseAt(8, &e.Type)
+	p := fieldParser{t: t}
+	p.at(1, &e.X)
+	p.at(2, &e.Y)
+	p.ints(4, &e.HP, &act, &e.Type)
 	e.Active = act != 0
-	return err
+	return p.err
 }
 
 func parseMSGLine(m *MSGRow, t []string) error {
@@ -456,15 +416,9 @@ func parseMSGLine(m *MSGRow, t []string) error {
 	if len(t) < 12 {
 		return fmt.Errorf("trace: short M line %q", strings.Join(t, " "))
 	}
-	var err error
-	for i, dst := range []*int{&m.ID, &m.Clock, &m.Wait, &m.Signal, &m.At, &m.Op} {
-		v, e := strconv.Atoi(t[1+2*i])
-		if e != nil && err == nil {
-			err = e
-		}
-		*dst = v
-	}
-	return err
+	p := fieldParser{t: t}
+	p.ints(1, &m.ID, &m.Clock, &m.Wait, &m.Signal, &m.At, &m.Op)
+	return p.err
 }
 
 func parseBulletLine(b *BulletRow, t []string) error {
@@ -472,28 +426,11 @@ func parseBulletLine(b *BulletRow, t []string) error {
 	if len(t) < 11 {
 		return fmt.Errorf("short bullet row: got %d fields, want at least 11", len(t))
 	}
-	var err error
-	parseAt := func(idx int, dst any) {
-		switch d := dst.(type) {
-		case *float64:
-			v, e := strconv.ParseFloat(t[idx], 64)
-			if e != nil && err == nil {
-				err = e
-			}
-			*d = v
-		case *int:
-			v, e := strconv.Atoi(t[idx])
-			if e != nil && err == nil {
-				err = e
-			}
-			*d = v
-		}
-	}
-	parseAt(1, &b.X)
-	parseAt(2, &b.Y)
-	parseAt(4, &b.Angle)
-	parseAt(6, &b.Speed)
-	parseAt(8, &b.Type)
-	parseAt(10, &b.Color)
-	return err
+	p := fieldParser{t: t}
+	p.at(1, &b.X)
+	p.at(2, &b.Y)
+	p.at(4, &b.Angle)
+	p.at(6, &b.Speed)
+	p.ints(8, &b.Type, &b.Color)
+	return p.err
 }

@@ -11,9 +11,13 @@ import (
 // embedded. The original file remains available to logic and resource tests.
 // The patch changes pictures, not the GUI's FUN_0043ee30 timelines.
 func PresentationANM(name string) (*anm.File, error) {
-	p := "anm/" + strings.TrimSuffix(name, ".anm") + ".ant"
-	if data, err := readANM(p); err == nil {
+	if data, err := readANM(presentationPath(name)); err == nil {
 		return anm.Load(bytes.Clone(data))
 	}
 	return ANM(name)
+}
+
+// presentationPath is name's th10c.dat variant in the embedded tree.
+func presentationPath(name string) string {
+	return "anm/" + strings.TrimSuffix(name, ".anm") + ".ant"
 }

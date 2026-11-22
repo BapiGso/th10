@@ -110,35 +110,10 @@ func decodeMSGText(enc []byte, dec interface {
 // Stage-level loader: official .msg, cached, with our speaker names.
 // ---------------------------------------------------------------------------
 
-// stageMsgSpeakers names the right (boss/enemy) speaker of each .msg entry of
-// a stage, so the overlay can pick our portraits. Index = entry order in the
-// file.
-type stageMsgSpeakers struct {
-	// rightBySeg[i] = boss/enemy speaker name for entry i (must exist in
-	// speakerFaces).
-	rightBySeg []string
-}
-
-// msgSpeakers maps stageN → per-entry right-speaker names. Entry layout (from
-// the decoded files): most stages = [bossPre, post]; stage 3 = [midPre,
-// midPost, bossPre, post]; extra = [midPre, bossPre, post]. Stage 1's
-// mid-boss (静葉) has no dialog; stage 6's post entry has no text.
-var msgSpeakers = map[string]stageMsgSpeakers{
-	"stage1": {rightBySeg: []string{"秋穣子", "秋穣子"}},
-	"stage2": {rightBySeg: []string{"鍵山雛", "鍵山雛"}},
-	"stage3": {rightBySeg: []string{"河城にとり", "河城にとり", "河城にとり", "河城にとり"}},
-	"stage4": {rightBySeg: []string{"射命丸文", "射命丸文"}},
-	"stage5": {rightBySeg: []string{"東風谷早苗", "東風谷早苗"}},
-	"stage6": {rightBySeg: []string{"八坂神奈子", "八坂神奈子"}},
-	"extra":  {rightBySeg: []string{"八坂神奈子", "洩矢諏訪子", "洩矢諏訪子"}},
-}
-
 // StageMSG is a stage's .msg for one character.
 type StageMSG struct {
-	Entries    [][]Instr
-	PlayerName string
-	BossNames  []string // the right speaker of each entry
-	Stage      int
+	Entries [][]Instr
+	Stage   int
 }
 
 var (
@@ -165,10 +140,7 @@ func LoadStage(stage string, character int) *StageMSG {
 	path := fmt.Sprintf("msg/st%02d_%02d.msg", stageNum, character&1)
 	if data, err := gamedata.ReadFile(path); err == nil {
 		if entries := ParseMSG(data); len(entries) > 0 {
-			sm = &StageMSG{Entries: entries, PlayerName: "博麗霊夢", BossNames: msgSpeakers[stage].rightBySeg, Stage: stageNum}
-			if character&1 == 1 {
-				sm.PlayerName = "霧雨魔理沙"
-			}
+			sm = &StageMSG{Entries: entries, Stage: stageNum}
 			if localized, err := gamedata.ReadFile(fmt.Sprintf("msg/st%02d_%02d.mst", stageNum, character&1)); err == nil {
 				attachDisplayTexts(entries, localized)
 			}
@@ -227,12 +199,7 @@ func (s *StageMSG) Open(id int32, hooks Hooks) *MSG {
 	if s == nil || id < 0 || int(id) >= len(s.Entries) {
 		return nil
 	}
-	m := NewMSG(id, s.Entries[id], hooks)
-	m.View.PlayerName = s.PlayerName
-	if int(id) < len(s.BossNames) {
-		m.View.BossName = s.BossNames[id]
-	}
-	return m
+	return NewMSG(id, s.Entries[id], hooks)
 }
 
 // stageIndex extracts the stage number from a stage key (0 = unknown).

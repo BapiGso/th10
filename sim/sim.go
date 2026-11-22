@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"th10/entity/bullet"
-	"th10/entity/enemy"
 	"th10/game"
 	"th10/input"
 	"th10/replay"
@@ -72,13 +71,7 @@ func ConfigFor(rp *replay.Replay, chapter int) (Config, error) {
 // trace to out. It stops at the end of the input, when the stage finishes, or
 // at maxFrames (0 = no cap).
 func (r *Runner) Run(ch replay.Chapter, out io.Writer, maxFrames int) error {
-	var h *headless
-	var err error
-	if r.ConfigureState == nil {
-		h, err = newHeadless(r.cfg, r.factory)
-	} else {
-		h, err = newHeadlessConfigured(r.cfg, r.factory, 0, r.ConfigureState)
-	}
+	h, err := newHeadless(r.cfg, r.factory, 0, r.ConfigureState)
 	if err != nil {
 		return err
 	}
@@ -190,17 +183,17 @@ type headless struct {
 	finished bool
 }
 
-func newHeadless(cfg Config, factory ScriptFactory) (*headless, error) {
-	return newHeadlessWithAlternateSeed(cfg, factory, 0)
-}
-
-// Inject before STD/ANM initialization; replay seeds only restore the main
-// generator (FUN_00428f60 / FUN_0042a6a0), never DAT_004918a8.
+// newHeadlessWithAlternateSeed is newHeadless without a state override
+// (kept for sim's alternate-RNG tests).
 func newHeadlessWithAlternateSeed(cfg Config, factory ScriptFactory, seed uint16) (*headless, error) {
-	return newHeadlessConfigured(cfg, factory, seed, nil)
+	return newHeadless(cfg, factory, seed, nil)
 }
 
-func newHeadlessConfigured(cfg Config, factory ScriptFactory, seed uint16, configure func(*game.GameState)) (*headless, error) {
+// newHeadless builds the world for cfg. seed is the alternate generator
+// DAT_004918a8, injected before STD/ANM initialization; replay seeds only
+// restore the main generator (FUN_00428f60 / FUN_0042a6a0). configure, when
+// set, overrides the initial state before stage/GUI construction.
+func newHeadless(cfg Config, factory ScriptFactory, seed uint16, configure func(*game.GameState)) (*headless, error) {
 	if factory == nil {
 		return nil, fmt.Errorf("sim: no script factory")
 	}
@@ -248,7 +241,8 @@ const (
 
 // sample snapshots the current world into a trace frame.
 func (h *headless) sample(index int) *trace.Frame {
-	enemies := liveEnemies(h.ctx)
+	// The enemy manager's list order, hidden main first (set by the ECL VM).
+	enemies := h.ctx.ManagerOrder()
 	bomb := 0
 	if b := h.ctx.Bomb; b.Active() {
 		bomb = int(b.Timer.Cur)
@@ -324,19 +318,4 @@ func (h *headless) dumpBullets(w io.Writer, frame int) {
 			f(b.Pos[0]), f(b.Pos[1]), f(b.Angle), f(b.Speed), f(b.Vel[0]), f(b.Vel[1]), b.ExFlags, b.State)
 		n++
 	})
-}
-
-// liveEnemies is the enemy list in the original manager's order (hidden main
-// first) when the stage runs an ECL VM, else the stage's own list.
-func liveEnemies(ctx *stage.Context) []*enemy.Enemy {
-	if ctx.ManagerOrder != nil {
-		return ctx.ManagerOrder()
-	}
-	out := make([]*enemy.Enemy, 0, len(ctx.Enemies))
-	for _, e := range ctx.Enemies {
-		if e != nil && e.Active {
-			out = append(out, e)
-		}
-	}
-	return out
 }

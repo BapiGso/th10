@@ -10,13 +10,7 @@ import (
 
 	"th10/replay"
 	"th10/scene/stage"
-	"th10/scene/stage/extra"
-	"th10/scene/stage/stage1"
-	"th10/scene/stage/stage2"
-	"th10/scene/stage/stage3"
-	"th10/scene/stage/stage4"
-	"th10/scene/stage/stage5"
-	"th10/scene/stage/stage6"
+	stagescript "th10/scene/stage/script"
 	"th10/sim"
 	"th10/supervisor"
 	"th10/supervisor/supervisortest"
@@ -33,8 +27,6 @@ import (
 // none. Each chapter runs for at most 3000 frames. TH10_SMOKE=full runs every
 // frame of every chapter instead, and -short caps each chapter at 300 frames.
 func TestReplayDrawSmoke(t *testing.T) {
-	// The stages read TH10_LEGACY_BG when they are built; keep the STD drawer on.
-	t.Setenv("TH10_LEGACY_BG", "")
 	dir := os.Getenv("TH10_REPLAYS")
 	if dir == "" {
 		dir = filepath.Join("..", "..", ".tmp", "[th10]", "replay")
@@ -90,7 +82,7 @@ func drawChapter(t *testing.T, rp *replay.Replay, i, limit int) int {
 	}
 	d := &supervisortest.Rec{}
 	sv := supervisor.New(d, nil)
-	r := sim.New(cfg, scriptFactory)
+	r := sim.New(cfg, stagescript.New)
 	frames, drawTL, strips, draw3D := 0, 0, 0, 0
 	r.OnFrame = func(st *stage.Stage) {
 		if !stage.HasSTDDrawer(st) {
@@ -119,27 +111,4 @@ func drawChapter(t *testing.T, rp *replay.Replay, i, limit int) int {
 		t.Errorf("%d frames drew nothing", frames)
 	}
 	return strips
-}
-
-// scriptFactory builds the stage script for a stage number, as tools/th10sim
-// does.
-func scriptFactory(stageNum int) stage.Script {
-	switch stageNum {
-	case 1:
-		return stage1.NewScript()
-	case 2:
-		return stage2.NewScript()
-	case 3:
-		return stage3.NewScript()
-	case 4:
-		return stage4.NewScript()
-	case 5:
-		return stage5.NewScript()
-	case 6:
-		return stage6.NewScript()
-	case 7:
-		return extra.NewScript()
-	default:
-		return stage1.NewScript()
-	}
 }

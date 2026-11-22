@@ -11,9 +11,9 @@ func loadStage01(t *testing.T) *Program {
 	if err != nil {
 		t.Fatalf("read stage01.ecl: %v", err)
 	}
-	prog, err := LoadProgram(data)
+	prog, err := loadProgram(data)
 	if err != nil {
-		t.Fatalf("LoadProgram: %v", err)
+		t.Fatalf("loadProgram: %v", err)
 	}
 	return prog
 }
@@ -22,28 +22,28 @@ func TestLoaderParsesStage01Header(t *testing.T) {
 	prog := loadStage01(t)
 
 	wantAnim := []string{"enemy.anm", "stgenm01.anm"}
-	if len(prog.AnimNames) != len(wantAnim) {
-		t.Fatalf("anim names = %v, want %v", prog.AnimNames, wantAnim)
+	if len(prog.animNames) != len(wantAnim) {
+		t.Fatalf("anim names = %v, want %v", prog.animNames, wantAnim)
 	}
 	for i, n := range wantAnim {
-		if prog.AnimNames[i] != n {
-			t.Fatalf("anim[%d] = %q, want %q", i, prog.AnimNames[i], n)
+		if prog.animNames[i] != n {
+			t.Fatalf("anim[%d] = %q, want %q", i, prog.animNames[i], n)
 		}
 	}
-	if len(prog.EcliNames) != 1 || prog.EcliNames[0] != "default.ecl" {
-		t.Fatalf("ecli names = %v, want [default.ecl]", prog.EcliNames)
+	if len(prog.ecliNames) != 1 || prog.ecliNames[0] != "default.ecl" {
+		t.Fatalf("ecli names = %v, want [default.ecl]", prog.ecliNames)
 	}
 	// Known Stage 1 subs from stage01.ecl.txt.
 	for _, name := range []string{"BGirl00", "Boss", "Boss1", "Boss1At1", "main"} {
-		if prog.SubByName[name] == nil {
-			t.Fatalf("missing sub %q (have %d subs)", name, len(prog.Subs))
+		if prog.subByName[name] == nil {
+			t.Fatalf("missing sub %q (have %d subs)", name, len(prog.subs))
 		}
 	}
 }
 
 func TestLoaderDecodesBGirl00(t *testing.T) {
 	prog := loadStage01(t)
-	sub := prog.SubByName["BGirl00"]
+	sub := prog.subByName["BGirl00"]
 	// void BGirl00() { var A; ins_330(2); ins_262(1,45); @Girl00(0); ins_1(); }
 	wantOps := []uint16{opStackAlloc, 330, 262, opCall, opRetBig}
 	if len(sub.Instrs) != len(wantOps) {
@@ -61,14 +61,14 @@ func TestLoaderDecodesBGirl00(t *testing.T) {
 	}
 	// @Girl00(0): CALL with string name "Girl00" then one D arg = 0.
 	call := sub.Instrs[3]
-	if len(call.Params) < 1 || call.Params[0].Str != "Girl00" {
+	if len(call.Params) < 1 || call.Params[0].str != "Girl00" {
 		t.Fatalf("call params[0] = %+v, want name Girl00", call.Params)
 	}
 }
 
 func TestLoaderDecodesBossMovePosTime(t *testing.T) {
 	prog := loadStage01(t)
-	sub := prog.SubByName["Boss"]
+	sub := prog.subByName["Boss"]
 	// Boss contains ins_281(60, 4, 0.0f, 112.0f) — movePosTime.
 	var found *Instr
 	for i := range sub.Instrs {
@@ -112,28 +112,28 @@ func TestLoaderParsesAllStages(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		prog, err := LoadProgram(data)
+		prog, err := loadProgram(data)
 		if err != nil {
-			t.Fatalf("LoadProgram(%s): %v", name, err)
+			t.Fatalf("loadProgram(%s): %v", name, err)
 		}
-		if prog.SubByName["main"] == nil {
-			t.Fatalf("%s: missing main sub (have %d subs)", name, len(prog.Subs))
+		if prog.subByName["main"] == nil {
+			t.Fatalf("%s: missing main sub (have %d subs)", name, len(prog.subs))
 		}
 	}
 }
 
 // TestStageVMIncludesDefaultECL: every stage lists default.ecl in its ECLI
 // block and calls its subs (Ecl_EtBreak) by name, so the VM must merge it.
-// No stage redefines a default.ecl sub, so Include's keep-the-stage's-copy
+// No stage redefines a default.ecl sub, so include's keep-the-stage's-copy
 // rule never has to pick between two definitions.
 func TestStageVMIncludesDefaultECL(t *testing.T) {
 	data, err := assets.Assets.ReadFile("ecl/default.ecl")
 	if err != nil {
 		t.Fatalf("read default.ecl: %v", err)
 	}
-	def, err := LoadProgram(data)
+	def, err := loadProgram(data)
 	if err != nil {
-		t.Fatalf("LoadProgram(default.ecl): %v", err)
+		t.Fatalf("loadProgram(default.ecl): %v", err)
 	}
 	for _, name := range []string{
 		"ecl/stage01.ecl", "ecl/stage02.ecl", "ecl/stage03.ecl",
@@ -144,20 +144,20 @@ func TestStageVMIncludesDefaultECL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		own, err := LoadProgram(data)
+		own, err := loadProgram(data)
 		if err != nil {
-			t.Fatalf("LoadProgram(%s): %v", name, err)
+			t.Fatalf("loadProgram(%s): %v", name, err)
 		}
-		for _, sub := range def.Subs {
-			if own.SubByName[sub.Name] != nil {
+		for _, sub := range def.subs {
+			if own.subByName[sub.Name] != nil {
 				t.Errorf("%s redefines default.ecl's %s", name, sub.Name)
 			}
 		}
 		vm := NewStageVM(name)
-		if vm.prog.SubByName["Ecl_EtBreak"] == nil {
-			t.Errorf("%s: Ecl_EtBreak not reachable (ECLI %v)", name, own.EcliNames)
+		if vm.prog.subByName["Ecl_EtBreak"] == nil {
+			t.Errorf("%s: Ecl_EtBreak not reachable (ECLI %v)", name, own.ecliNames)
 		}
-		if got, want := len(vm.prog.Subs), len(own.Subs)+len(def.Subs); got != want {
+		if got, want := len(vm.prog.subs), len(own.subs)+len(def.subs); got != want {
 			t.Errorf("%s: %d subs after include, want %d", name, got, want)
 		}
 	}

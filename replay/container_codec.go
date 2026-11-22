@@ -1,6 +1,10 @@
 package replay
 
-import "fmt"
+import (
+	"fmt"
+
+	"th10/datfs"
+)
 
 // CompressLZSS exposes FUN_004359b0's codec, shared by .rpy and scoreth10.dat.
 func CompressLZSS(src []byte) []byte { return lzssCompress(src) }
@@ -11,7 +15,7 @@ func DecompressLZSS(src []byte, outLen int) ([]byte, error) {
 	if outLen < 0 || outLen > 64<<20 {
 		return nil, fmt.Errorf("replay: invalid LZSS output length %d", outLen)
 	}
-	out := lzssDecompress(src, outLen)
+	out := datfs.Unlzss(src, outLen)
 	if len(out) != outLen {
 		return nil, fmt.Errorf("replay: short LZSS output %d, want %d", len(out), outLen)
 	}
@@ -31,5 +35,5 @@ func DecryptBlocks(data []byte, keyInc byte, modulus int, initKey byte) {
 	if modulus < 2 || modulus&1 != 0 {
 		panic("replay: invalid XOR block size")
 	}
-	xorTransform(data, keyInc, modulus, initKey)
+	datfs.Decrypt(data, initKey, keyInc, modulus, len(data))
 }

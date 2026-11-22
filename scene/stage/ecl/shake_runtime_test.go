@@ -14,8 +14,6 @@ import (
 	"th10/std"
 	"th10/supervisor"
 	"th10/supervisor/supervisortest"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 func TestShake337OperandOrderAndConstructor(t *testing.T) {
@@ -172,7 +170,6 @@ func (s *shakeStageScript) Update(c *stage.Context) {
 		}})
 	}
 }
-func (*shakeStageScript) BgDraw(*ebiten.Image)              {}
 func (*shakeStageScript) Finished() bool                    { return false }
 func (s *shakeStageScript) ShakeOffset() (float64, float64) { return s.vm.ShakeOffset() }
 func (s *shakeStageScript) LateUpdate(c *stage.Context)     { s.vm.LateUpdate(c) }

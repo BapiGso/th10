@@ -4,8 +4,7 @@
 // selects bounded-error web colors. -pack-se losslessly packs WAVs. -fonts
 // preserves the original glyph programs for fixed text and printable ASCII.
 // -bgm cuts exactly thbgm.fmt's PCM span and uses ffmpeg libvorbis, without
-// shifting its sample-exact loop points. -textures is the legacy PNG repair
-// command; decoded reference PNGs are no longer runtime assets.
+// shifting its sample-exact loop points.
 //
 // Usage:
 //
@@ -14,7 +13,6 @@
 //	th10extract [-dir DIR] [-out assets] -bgm [-q 1] [-bgm-track N]
 //	th10extract [-dir DIR] [-out assets] -pack-se
 //	th10extract [-out assets] -fonts -font-source DIR
-//	th10extract [-out assets] -audit FILE.json
 //
 // PATTERNs are path.Match globs over th10.dat names ("stage01.std",
 // "se_*.wav"). -list prints every th10.dat file and whether it is embedded.
@@ -22,22 +20,16 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"flag"
 	"fmt"
-	"image"
-	"image/draw"
-	"image/png"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 
-	"th10/anm"
 	"th10/datfs"
 )
 
@@ -52,19 +44,10 @@ func main() {
 	se := flag.Bool("pack-se", false, "losslessly compress embedded SE WAVs from th10.dat")
 	fonts := flag.Bool("fonts", false, "subset original fonts to fixed game text and printable ASCII")
 	fontSource := flag.String("font-source", "", "directory containing unmodified source fonts for -fonts")
-	textures := flag.Bool("textures", false, "redraw the decoded pictures under anm/ from th10.dat")
-	audit := flag.String("audit", "", "write an asset census JSON (reads -out, does not change assets)")
 	pack := flag.Bool("pack-textures", false, "split runtime ANM pixels into deduplicated lossless texture packs")
 	web := flag.Bool("web-textures", false, "also choose lossy js textures (implies -pack-textures)")
 	compare := flag.String("compare", "", "directory for the worst web texture comparison images")
 	flag.Parse()
-	if *audit != "" {
-		if err := auditAssets(*out, *audit); err != nil {
-			fmt.Fprintln(os.Stderr, "th10extract:", err)
-			os.Exit(1)
-		}
-		return
-	}
 	if *fonts {
 		if err := subsetFonts(*out, *fontSource); err != nil {
 			fmt.Fprintln(os.Stderr, "th10extract:", err)
@@ -93,21 +76,17 @@ func main() {
 		}
 		return
 	}
-	if !*list && !*bgm && !*textures && flag.NArg() == 0 {
+	if !*list && !*bgm && flag.NArg() == 0 {
 		flag.Usage()
 		os.Exit(2)
 	}
-	if err := runArchive(*dir, *archive, *out, *list, *bgm, *textures, *quality, flag.Args()); err != nil {
+	if err := runArchive(*dir, *archive, *out, *list, *bgm, *quality, flag.Args()); err != nil {
 		fmt.Fprintln(os.Stderr, "th10extract:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir, out string, list, bgm, textures bool, quality float64, patterns []string) error {
-	return runArchive(dir, "th10.dat", out, list, bgm, textures, quality, patterns)
-}
-
-func runArchive(dir, archive, out string, list, bgm, textures bool, quality float64, patterns []string) error {
+func runArchive(dir, archive, out string, list, bgm bool, quality float64, patterns []string) error {
 	if archive != "th10.dat" && archive != "th10c.dat" {
 		return fmt.Errorf("unsupported resource archive %q", archive)
 	}
@@ -156,11 +135,6 @@ func runArchive(dir, archive, out string, list, bgm, textures bool, quality floa
 		}
 	}
 
-	if textures {
-		if err := redrawTextures(dat, out); err != nil {
-			return err
-		}
-	}
 	if bgm {
 		return encodeBGM(dat, dir, out, quality)
 	}
@@ -237,72 +211,4 @@ func encodeBGMSelection(dat *datfs.Archive, dir, out string, quality float64, on
 		fmt.Printf("wrote %s (%d bytes, %s)\n", dst, st.Size(), t.Name)
 	}
 	return extract(dat, "thbgm.fmt", out)
-}
-
-// redrawTextures rewrites each out/anm/**/*.png that names a th10.dat
-// texture and whose pixels (ignoring colour under zero alpha) differ from it.
-func redrawTextures(dat *datfs.Archive, out string) error {
-	textures := map[string]*anm.File{} // first .anm in archive order wins
-	for _, name := range dat.Names() {
-		if !strings.HasSuffix(name, ".anm") {
-			continue
-		}
-		data, err := dat.ReadFile(name)
-		if err != nil {
-			return err
-		}
-		f, err := anm.Load(data)
-		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		for _, e := range f.Entries {
-			if _, seen := textures[e.Name]; !seen && e.Texture != nil {
-				textures[e.Name] = f
-			}
-		}
-	}
-	root := filepath.Join(out, "anm")
-	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".png") {
-			return err
-		}
-		rel, err := filepath.Rel(root, p)
-		if err != nil {
-			return err
-		}
-		f, ok := textures[filepath.ToSlash(rel)]
-		if !ok {
-			return nil
-		}
-		want := f.NamedImage(filepath.ToSlash(rel))
-		old, err := os.ReadFile(p)
-		if err != nil {
-			return err
-		}
-		if img, err := png.Decode(bytes.NewReader(old)); err == nil && samePixels(img, want) {
-			return nil
-		}
-		var buf bytes.Buffer
-		if err := png.Encode(&buf, want); err != nil {
-			return err
-		}
-		return write(p, buf.Bytes())
-	})
-}
-
-func samePixels(a image.Image, b *image.NRGBA) bool {
-	if a.Bounds() != b.Bounds() {
-		return false
-	}
-	n := image.NewNRGBA(b.Rect)
-	draw.Draw(n, n.Rect, a, a.Bounds().Min, draw.Src)
-	for i := 0; i < len(n.Pix); i += 4 {
-		if n.Pix[i+3] == 0 && b.Pix[i+3] == 0 {
-			continue
-		}
-		if !bytes.Equal(n.Pix[i:i+4], b.Pix[i:i+4]) {
-			return false
-		}
-	}
-	return true
 }

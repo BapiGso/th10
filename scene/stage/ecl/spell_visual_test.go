@@ -49,7 +49,7 @@ func TestSpellCutinScriptsAndLayers(t *testing.T) {
 	}{{1, 0, 0xf}, {1, 2, 0xe}, {2, 10, 0x11}, {3, 20, 0x15}, {4, 30, 0x16}, {5, 50, 0xf}, {6, 60, 0x24}} {
 		vm, ctx, boss, _ := visualVM(t)
 		ctx.State.Stage = c.stage
-		vm.prog.AnimNames = []string{"enemy.anm", fmt.Sprintf("stgenm%02d.anm", c.stage)}
+		vm.prog.animNames = []string{"enemy.anm", fmt.Sprintf("stgenm%02d.anm", c.stage)}
 		vm.bossSlots[0] = boss.e
 		vm.execGameOp(ctx, &eclTask{owner: boss.e}, &Instr{Opcode: opSpellBg, Params: []Param{
 			intParam(int32(c.id)), intParam(2700), intParam(777), stringParam("card"),

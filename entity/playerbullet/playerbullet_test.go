@@ -6,6 +6,7 @@ import (
 	"th10/entity/enemy"
 	"th10/game"
 	"th10/sht"
+	"th10/zun"
 )
 
 func closeTo(t *testing.T, got, want float64) {
@@ -13,6 +14,11 @@ func closeTo(t *testing.T, got, want float64) {
 	if math.Abs(got-want) > 1e-4 {
 		t.Fatalf("got %.9f want %.9f", got, want)
 	}
+}
+
+// gamePos is a record's game position (R+0x14) for screen position (x, y).
+func gamePos(x, y float64) [3]float32 {
+	return [3]float32{float32(x - gameOriginX), float32(y - gameOriginY), 0}
 }
 
 func homingShot() sht.Shot {
@@ -36,7 +42,7 @@ func TestSHTBirthCompensation(t *testing.T) {
 
 func TestHomingTurnSpeedAndLifetime(t *testing.T) {
 	e := &enemy.Enemy{X: 100, Y: 100, Active: true}
-	b := Bullet{X: 100, Y: 200, Angle: 0, Speed: 12, Homing: true, target: e}
+	b := Bullet{X: 100, Y: 200, pos: gamePos(100, 200), Angle: 0, Speed: 12, Homing: true, target: e}
 	b.tickHoming()
 	closeTo(t, b.Angle, -math.Pi/10)
 	closeTo(t, b.Speed, 11.7)
@@ -90,11 +96,11 @@ func TestHomingRejectsOriginalFlagsAndOffscreenBirthTarget(t *testing.T) {
 }
 
 func TestHomingWrapAndClamps(t *testing.T) {
-	closeTo(t, normAngle(-math.Pi+0.1-(math.Pi-0.1)), 0.2)
+	closeTo(t, float64(zun.NormAngle(float32(-math.Pi+0.1-(math.Pi-0.1)))), 0.2)
 	b := Bullet{Speed: 15.99, Angle: 0}
 	b.tickHoming()
 	closeTo(t, b.Speed, 16)
-	b = Bullet{X: 100, Y: 100, Speed: 4.1, Angle: 0, target: &enemy.Enemy{Active: true, X: 0, Y: 100}}
+	b = Bullet{X: 100, Y: 100, pos: gamePos(100, 100), Speed: 4.1, Angle: 0, target: &enemy.Enemy{Active: true, X: 0, Y: 100}}
 	b.tickHoming()
 	closeTo(t, b.Speed, 4)
 }
@@ -113,10 +119,6 @@ func TestSHTCollisionExtentAndPoolReuse(t *testing.T) {
 	}
 	if got := p.HitEnemy(200, 300, 30, 30); got != 0 {
 		t.Fatal("hit twice")
-	}
-	p.Fire(200, 300, 0, -12, 8)
-	if p.bullets[0].Homing || p.bullets[0].fromSHT || p.bullets[0].ScriptID != -1 || p.bullets[0].target != nil {
-		t.Fatal("stale slot metadata")
 	}
 }
 

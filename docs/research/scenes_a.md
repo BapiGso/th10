@@ -126,7 +126,7 @@ Key Config：`FUN_0042f540`，根 script 2，七项（射击／灵击／低速�
 
 ## 9．t11 接线约定
 
-实现按以下方向提供接口；**实现后的准确 Go 签名、调用地址与差别写进 `docs/handoff/codex_t10.md` 第 9 节，并复制至主树**，t11 无需读取本工作树。
+实现按以下方向提供接口；实现后的准确 Go 签名、调用地址与差别记在 t10 交付第 9 节（`git show b4df88d:docs/handoff/codex_t10.md`）。
 
 - `game.SceneID` 保留原 0…15 编号；带原号的请求／延迟工厂，`GoTo／SetScene` 原签名不变；可选 SceneMode／Enter／Leave。
 - `input.MenuInput` 提供 Current／Pressed／Released／Repeat 与 `Move(mask)`；从 `input.State` 只读当前帧，读取本身不推进计数。

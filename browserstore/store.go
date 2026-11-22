@@ -1,4 +1,6 @@
-// Package browserstore is the binary user-data boundary for the web build.
+// Package browserstore is the binary user-data boundary: IndexedDB in the
+// web build (Open); the desktop game implements Store over its user-data
+// directory.
 package browserstore
 
 import "errors"

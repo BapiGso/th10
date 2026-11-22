@@ -14,7 +14,6 @@ import (
 // seRec records the sound ids played through Context.Audio.
 type seRec struct{ ids []int }
 
-func (r *seRec) PlaySE(string)   {}
 func (r *seRec) PlaySEID(id int) { r.ids = append(r.ids, id) }
 func (r *seRec) PlayBGM(int)     {}
 func (r *seRec) StopBGM()        {}
@@ -42,7 +41,13 @@ func init() {
 		}}
 	}
 	f.Scripts[20] = &anm.Script{ID: 20, Instrs: []anm.Instr{anmIns(63)}}
-	anmFiles.Store(visualANM, f)
+	shared := loadANM
+	loadANM = func(name string) *anm.File {
+		if name == visualANM {
+			return f
+		}
+		return shared(name)
+	}
 }
 
 // visualVM is a VM with a full stage context (World, Anm, BulletEnv), the
@@ -54,7 +59,7 @@ func visualVM(t *testing.T) (*VM, *stage.Context, *eclActor, *seRec) {
 	rec := &seRec{}
 	ctx.Audio = rec
 	vm := newTestVM()
-	vm.prog.AnimNames = []string{visualANM}
+	vm.prog.animNames = []string{visualANM}
 	vm.ctx = ctx
 	e := enemy.New(0, 0, 100, enemy.TypeFairy)
 	e.Damaged = vm.damaged

@@ -8,8 +8,8 @@ import (
 	"th10/game"
 	"th10/input"
 	"th10/replay"
-	selectscene "th10/scene/select"
 	"th10/scene/stage"
+	stagescript "th10/scene/stage/script"
 	sceneui "th10/scene/ui"
 	"th10/supervisor"
 	"th10/zun"
@@ -140,7 +140,7 @@ func (s *Replay) Update(g *game.Game) error {
 			if a := g.Audio(); a != nil {
 				a.FadeOutBGM(360) // 0x431a18 passes float32 6 seconds
 			}
-			p, err := stage.NewPlayback(g, s.selected, s.chapters[s.chapter], selectscene.ReplayScript, s)
+			p, err := stage.NewPlayback(g, s.selected, s.chapters[s.chapter], stagescript.New, s)
 			if err != nil {
 				s.status, s.state = err.Error(), 4
 				s.timer.Reset()

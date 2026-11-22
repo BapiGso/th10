@@ -1,10 +1,12 @@
 # M4 / L3 渲染架构设计（2026-11-01）
 
 本文是 3D 背景（M4）、ANM 绘制（M3 剩余部分）和截图差分（L3）共用的基础设施设计。现状见
-`presentation_gaps.md`。STD／gfx／anmdraw／supervisor 与 World 层绘制已实现，第一轮又接了本体、GUI／MSG、
+`docs/fidelity.md`。STD／gfx／anmdraw／supervisor 与 World 层绘制已实现，第一轮又接了本体、GUI／MSG、
 符卡已知环／cut-in 与关卡内菜单；不再是只完成逻辑、尚无绘制的阶段。剩余缺口是部分实体／符卡接线和 L3 验证。
 
 > 2026-11-08，t9 按 t4 第 5 阶段审计与合并代码更新 D1 状态；原设计契约与历史任务分工保留，不作为第二轮调度指令。t1／t2／t3／t5 的依据为 `FUN_00426360`／`FUN_00409280`／`FUN_00415800`／`FUN_00422660`。第二轮实际分工见共用规则第 8 节；t4 已更正的矩形语义与 0x2e 定义不重复。
+>
+> 2026-11-21：文中“归第二轮 t6／t7／t8”“0x16 仍 legacy”“尚未接”的状态已过时。第二轮已完成副机／自机子弹 World VM 与 0x16 去 legacy、五机体 SHT 射击、信仰矩形门控、cdbg／0x0e、344、原震屏与应用级备用 RNG；现状以 `docs/fidelity.md` 为准。
 
 分工：本文和 §2 的接口由我设计；§1 取证、§3 工具和 §4 中标注 Haiku 的实现都交给 Haiku 子代理，
 我审 diff。
@@ -212,7 +214,7 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
 
   | 节点 | 内容 | 依据 |
   |---|---|---|
-  | 7 | 默认 STD Node7，pass 0–7；BgDraw 只作显式 legacy 回退 | `FUN_00402850`；S3 |
+  | 7 | STD Node7，pass 0–7（旧 BgDraw 已删除） | `FUN_00402850`；S3 |
   | 9、0xb、0xd | World 层 0、1、2 | §1.3 |
   | 0xa | STD Node0A，按原顺序交错 World 层 17／18 与 pass 8–11 | `FUN_00402ca0`；S3 |
   | 0xf、0x10–0x13、0x15、0x17、0x18、0x1a、0x1c、0x21、0x24、0x29、0x2a | World 层 3–16 | §1.3 |
@@ -277,6 +279,8 @@ gfx.Texture           —— 一张整纹理（不切 SubImage），记录宽高
 
 ## 3. L3 截图差分
 
+> 2026-11-21：本节的截图路径已撤销。`th10probe` 的 `-shot-frames／-shot-dir` 与 `tools/th10pix` 均已删除，复刻侧 `-shot` 从未实现；L3 现由用户目视。下文仅作历史设计保留。
+
 ### 3.1 原作侧：`th10probe -shot-frames=F1,F2,… -shot-dir=D`
 
 - **仍然只读，且不与原作进程交互。**
@@ -324,13 +328,13 @@ th10 -replay X -chapter N -shot-frames F1,F2,… -shot-dir D
 | # | 任务 | 执行 | 验证 |
 |---|---|---|---|
 | R1–R5 | §1 取证（另加 R4a–c：quad +0x06 的 VM 序号、entry +0x03 bit 0、face 遍历） | Haiku | 我审文档 |
-| P1 | probe 截图（§3.1）——**已完成** | Haiku | `go vet`、单元测试；用户实测 |
+| P1 | probe 截图（§3.1）——曾完成，后已删除 | Haiku | `go vet`、单元测试；用户实测 |
 | S1 | STD 完整解析（§2.4）——**已完成** | Haiku | 与 thtk 输出逐项一致：35 个 entry、138 个 quad、429 个 face |
 | G1 | `gfx` 接口与着色器契约（§2.1）——**已完成** | 我 | `gfx/pipeline_test.go` 规格测试 |
 | G2 | `gfx` 实现：裁剪、viewport、Kage、批处理——**已完成** | Haiku | 规格测试全过；`go test -tags gpu ./gfx/` 9 个用例用 CPU 参考光栅化逐像素比较（容差 2/255，实测最大 1.1/255），另做了 3 个变异检查 |
 | G3 | `gfx` 深度缓冲与 alpha test（§2.1）——**已完成** | Haiku | `go test ./gfx/` 规格测试全过；GPU 用例覆盖遮挡（两种提交顺序，含同一批次）、深度相交、alpha test 与写深度、只测不写、Clear 矩形、偏移 viewport、D16 量化、FOGENABLE；另做变异检查。结果：规格测试全过，新增 8 个 GPU 用例，变异检查均被捕获 |
 | P2 | 复刻 `-shot` 模式（§3.2） | Haiku | 截图可复现 |
-| P3 | `th10pix`（§3.3）——**已完成** | Haiku | 单元测试（已知偏移、已知 PSNR） |
+| P3 | `th10pix`（§3.3）——曾完成，后已删除 | Haiku | 单元测试（已知偏移、已知 PSNR） |
 | A1a | `anmdraw` render mode 0–3（§2.3）——**已完成**：契约与规格测试（我），实现（Haiku）；剔除的 NaN 行为按汇编更正（`m4_render_re.md` §3.9）；ins_65 锚点 3 在 46 个 .anm 的 597 条指令中未出现 | Haiku | `go test ./anm/anmdraw/`：锚点、取整与半像素、分组、旋转、裁剪、状态缓存与提交顺序、颜色与 tint、UV 滚动、Shift、Invalidate；另对照汇编核对分组 |
 | R6 | A1b 之前的取证：A 运行时精灵的构造；B 管理器 +0x5c/+0x60（Shift）的写入者；C VM +0x4c/+0x50 的写入者、flag 0x4000、bit 1；D mode 8/9；E mode 4–7；F `FUN_004451c0` 的其他调用者；G VM+0x39c 绘制前回调的写入者与语义——**已完成**（`m4_r6.md`）。B 的帧块写入者由我补上：`FUN_0043c5ca` 写 Field.Shift（§2.2） | Haiku | 我审文档 |
 | R7 | render mode 4/6/8/9 的绘制路径取证（`m4_r7.md`）——**已完成**（R7-A 至 R7-F 与“R7 审校更正”齐全；模式 9 的 Go 侧差距，无法确定 #8 已解决（`fillRing` 每帧读 `$10000`/`$10001`）） | Haiku | 我审文档 |
@@ -338,7 +342,7 @@ th10 -replay X -chapter N -shot-frames F1,F2,… -shot-dir D
 | S2a | quad 与槽位的 ANM VM、op 14、entry 循环（§2.4）：契约与规格测试（我），实现与嵌入 stage0N.anm（Haiku）——**已完成**，游戏和 sim 在关卡开始时 `Enable` | Haiku | `std/objects_test.go`：参考 VM 逐帧比较；七面实际数据：quad 顺序、四面与六面 op 14 的帧、RNG 不动。`go test ./...` 全过 |
 | S2b | op 9 雾插值（依赖 dump）——**已完成**（`std/fog.go`；`m4_s2b.md` §6 尚有未核对项） | Haiku | 单元测试（`std/fog_test.go`）；可选 probe 采样（未做） |
 | S2c | STD 的 +0x1eec、+0x2a18 位、+0x2a1c 计时器与三个特殊 VM 的写入者（取证，`m4_s2c.md`）——**已完成**：+0x1eec 的非零写入者与特殊 VM 的启动点未找到，按静态证据视为不可达（推测，待运行时核对） | Haiku | 文档取证（`m4_s2c.md` §1–§6） |
-| S3 | `stddraw`（依赖 R4、G3、A1b）——**已完成**：七面背景全部改用 STD 绘制（节点 0x07、0x0a），手写 `BgDraw` 仅由 `TH10_LEGACY_BG=1` 切回（或无内嵌 STD 时回退），待用户目视对比后删除 | Haiku | 用户目视（`TH10_LEGACY_BG=1` 对比）；`TestSTDSmoke`；L3：各面背景 PSNR（待 P2） |
+| S3 | `stddraw`（依赖 R4、G3、A1b）——**已完成**：七面背景全部改用 STD 绘制（节点 0x07、0x0a），旧手写 `BgDraw` 背景已于第五轮删除 | Haiku | 用户目视；`TestSTDSmoke` |
 | D1a | supervisor 与绘制链（§2.2）：契约与规格测试（我），实现与 `Stage.Draw` 迁移（Haiku）——**已完成**，待用户目视确认 | Haiku | `go test ./supervisor/ ./scene/stage/ ./anm/anmdraw/`；画面与迁移前相同，除了震屏只作用到 0x24 之前的节点 |
 | D1b | World 层改用 `ANM.DrawLayer`（`NewSheet` 已完成）——**已完成** | Haiku | `TestLayersANM`、`TestReplayDrawSmoke`；L3（待 P2） |
 | D1c | 道具／激光／敌弹与 D1c-2 敌机已完成；t1 本体／判定点／被弹／Rect 已接，副机／自机子弹与矩形门控归 t6，0x16 仍 legacy | 原 M4 分工，后续 t1／t6 | 合并后完整 smoke 通过；L3 与剩余实体接线待验收 |

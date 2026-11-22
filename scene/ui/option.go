@@ -30,7 +30,6 @@ func (c *TitleController) refreshHint(g *game.Game) {
 	}
 	c.SetChildSprite(1, 0x1f, pair[0])
 	c.SetChildSprite(1, 0x20, pair[1])
-	g.Config.Hint = native.Raw[0x22] != 1 // preserve the host bool without losing native Auto
 }
 
 // refreshVolumes is FUN_0042e5a0: six digits plus their six shadows,

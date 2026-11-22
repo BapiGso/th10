@@ -65,7 +65,7 @@ func TestCryptRoundTrip(t *testing.T) {
 			if n >= p.block && bytes.Equal(buf, orig) {
 				t.Fatalf("params %+v n=%d: encrypt left data unchanged", p, n)
 			}
-			decrypt(buf, p.key, p.step, p.block, p.limit)
+			Decrypt(buf, p.key, p.step, p.block, p.limit)
 			if !bytes.Equal(buf, orig) {
 				t.Fatalf("params %+v n=%d: round trip mismatch", p, n)
 			}

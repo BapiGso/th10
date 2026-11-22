@@ -62,13 +62,13 @@ func (vm *VM) queueScreenEffect(s *screenShake) {
 // MSG's final-clear caller (0x416d85) passes kind 5 and EBX=0x31: a
 // full-screen fade-out, not a random shake. No constructor samples RNG.
 func (vm *VM) RequestShake(kind, frames, x, y, z int32) {
-	vm.NewScreenEffect(kind, frames, x, y, z, 0x31)
+	vm.startScreenEffect(kind, frames, x, y, z, 0x31)
 }
 
-// NewScreenEffect is FUN_0043c8b0, including its returned object and
+// startScreenEffect is FUN_0043c8b0, including its returned object and
 // FUN_0043c970's hidden draw-priority EBX argument. Kinds 6/7 retain a
 // caller-controlled phase; out-of-stage callers own those raw writes.
-func (vm *VM) NewScreenEffect(kind, frames, x, y, z, priority int32) *ScreenEffect {
+func (vm *VM) startScreenEffect(kind, frames, x, y, z, priority int32) *ScreenEffect {
 	s := newScreenEffect(kind, frames, x, y, z, priority)
 	vm.queueScreenEffect(s)
 	return s

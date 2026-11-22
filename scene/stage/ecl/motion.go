@@ -18,11 +18,9 @@ import (
 	"th10/zun"
 )
 
-// float32 constants, bit-identical to th10.exe .rdata (see motion_test.go).
+// float32 constants, bit-identical to th10.exe .rdata (see motion_test.go);
+// pi, 2pi and pi/2 are zun.Pi, zun.TwoPi and zun.HalfPi.
 const (
-	pi32      float32 = math.Pi     // DAT_00470b18
-	twoPi32   float32 = 2 * math.Pi // DAT_00470b14
-	halfPi32  float32 = math.Pi / 2 // DAT_00470b94
 	thirdPi32 float32 = math.Pi / 3 // DAT_00470d50
 	third32   float32 = 1.0 / 3     // DAT_00470cc4
 
@@ -30,21 +28,6 @@ const (
 	// "keep the current value".
 	unsetArg = -999999.0
 )
-
-// normAngle is FUN_0044bc70 (zun.NormAngle).
-func normAngle(a float32) float32 { return zun.NormAngle(a) }
-
-// polar is FUN_0044c5d0 (zun.Polar).
-func polar(a, r float32) (float32, float32) { return zun.Polar(a, r) }
-
-// round01 snaps a coordinate down to the 0.01 grid: floor(v*100) * 0.01
-// (FUN_0044c2a0 with the CRT floor FUN_00452ff0).
-func round01(v float32) float32 {
-	return float32(float32(math.Floor(float64(float32(v*100)))) * 0.01)
-}
-
-// ease is FUN_0044c350 (zun.Ease).
-func ease(mode int32, num, den float32) float32 { return zun.Ease(mode, num, den) }
 
 // interp is the shared tween zun.Interp (FUN_00412ac0 / FUN_00404610).
 type interp = zun.Interp
@@ -69,13 +52,13 @@ func (b *posBlock) advance() {
 			b.pos[i] += b.delta[i]
 		}
 	} else {
-		c, s := polar(b.angle, b.radius)
+		c, s := zun.Polar(b.angle, b.radius)
 		b.pos[0] = c + b.delta[0]
 		b.pos[1] = s + b.delta[1]
 		b.pos[2] = b.delta[2]
 	}
-	b.pos[0] = round01(b.pos[0])
-	b.pos[1] = round01(b.pos[1])
+	b.pos[0] = zun.Round01(b.pos[0])
+	b.pos[1] = zun.Round01(b.pos[1])
 }
 
 // motion is an enemy's movement state (EnemyData from +0x0).
@@ -118,7 +101,7 @@ func (m *motion) step(flags *int, speed float32, cam [3]float32) bool {
 		l := &m.layer[i]
 		if m.velI[i].Dur != 0 {
 			o := m.velI[i].Step(speed, 2)
-			l.angle, l.speed = normAngle(o[0]), o[1]
+			l.angle, l.speed = zun.NormAngle(o[0]), o[1]
 		}
 		if m.circI[i].Dur != 0 {
 			o := m.circI[i].Step(speed, 2)
@@ -135,9 +118,9 @@ func (m *motion) step(flags *int, speed float32, cam [3]float32) bool {
 			}
 		case l.circle:
 			l.radius = l.radVel + l.radius
-			l.angle = normAngle(l.speed + l.angle)
+			l.angle = zun.NormAngle(l.speed + l.angle)
 		default:
-			l.delta[0], l.delta[1] = polar(l.angle, l.speed)
+			l.delta[0], l.delta[1] = zun.Polar(l.angle, l.speed)
 			l.delta[2] = 0
 		}
 	}

@@ -232,3 +232,8 @@ func fontECLStrings(data []byte, enc encoding.Encoding) ([]string, error) {
 	}
 	return out, nil
 }
+
+func cString(data []byte) string {
+	s, _, _ := bytes.Cut(data, []byte{0})
+	return string(s)
+}

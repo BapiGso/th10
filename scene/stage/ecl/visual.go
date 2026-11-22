@@ -30,7 +30,7 @@ const (
 
 // fileAt is the ECL's ANM file table (DAT_00477704+0x30): index 0 is
 // bullet.anm (ctx.BulletEnv.File when there is one, else loadANM), index
-// i >= 1 the ECL's i-th ANM (vm.prog.AnimNames[i-1], through loadANM). Out
+// i >= 1 the ECL's i-th ANM (vm.prog.animNames[i-1], through loadANM). Out
 // of range or not embedded: nil, which spawns ended objects as a missing
 // script does.
 func (vm *VM) fileAt(ctx *stage.Context, i int) *anm.File {
@@ -40,10 +40,10 @@ func (vm *VM) fileAt(ctx *stage.Context, i int) *anm.File {
 		}
 		return loadANM("bullet.anm")
 	}
-	if i < 0 || i > len(vm.prog.AnimNames) {
+	if i < 0 || i > len(vm.prog.animNames) {
 		return nil
 	}
-	return loadANM(vm.prog.AnimNames[i-1])
+	return loadANM(vm.prog.animNames[i-1])
 }
 
 // effects is the stage's effect world and its environment, both nil with no

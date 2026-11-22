@@ -70,7 +70,6 @@ func packTextures(dir, out string, web bool, compare string) error {
 	}
 	lossless, webBlobs := map[string][]byte{}, map[string][]byte{}
 	products, originals := map[string]*textureProduct{}, map[string]*anm.Texture{}
-	index := map[string]string{}
 	manifest := textureManifest{Version: 1}
 	for _, file := range files {
 		name, ext := file.Name(), filepath.Ext(file.Name())
@@ -89,7 +88,7 @@ func packTextures(dir, out string, web bool, compare string) error {
 		if err != nil {
 			return err
 		}
-		packed, textures, err := anm.Split(raw)
+		packed, textures, err := Split(raw)
 		if err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
@@ -97,7 +96,7 @@ func packTextures(dir, out string, web bool, compare string) error {
 			if e.Texture == nil {
 				continue
 			}
-			id := anm.TextureID(e.Texture)
+			id := TextureID(e.Texture)
 			p := products[id]
 			if p == nil {
 				t := textures[id]
@@ -113,11 +112,6 @@ func packTextures(dir, out string, web bool, compare string) error {
 				products[id] = p
 			}
 			p.References = append(p.References, fmt.Sprintf("%s#%d", name, i))
-			if ext == ".anm" {
-				if _, seen := index[e.Name]; !seen {
-					index[e.Name] = name
-				}
-			}
 		}
 		if err := write(filepath.Join(out, "anm", name), packed); err != nil {
 			return err
@@ -145,7 +139,7 @@ func packTextures(dir, out string, web bool, compare string) error {
 		if variant == "web" {
 			blobs = webBlobs
 		}
-		pack, err := anm.BuildTexturePack(blobs)
+		pack, err := BuildTexturePack(blobs)
 		if err != nil {
 			return err
 		}
@@ -158,18 +152,11 @@ func packTextures(dir, out string, web bool, compare string) error {
 			return err
 		}
 	}
-	indexData, err := json.MarshalIndent(index, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := write(filepath.Join(out, "anm", "texture_index.json"), append(indexData, '\n')); err != nil {
-		return err
-	}
 	data, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := write(filepath.Join(filepath.Dir(filepath.Clean(out)), "docs", "research", "textures_manifest.json"), append(data, '\n')); err != nil {
+	if err := write(filepath.Join(filepath.Dir(filepath.Clean(out)), "tools", "th10extract", "testdata", "textures_manifest.json"), append(data, '\n')); err != nil {
 		return err
 	}
 	if web && compare != "" {
@@ -218,7 +205,7 @@ func encodeLosslessTexture(t *anm.Texture) ([]byte, string, error) {
 			best, codec = candidate, kind
 		}
 	}
-	bpp := pixelBytes(t.Format)
+	bpp := anm.BytesPerPixel(t.Format)
 	if t.W*t.H*bpp != len(t.Pixels) {
 		return best, codec, nil
 	}
@@ -270,18 +257,6 @@ func paletteImage(img *image.NRGBA) (color.Palette, *image.Paletted) {
 	return palette, indices
 }
 
-func pixelBytes(format int) int {
-	switch format {
-	case anm.FormatBGRA8888:
-		return 4
-	case anm.FormatRGB565, anm.FormatARGB4444:
-		return 2
-	case anm.FormatGray8:
-		return 1
-	}
-	return 0
-}
-
 func filterPixels(pixels []byte, stride, height, bpp int) []byte {
 	out := make([]byte, (stride+1)*height)
 	candidate := make([]byte, stride)
@@ -309,7 +284,7 @@ func filterPixels(pixels []byte, stride, height, bpp int) []byte {
 				case 3:
 					prediction = byte((int(left) + int(up)) / 2)
 				case 4:
-					prediction = predictPaeth(left, up, upperLeft)
+					prediction = anm.Paeth(left, up, upperLeft)
 				}
 				candidate[x] = value - prediction
 				cost += absInt(int(int8(candidate[x])))
@@ -322,18 +297,6 @@ func filterPixels(pixels []byte, stride, height, bpp int) []byte {
 		}
 	}
 	return out
-}
-
-func predictPaeth(a, b, c byte) byte {
-	p := int(a) + int(b) - int(c)
-	pa, pb, pc := absInt(p-int(a)), absInt(p-int(b)), absInt(p-int(c))
-	if pa <= pb && pa <= pc {
-		return a
-	}
-	if pb <= pc {
-		return b
-	}
-	return c
 }
 
 func absInt(n int) int {

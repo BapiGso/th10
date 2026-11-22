@@ -38,16 +38,13 @@ func TestFontSubsetKeepsGlyphProgramsAndMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"Bimini Bold.ttf", "DFYuGaSo-W3.ttc", "DFYuGaSo-W7.ttc"} {
+	for _, name := range []string{"DFYuGaSo-W3.ttc", "DFYuGaSo-W7.ttc"} {
 		t.Run(name, func(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join(source, name))
 			if err != nil {
 				t.Fatal(err)
 			}
 			text := corpus.Text
-			if name == "Bimini Bold.ttf" {
-				text = corpus.Sources["ASCII"]
-			}
 			data, p, err := subsetFont(raw, text)
 			if err != nil {
 				t.Fatal(err)

@@ -7,7 +7,7 @@ func TestRetryInitialStageIsNotLaterStageContinue(t *testing.T) {
 	s.Stage, s.StartStage, s.ReplayState90, s.RunFlags = 5, 1, 3, RunFlagContinued
 	s.Score, s.Power, s.Paused = 123450, 500, true
 	s.RetryInitialStage()
-	if s.Stage != 1 || s.StartStage != 1 || s.ReplayState90 != 0 || s.Continued || s.RunFlags&RunFlagContinued != 0 || s.Score != 0 || s.Power != 0 || s.Paused || s.Rank != 0 || s.Life != 2 || !s.FreshRun {
+	if s.Stage != 1 || s.StartStage != 1 || s.ReplayState90 != 0 || s.RunFlags&RunFlagContinued != 0 || s.Score != 0 || s.Power != 0 || s.Paused || s.Rank != 0 || s.Life != 2 || !s.FreshRun {
 		t.Fatalf("retry fresh state %+v", s)
 	}
 	s.Practice(4)

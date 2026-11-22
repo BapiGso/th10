@@ -86,7 +86,7 @@ try {
         $env:GOARCH = 'wasm'
         $env:TH10_WASM_FAKE_IDB = '1'
         $execArg = 'node --stack-size=8192 "' + ($executor -replace '\\', '/') + '"'
-        foreach ($package in @('browserstore','collision','datfs','input','pacing','replay','sht','std','trace','zun')) {
+        foreach ($package in @('browserstore','datfs','input','pacing','replay','sht','std','trace','zun')) {
             Check "test-$package" { go test -p 1 -count=1 -exec $execArg "./$package" }
         }
     }

@@ -135,6 +135,14 @@ func (s *Stage) nodeBullets(sv *supervisor.Supervisor) {
 	}
 }
 
+// nodeBackground is node 0x07, STD's background: stddraw's Node7
+// (FUN_00403060 -> FUN_00402850). A stage without an embedded STD draws none.
+func (s *Stage) nodeBackground(sv *supervisor.Supervisor) {
+	if s.bg != nil {
+		s.bg.Node7(sv)
+	}
+}
+
 // nodeSTDFront is node 0x0a (FUN_00403070). With the STD drawer it is
 // Node0A: layers 17 and 18 and STD's passes 8-11, interleaved in the order
 // the original runs them. Without it, the legacy layers 17 and 18 only.
@@ -162,12 +170,8 @@ func (s *Stage) drawFrame(sv *supervisor.Supervisor) { s.runChain(sv, true) }
 
 // runChain is drawFrame. With legacy false it skips the draw of every
 // legacy node (its enter still runs), so sv needs no back buffer: for
-// headless tests of the ported drawing. Then the stage must have the STD
-// drawer, since nodeBackground's other path is legacy too.
+// headless tests of the ported drawing.
 func (s *Stage) runChain(sv *supervisor.Supervisor, legacy bool) {
-	if !legacy && s.bg == nil {
-		panic("stage: runChain without the legacy nodes needs the STD drawer")
-	}
 	sv.BeginFrame()
 	first := int32(-1 << 31)
 	for _, n := range drawChain {

@@ -10,10 +10,8 @@ import (
 	"th10/game"
 	"th10/replay"
 	"th10/scene/stage"
-	"th10/scene/stage/stage1"
+	stagescript "th10/scene/stage/script"
 	"th10/sim"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 type playbackScript struct{ clearAt int }
@@ -24,8 +22,7 @@ func (s *playbackScript) Update(c *stage.Context) {
 		c.OpenMSG(999)
 	}
 }
-func (*playbackScript) BgDraw(*ebiten.Image) {}
-func (*playbackScript) Finished() bool       { return false }
+func (*playbackScript) Finished() bool { return false }
 
 func playbackFixture() *replay.Replay {
 	r := &replay.Replay{Global: replay.GlobalHeader{Stage: 2, Difficulty: 1}}
@@ -108,7 +105,7 @@ func TestInteractivePlaybackMatchesSim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	factory := func(int) stage.Script { return stage1.NewScript() }
+	factory := func(int) stage.Script { return stagescript.New(1) }
 	cfg, err := sim.ConfigFor(r, 0)
 	if err != nil {
 		t.Fatal(err)

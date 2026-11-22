@@ -16,6 +16,18 @@ const (
 	HalfPi float32 = math.Pi / 2 // DAT_00470b94
 )
 
+// Round01 snaps a coordinate down to the 0.01 grid as FUN_0044c2a0 does
+// through the CRT floor FUN_00452ff0: floor(float32(v*100)) * 0.01f.
+func Round01(v float32) float32 {
+	return float32(float32(math.Floor(float64(float32(v*100)))) * 0.01)
+}
+
+// Abs32 is fabs on a float32 (clears the sign bit, so -0 and NaN keep their
+// payload).
+func Abs32(v float32) float32 {
+	return math.Float32frombits(math.Float32bits(v) &^ (1 << 31))
+}
+
 // NormAngle is FUN_0044bc70: fold into [-pi, pi] by whole turns, at most 34
 // steps in all (the counter is shared by both loops).
 func NormAngle(a float32) float32 {

@@ -35,9 +35,6 @@ func TestParseMSGStage2Reimu(t *testing.T) {
 	if len(sm.Entries) != 2 {
 		t.Fatalf("stage2 entries = %d, want 2 (bossPre, post)", len(sm.Entries))
 	}
-	if sm.PlayerName != "博麗霊夢" || sm.BossNames[0] != "鍵山雛" {
-		t.Errorf("speakers %q / %q, want 博麗霊夢 / 鍵山雛", sm.PlayerName, sm.BossNames[0])
-	}
 	pre := texts(sm.Entries[0])
 	if len(pre) < 4 || pre[0] != (TextLine{"しょっぱなから気持ち悪いなぁ", 0}) ||
 		pre[3] != (TextLine{"あらあらまだ居たの？", 1}) {
@@ -99,10 +96,9 @@ func TestOfficialMSGExtraSegments(t *testing.T) {
 	if sm == nil {
 		t.Fatal("LoadStage(extra, Reimu) = nil")
 	}
-	for i, want := range []string{"八坂神奈子", "洩矢諏訪子", "洩矢諏訪子"} {
-		m := sm.Open(int32(i), Hooks{})
-		if m == nil || m.View.BossName != want {
-			t.Fatalf("extra entry %d: %v, want boss %s", i, m, want)
+	for i := range 3 {
+		if sm.Open(int32(i), Hooks{}) == nil {
+			t.Fatalf("extra entry %d did not open", i)
 		}
 	}
 	if sm.Open(3, Hooks{}) != nil || sm.Open(-1, Hooks{}) != nil {

@@ -21,27 +21,8 @@ const (
 	maxActiveSEPlayers = 64
 )
 
-// BGMNames 是音乐室顺序（即 thbgm.fmt 记录顺序）的曲名。
-var BGMNames = [18]string{
-	"封印されし神々",
-	"人恋し神様 〜 Romantic Fall",
-	"稲田姫様に叱られるから",
-	"厄神様の通り道 〜 Dark Road",
-	"運命のダークサイド",
-	"神々が恋した幻想郷",
-	"芥川龍之介の河童 〜 Candid Friend",
-	"フォールオブフォール 〜 秋めく滝",
-	"妖怪の山 〜 Mysterious Mountain",
-	"少女が見た日本の原風景",
-	"信仰は儚き人間の為に",
-	"御柱の墓場 〜 Grave of Being",
-	"神さびた古戦場 〜 Suwa Foughten Field",
-	"明日ハレの日、ケの昨日",
-	"ネイティブフェイス",
-	"麓の神社",
-	"神は恵みの雨を降らす",
-	"プレイヤーズスコア",
-}
+// bgmCount is the number of thbgm.fmt records (music-room order).
+const bgmCount = 18
 
 // BGM 编号常量（0-based，thbgm.fmt 记录下标）
 // 风神录 BGM 顺序: 标题→1面道中→1面Boss→2面道中→2面Boss→...→Extra道中→Extra Boss→ED→Staff→Result
@@ -61,26 +42,7 @@ const (
 	BGMStage6Boss = 12 // 13 神さびた古戦場 〜 Suwa Foughten Field（6面Boss: 八坂神奈子）
 	BGMExtra      = 13 // 14 明日ハレの日、ケの昨日（Extra道中）
 	BGMExtraBoss  = 14 // 15 ネイティブフェイス（Extra Boss: 洩矢諏訪子）
-	BGMEnding     = 15 // 16 麓の神社（Ending）
-	BGMStaff      = 16 // 17 神は恵みの雨を降らす 〜 Sylphid Dream（Staff Roll）
 	BGMResult     = 17 // 18 プレイヤーズスコア（Result）
-)
-
-// SE 音效名称常量（th10.dat 内的文件名）
-const (
-	SEShoot   = "se_gun00.wav"
-	SEEnemy   = "se_enep00.wav"
-	SEDamage  = "se_damage00.wav"
-	SEGraze   = "se_graze.wav"
-	SEItem    = "se_item00.wav"
-	SEExtend  = "se_extend.wav"
-	SEBomb    = "se_ch00.wav"
-	SEOk      = "se_ok00.wav"
-	SECancel  = "se_cancel00.wav"
-	SESelect  = "se_select00.wav"
-	SEPause   = "se_pause.wav"
-	SEPowerUp = "se_powerup.wav"
-	SEDead    = "se_pldead00.wav"
 )
 
 // Manager 管理 BGM 和 SE 播放
@@ -115,25 +77,13 @@ func NewManager(ctx *audio.Context) *Manager {
 	return m
 }
 
-// PlaySE 播放音效
-func (m *Manager) PlaySE(name string) {
-	m.playSE(name, 1)
-}
-
-func (m *Manager) playSE(name string, gain float64) {
-	if m.nativeVolume {
-		gain *= nativeGain(m.nativeSE, 0, true)
-	}
-	m.playSEPan(name, gain, 0)
-}
-
 func (m *Manager) playSEPan(name string, gain float64, pan int32) *audio.Player {
 	m.cleanupSE()
 	if m.ctx == nil || m.seVolume <= 0 {
 		return nil
 	}
-	pcm, err := m.loadSEPCM(name)
-	if err != nil {
+	pcm := m.seCache[name] // preloadSE decoded every seWav entry
+	if pcm == nil {
 		return nil
 	}
 	m.trimSEPlayers()
@@ -145,22 +95,6 @@ func (m *Manager) playSEPan(name string, gain float64, pan int32) *audio.Player 
 	p.Play()
 	m.sePlayers = append(m.sePlayers, p)
 	return p
-}
-
-func (m *Manager) loadSEPCM(name string) ([]byte, error) {
-	if pcm, ok := m.seCache[name]; ok {
-		return pcm, nil
-	}
-	rate := 44100
-	if m.ctx != nil {
-		rate = m.ctx.SampleRate()
-	}
-	pcm, err := decodeSEPCM(name, rate)
-	if err != nil {
-		return nil, err
-	}
-	m.seCache[name] = pcm
-	return pcm, nil
 }
 
 // Update flushes FUN_0043dd10's sound queue and releases finished voices.
@@ -247,7 +181,7 @@ func (m *Manager) playBGM(idx int, unlock bool) {
 	m.StopBGM()
 	m.fadeLeft = 0
 	m.bgmPaused = false
-	if idx < 0 || idx >= len(BGMNames) {
+	if idx < 0 || idx >= bgmCount {
 		return
 	}
 	// The original writes the unlock byte after queuing the request, even

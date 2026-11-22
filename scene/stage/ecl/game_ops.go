@@ -10,7 +10,6 @@ package ecl
 import (
 	"math"
 	"strings"
-	"sync"
 
 	"golang.org/x/text/encoding/japanese"
 
@@ -127,7 +126,7 @@ func set(v float32) bool { return float64(v) > unsetArg }
 // mirrorAngle reflects a heading about the vertical axis for a mirrored
 // enemy (flag 0x800): pi/2 - norm(a - pi/2).
 func mirrorAngle(a float32) float32 {
-	return normAngle(halfPi32 - normAngle(a-halfPi32))
+	return zun.NormAngle(zun.HalfPi - zun.NormAngle(a-zun.HalfPi))
 }
 
 // execGameOp dispatches opcodes >= 256.
@@ -309,7 +308,7 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 				s := &a.slots[i]
 				if s.hp = hp; s.hp >= 0 {
 					s.time = time
-					s.sub, s.timeoutSub = in.Params[3].Str, in.Params[3].Str
+					s.sub, s.timeoutSub = in.Params[3].str, in.Params[3].str
 				}
 			}
 		}
@@ -348,7 +347,7 @@ func (vm *VM) execGameOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		if t.owner != nil && len(in.Params) >= 2 {
 			a := vm.actorFor(t.owner)
 			if i := int(vm.resolveInt(t, in.Params[0])); i >= 0 && i < len(a.slots) {
-				a.slots[i].timeoutSub = in.Params[1].Str
+				a.slots[i].timeoutSub = in.Params[1].str
 			}
 		}
 	case opSpellEnd: // case 0x157: FUN_00409c00; no bullet/laser clear
@@ -493,7 +492,7 @@ func (vm *VM) opSetVel(t *eclTask, in *Instr, i int) {
 		if t.owner.ECLFlags&0x800 != 0 {
 			ang = mirrorAngle(ang)
 		}
-		l.angle = normAngle(ang)
+		l.angle = zun.NormAngle(ang)
 	}
 	if set(speed) {
 		l.speed = speed
@@ -532,11 +531,11 @@ func (vm *VM) opMoveVel(t *eclTask, in *Instr, i int) {
 		}
 	}
 	start := l.angle
-	if d := start - ang; pi32 <= float32(math.Abs(float64(d))) {
+	if d := start - ang; zun.Pi <= float32(math.Abs(float64(d))) {
 		if ang <= start {
-			ang += twoPi32
+			ang += zun.TwoPi
 		} else {
-			start += twoPi32
+			start += zun.TwoPi
 		}
 	}
 	p := &a.mv.velI[i]
@@ -561,7 +560,7 @@ func (vm *VM) opSetCircle(t *eclTask, in *Instr, i int) {
 		l.delta = l.pos
 	}
 	if set(ang) {
-		l.angle = normAngle(ang)
+		l.angle = zun.NormAngle(ang)
 	}
 	if set(speed) {
 		l.speed = speed
@@ -629,11 +628,11 @@ func (vm *VM) opMoveRand(t *eclTask, in *Instr, i int) {
 	case fx < lx-q: // past the left margin: fan to the right
 		ang = float32(vm.randSigned() * thirdPi32)
 	case q+lx < fx: // past the right margin: fan to the left
-		ang = normAngle(float32(float32(vm.randSigned()*pi32)*third32) + pi32)
+		ang = zun.NormAngle(float32(float32(vm.randSigned()*zun.Pi)*third32) + zun.Pi)
 	case fx < vm.playerECL[0]: // player to the right
-		ang = float32(vm.randSigned() * halfPi32)
+		ang = float32(vm.randSigned() * zun.HalfPi)
 	default:
-		ang = normAngle(float32(float32(vm.randSigned()*pi32)*0.5) + pi32)
+		ang = zun.NormAngle(float32(float32(vm.randSigned()*zun.Pi)*0.5) + zun.Pi)
 	}
 	qh := float32(m.limit[3] * 0.25)
 	switch {
@@ -674,7 +673,7 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		return
 	}
 	parent := vm.actors[t.owner]
-	name := in.Params[0].Str
+	name := in.Params[0].str
 	var pos [3]float32
 	pos[0] = vm.resolveFloat(t, in.Params[1])
 	pos[1] = vm.resolveFloat(t, in.Params[2])
@@ -724,7 +723,7 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 		a.vars = parent.vars
 	}
 	a.invuln.set(2)
-	a.main = &eclTask{sub: vm.prog.SubByName[name], owner: e, asyncID: -1}
+	a.main = &eclTask{sub: vm.prog.subByName[name], owner: e, asyncID: -1}
 	if a.main.sub != nil {
 		a.main.frame = newFrame(a.main.sub, nil)
 	}
@@ -740,18 +739,9 @@ func (vm *VM) createOp(ctx *stage.Context, t *eclTask, in *Instr) {
 	}
 }
 
-// anmFiles caches parsed ANM files by name (nil: not embedded).
-var anmFiles sync.Map
-
-func loadANM(name string) *anm.File {
-	if v, ok := anmFiles.Load(name); ok {
-		return v.(*anm.File)
-	}
-	f, err := gamedata.ANM(name)
-	if err != nil {
-		f = nil
-	}
-	anmFiles.Store(name, f)
+// loadANM is the shared embedded file name (nil: not embedded).
+var loadANM = func(name string) *anm.File {
+	f, _ := gamedata.SharedANM(name)
 	return f
 }
 
@@ -917,7 +907,7 @@ func (vm *VM) declareSpell(ctx *stage.Context, t *eclTask, in *Instr) {
 	// pop the ECL stack or consume RNG even though its value is discarded.
 	vm.resolveInt(t, in.Params[2])
 	duration := vm.resolveInt(t, in.Params[1])
-	name := in.Params[3].Str
+	name := in.Params[3].str
 	var state *game.GameState
 	if ctx != nil {
 		state = ctx.State

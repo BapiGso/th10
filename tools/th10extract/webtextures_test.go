@@ -22,7 +22,7 @@ func TestTextureVariantsMetadataAndQuality(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "research", "textures_manifest.json"))
+	data, err := os.ReadFile(filepath.Join("testdata", "textures_manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestTextureVariantsMetadataAndQuality(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		q, err := anm.CompareTextureQuality(a, b)
+		q, err := CompareTextureQuality(a, b)
 		if err != nil || !q.Acceptable() {
 			t.Errorf("%s (%s): unacceptable web quality %+v: %v", p.Name, p.ID, q, err)
 		}
@@ -114,7 +114,7 @@ func TestJPEGAlphaDoesNotPremultiplyHiddenRGB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err := anm.CompareTextureQuality(texture, decoded)
+	q, err := CompareTextureQuality(texture, decoded)
 	if err != nil || !q.Acceptable() {
 		t.Fatalf("JPEG discarded or premultiplied hidden RGB: %+v %v", q, err)
 	}
@@ -126,7 +126,7 @@ func TestJPEGAlphaDoesNotPremultiplyHiddenRGB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q, err = anm.CompareTextureQuality(texture, decoded)
+	q, err = CompareTextureQuality(texture, decoded)
 	if err != nil || !q.Acceptable() {
 		t.Fatalf("RGB JPEG changed hidden RGB or alpha: %+v %v", q, err)
 	}

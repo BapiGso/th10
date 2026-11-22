@@ -29,7 +29,7 @@ func TestReplayPlayerPairLayoutAndClockReset(t *testing.T) {
 	p.StateTimer.Set(30)
 	p.initTimer.Set(20)
 	p.Invinc.Set(51)
-	p.reimuA.timer.Set(12)
+	p.shot.timer.Set(12)
 	h := bytes.Repeat([]byte{0xa5}, 0x1c4)
 	for i := range 33 {
 		putReplayPair(h, 0x2c+i*8, [2]int32{int32(i) * -731, int32(i) * 919})
@@ -41,7 +41,7 @@ func TestReplayPlayerPairLayoutAndClockReset(t *testing.T) {
 	}
 	p.RestoreReplayPlayer(h)
 	if p.State != StateNormal || p.StateTimer.Cur != 0 || p.StateTimer.Prev != -1 || p.initTimer.Cur != 0 ||
-		p.Invinc.Cur != 51 || p.reimuA.timer.Cur != -1 || !p.focus || p.optionCount != 4 {
+		p.Invinc.Cur != 51 || p.shot.timer.Cur != -1 || !p.focus || p.optionCount != 4 {
 		t.Fatal("replay restore reset the wrong player clocks/state")
 	}
 	for i, o := range p.options {

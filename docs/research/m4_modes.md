@@ -3,6 +3,8 @@
 依据：`anm/vm.go`（`case 65`、`case 67`、`case 74`、`case 84`、`case 88`、`Start`、`Reset`、`readI`、`intPtr`），`anm/anmdraw/anmdraw.go`（`Draw`、`DrawLayer`），`anm/anmdraw/mode46.go`（`corners` 的锚点 3 panic），`docs/research/m4_s3.md`（§1 方法）。调查程序是一次性的 `.tmp/scratch/modesurvey/main.go`（不在仓库包内，`.tmp` 已被 `.gitignore` 忽略），输出保存在 `.tmp/scratch/modesurvey/out.txt`。
 
 > 2026-11-08，t9 按 t4 第 5 阶段审计补正调用图与文件范围。下列静态矩阵仍是 2026-11-01 的 17 文件样本，未重跑或扩展计数；当前第一轮合并树有 28 个原 `.anm`，新增 pl01、front／ascii／text／七面 logo，不能把旧 768 脚本统计冒充全部现行资源。t1／t2／t3／t5 的接入依据分别为 `FUN_004247f0`、`FUN_00409280`、`FUN_00415800`／`FUN_00415e90`、`FUN_00422660`。
+>
+> 2026-11-21：文中“归第二轮 t6／t7／t8”“0x16 仍 legacy”“尚未接”的状态已过时。第二轮已完成副机／自机子弹 World VM 与 0x16 去 legacy、五机体 SHT 射击、信仰矩形门控、cdbg／0x0e、344、原震屏与应用级备用 RNG；现状以 `docs/fidelity.md` 为准。
 
 ---
 

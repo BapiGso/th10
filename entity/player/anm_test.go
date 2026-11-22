@@ -61,7 +61,7 @@ func TestPlayerAnmFiles(t *testing.T) {
 			}
 		}
 	}
-	if playerFiles[0]() == playerFiles[1]() {
+	if playerFile(0) == playerFile(1) {
 		t.Fatal("characters share an animation file")
 	}
 }

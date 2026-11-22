@@ -1,41 +1,51 @@
-// Package stagescript supplies the common ECL stage wrapper. Reachable legacy
-// backgrounds and the old safety cap are retained, not newly ported behavior.
+// Package stagescript supplies the common ECL stage wrapper and every
+// stage's configuration. The old safety cap is retained, not newly ported
+// behavior.
 package stagescript
 
 import (
+	"th10/audio"
 	"th10/scene/stage"
 	stageecl "th10/scene/stage/ecl"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 // Config contains only resource names, native BGM ordinals and the unchanged
-// legacy presentation/safety settings. Stage packages bind its factory methods.
+// safety cap.
 type Config struct {
-	ECL, MSG         string
-	BGM, BossBGM     int
-	FrameCap         int
-	BackgroundStage  int
-	BackgroundScroll float64
-	Backgrounds      [5]string
+	ECL, MSG     string
+	BGM, BossBGM int
+	FrameCap     int
+}
+
+// Configs holds stage n's configuration at index n-1; stage 7 is Extra.
+var Configs = [7]Config{
+	{ECL: "ecl/stage01.ecl", MSG: "stage1", BGM: audio.BGMStage1, BossBGM: audio.BGMStage1Boss, FrameCap: 60000},
+	{ECL: "ecl/stage02.ecl", MSG: "stage2", BGM: audio.BGMStage2, BossBGM: audio.BGMStage2Boss, FrameCap: 60000},
+	{ECL: "ecl/stage03.ecl", MSG: "stage3", BGM: audio.BGMStage3, BossBGM: audio.BGMStage3Boss, FrameCap: 60000},
+	{ECL: "ecl/stage04.ecl", MSG: "stage4", BGM: audio.BGMStage4, BossBGM: audio.BGMStage4Boss, FrameCap: 60000},
+	{ECL: "ecl/stage05.ecl", MSG: "stage5", BGM: audio.BGMStage5, BossBGM: audio.BGMStage5Boss, FrameCap: 60000},
+	{ECL: "ecl/stage06.ecl", MSG: "stage6", BGM: audio.BGMStage6, BossBGM: audio.BGMStage6Boss, FrameCap: 60000},
+	{ECL: "ecl/stage07.ecl", MSG: "extra", BGM: audio.BGMExtra, BossBGM: audio.BGMExtraBoss, FrameCap: 60000},
+}
+
+// New returns stage n's script (7 is Extra); any other n gets stage 1's.
+func New(n int) stage.Script {
+	if n < 1 || n > len(Configs) {
+		n = 1
+	}
+	return Configs[n-1].NewScript()
 }
 
 type Script struct {
 	config   Config
 	frame    int
 	finished bool
-	bg       legacyBackground
 	vm       *stageecl.VM
 }
 
 func (c Config) NewScript() *Script {
-	s := &Script{config: c, vm: stageecl.NewStageVM(c.ECL)}
-	s.bg.init(c)
-	return s
+	return &Script{config: c, vm: stageecl.NewStageVM(c.ECL)}
 }
-
-// NewScriptInterface preserves stage1's existing func() stage.Script entry.
-func (c Config) NewScriptInterface() stage.Script { return c.NewScript() }
 
 func (s *Script) Init(ctx *stage.Context) {
 	s.vm.BindContext(ctx) // FUN_00417870: manager exists before the first calc.
@@ -45,7 +55,6 @@ func (s *Script) Init(ctx *stage.Context) {
 
 func (s *Script) Update(ctx *stage.Context) {
 	s.frame++
-	s.bg.advance(s.frame)
 	if s.vm != nil {
 		s.vm.Update(ctx)
 		if s.vm.MainDone() {
@@ -58,8 +67,7 @@ func (s *Script) Update(ctx *stage.Context) {
 	}
 }
 
-func (s *Script) BgDraw(field *ebiten.Image) { s.bg.draw(field) }
-func (s *Script) Finished() bool             { return s.finished }
+func (s *Script) Finished() bool { return s.finished }
 
 // ShakeOffset reads FUN_0043c550/0043c5ca's already sampled shift.
 func (s *Script) ShakeOffset() (float64, float64) {

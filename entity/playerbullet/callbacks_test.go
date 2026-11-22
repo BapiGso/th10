@@ -40,7 +40,7 @@ func TestInitCallbackOneDoesNotImplyHoming(t *testing.T) {
 }
 
 func TestHomingCallbackHitStateAndShortestWrap(t *testing.T) {
-	b := Bullet{X: 200, Y: 200, Angle: 1, Speed: 7, Age: 4, state: 2,
+	b := Bullet{X: 200, Y: 200, pos: gamePos(200, 200), Angle: 1, Speed: 7, Age: 4, state: 2,
 		target: &enemy.Enemy{X: 100, Y: 100, Active: true}}
 	b.tickHoming()
 	if b.Angle != 1 || b.Speed != 7 {

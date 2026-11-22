@@ -3,20 +3,12 @@ package main
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"th10/datfs"
 )
-
-type seProduct struct {
-	Name       string `json:"name"`
-	Original   int    `json:"original_bytes"`
-	Stored     int    `json:"stored_bytes"`
-	Compressed bool   `json:"compressed"`
-}
 
 func packSounds(dir, out string) error {
 	if dir == "" {
@@ -34,7 +26,6 @@ func packSounds(dir, out string) error {
 	if err != nil {
 		return err
 	}
-	var products []seProduct
 	for _, file := range files {
 		if file.IsDir() || filepath.Ext(file.Name()) != ".wav" {
 			continue
@@ -51,20 +42,14 @@ func packSounds(dir, out string) error {
 		copy(blob, "ZSE1")
 		binary.LittleEndian.PutUint32(blob[4:], uint32(len(raw)))
 		blob = append(blob, compressed...)
-		p := seProduct{Name: file.Name(), Original: len(raw), Stored: len(blob), Compressed: true}
 		if len(blob) >= len(raw) {
-			blob, p.Stored, p.Compressed = raw, len(raw), false
+			blob = raw
 		}
-		if err := write(filepath.Join(out, "wav", "se", p.Name), blob); err != nil {
+		if err := write(filepath.Join(out, "wav", "se", file.Name()), blob); err != nil {
 			return err
 		}
-		products = append(products, p)
 	}
-	data, err := json.MarshalIndent(products, "", "  ")
-	if err != nil {
-		return err
-	}
-	return write(filepath.Join(filepath.Dir(filepath.Clean(out)), "docs", "research", "se_manifest.json"), append(data, '\n'))
+	return nil
 }
 
 func encodeOneBGM(dir, archive, out string, quality float64, index int) error {

@@ -26,7 +26,7 @@ type Profile struct {
 // the existing initializer/restore/input/step path and the same stop boundary.
 // memory, when supplied by a WASM host, reports linear-memory bytes.
 func (r *Runner) Measure(ch replay.Chapter, maxFrames int, memory func() uint64) (Profile, error) {
-	h, err := newHeadless(r.cfg, r.factory)
+	h, err := newHeadless(r.cfg, r.factory, 0, nil)
 	if err != nil {
 		return Profile{}, err
 	}

@@ -3,7 +3,6 @@ package game
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"slices"
 )
@@ -16,35 +15,25 @@ type ScoreStore interface {
 	LegacyJSON() ([]byte, error)
 }
 
-type MemoryScoreStore struct {
-	data, legacy []byte
-}
+// memoryStore is an in-memory browserstore.Store, the injectable backend
+// for tests and headless callers; returned data never aliases stored bytes.
+type memoryStore map[string][]byte
 
-func NewMemoryScoreStore() *MemoryScoreStore { return &MemoryScoreStore{} }
-
-func (s *MemoryScoreStore) Read() ([]byte, error) {
-	if s.data == nil {
+func (m memoryStore) Read(key string) ([]byte, error) {
+	data, ok := m[key]
+	if !ok {
 		return nil, fs.ErrNotExist
 	}
-	return slices.Clone(s.data), nil
+	return slices.Clone(data), nil
 }
 
-func (s *MemoryScoreStore) Write(data []byte) error {
-	if len(data) > maxScoreBytes {
-		return fmt.Errorf("game: score exceeds %d bytes", maxScoreBytes)
-	}
-	s.data = slices.Clone(data)
+func (m memoryStore) Write(key string, data []byte) error {
+	m[key] = slices.Clone(data)
 	return nil
 }
 
-func (s *MemoryScoreStore) LegacyJSON() ([]byte, error) {
-	if s.legacy == nil {
-		return nil, fs.ErrNotExist
-	}
-	return slices.Clone(s.legacy), nil
-}
-
-func (s *MemoryScoreStore) SetLegacyJSON(data []byte) { s.legacy = slices.Clone(data) }
+func NewMemoryScoreStore() ScoreStore   { return binaryScoreStore{store: memoryStore{}} }
+func NewMemoryReplayStore() ReplayStore { return binaryReplayStore{store: memoryStore{}} }
 
 func (g *Game) scoreStore() ScoreStore {
 	if g.Scores == nil {
@@ -54,7 +43,7 @@ func (g *Game) scoreStore() ScoreStore {
 }
 
 // DefaultSaveData keeps the empty host view useful to tests and callers that
-// supply their own tables. LoadSaveData uses the binary's initialized CR/STs.
+// supply their own tables. LoadProgress uses the binary's initialized CR/STs.
 func DefaultSaveData() *SaveData { return &SaveData{LastDifficulty: DiffNormal} }
 
 func saveView(native *ScoreFile) *SaveData {
@@ -181,8 +170,6 @@ func loadSaveDataWithSeed(store ScoreStore, seed uint16) *SaveData {
 	}
 	return s
 }
-
-func LoadSaveData() *SaveData { return loadSaveData(newScoreStore()) }
 
 // LoadProgress supports injected stores without initializing audio/windowing.
 func (g *Game) LoadProgress() {

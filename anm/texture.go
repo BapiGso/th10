@@ -37,7 +37,7 @@ func parseTHTX(data []byte, off int) (*Texture, error) {
 		return nil, errTooShort
 	}
 	t.Pixels = data[off+16 : off+16+size]
-	if bpp := bytesPerPixel(t.Format); bpp == 0 {
+	if bpp := BytesPerPixel(t.Format); bpp == 0 {
 		return nil, fmt.Errorf("anm: unknown THTX format %d", t.Format)
 	} else if t.W*t.H*bpp > size {
 		return nil, errTooShort
@@ -45,7 +45,8 @@ func parseTHTX(data []byte, off int) (*Texture, error) {
 	return t, nil
 }
 
-func bytesPerPixel(format int) int {
+// BytesPerPixel is the size of one THTX pixel in format, 0 if unknown.
+func BytesPerPixel(format int) int {
 	switch format {
 	case FormatBGRA8888:
 		return 4

@@ -3,7 +3,6 @@ package stage
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
 	"th10/anm"
 	"th10/datfs"
 	"th10/entity/bullet"
@@ -15,7 +14,6 @@ import (
 	"th10/gamedata"
 	"th10/input"
 	"th10/scene/dialog"
-	resultscene "th10/scene/result"
 	"th10/std"
 	"th10/std/stddraw"
 	"th10/supervisor"
@@ -28,7 +26,6 @@ import (
 type Script interface {
 	Init(ctx *Context)
 	Update(ctx *Context)
-	BgDraw(field *ebiten.Image)
 	Finished() bool
 }
 
@@ -192,10 +189,11 @@ func (c *Context) UpdateMSG(advance, skip bool) {
 
 // Stage 通用关卡场景，驱动一关的全部逻辑
 type Stage struct {
-	sceneFlags     uint32 // DAT_00477810+0x58, menu freeze is bit 0x10
-	ctx            *Context
-	script         Script
-	field          *ebiten.Image                                        // 游戏区域离屏缓冲
+	sceneFlags uint32 // DAT_00477810+0x58, menu freeze is bit 0x10
+	ctx        *Context
+	script     Script
+	// The scene callbacks are required for a stage driven by Update (see
+	// selector.buildStage); headless and playback stages never call them.
 	NextScene      func(g *game.Game, state *game.GameState) game.Scene // 通关后下一场景
 	OnGameOver     func(g *game.Game, state *game.GameState) game.Scene
 	OnContinue     func(g *game.Game, state *game.GameState) game.Scene // DAT_00491fb8 = 13 dispatcher hook
@@ -207,22 +205,13 @@ type Stage struct {
 	// drawn is set by the first Draw, which sets the clear colour.
 	drawn bool
 
-	// bg is the STD drawer that replaces the legacy background (nodes 0x07
-	// and 0x0a, see nodeBackground and nodeSTDFront). Nil keeps the legacy
-	// path: a stage outside stdConvertible, no embedded STD, or
-	// TH10_LEGACY_BG=1.
+	// bg is the STD drawer (nodes 0x07 and 0x0a, see nodeBackground and
+	// nodeSTDFront); nil when the stage has no embedded STD or its ANM.
+	// Every stage's STD uses only render modes anmdraw draws: stages 2, 3,
+	// 4, 6 and 7 use modes 0, 1, 2, 3 and 8; stages 1 and 5 add mode 6. See
+	// docs/research/m4_s3.md.
 	bg *stddraw.Drawer
 }
-
-// stdConvertible is the stages whose STD background uses only render modes
-// anmdraw draws: every stage. Stages 2, 3, 4, 6 and 7 use modes 0, 1, 2, 3
-// and 8; stages 1 and 5 add mode 6. See docs/research/m4_s3.md.
-var stdConvertible = map[int]bool{1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true}
-
-const (
-	fieldW = game.FieldRight - game.FieldLeft
-	fieldH = game.FieldBottom - game.FieldTop
-)
 
 func New(g *game.Game, state *game.GameState, script Script) *Stage {
 	g.BindState(state)
@@ -250,10 +239,7 @@ func NewHeadless(state *game.GameState, script Script) *Stage {
 
 func newStage(state *game.GameState, script Script) *Stage {
 	state.BindScoreController()
-	s := &Stage{
-		script: script,
-		field:  ebiten.NewImage(fieldW, fieldH),
-	}
+	s := &Stage{script: script}
 	s.ctx = NewContext(state)
 	s.ctx.stage = s
 	s.ctx.Menu = NewMenuController(s)
@@ -261,11 +247,9 @@ func newStage(state *game.GameState, script Script) *Stage {
 	s.ctx.ReplaySlowSample = 60
 	state.BeginStageFaith() // FUN_00417870 sets the decay rate at stage start
 	s.ctx.STD = loadSTD(state.Stage, s.ctx.Anm)
-	// TH10_LEGACY_BG=1 keeps the legacy background (BgDraw) on every stage,
-	// to compare the two by eye. Otherwise a convertible stage whose STD
-	// has run its Enable (Active set) draws its background with stddraw.
-	if stdConvertible[state.Stage] && s.ctx.STD != nil && s.ctx.STD.Active != nil &&
-		os.Getenv("TH10_LEGACY_BG") != "1" {
+	// A stage whose STD has run its Enable (Active set) draws its
+	// background with stddraw.
+	if s.ctx.STD != nil && s.ctx.STD.Active != nil {
 		s.bg = &stddraw.Drawer{STD: s.ctx.STD}
 	}
 	s.ctx.GUI = NewGUI(s.ctx)
@@ -290,7 +274,7 @@ func loadSTD(n int, env *anm.Env) *std.VM {
 		return nil
 	}
 	v := std.New(f)
-	if a, err := gamedata.ANM(f.ANM); err == nil {
+	if a, err := gamedata.SharedANM(f.ANM); err == nil {
 		v.Enable(a, env)
 	}
 	return v
@@ -324,30 +308,14 @@ func (s *Stage) Update(g *game.Game) error {
 	if blocked {
 		switch action {
 		case MenuNext:
-			if s.NextScene != nil {
-				g.GoTo(s.NextScene(g, s.ctx.State))
-			} else {
-				s.goGameOver(g)
-			}
+			g.GoTo(s.NextScene(g, s.ctx.State))
 		case MenuContinue:
-			if s.OnContinue != nil {
-				next := s.OnContinue(g, s.ctx.State) // preserve t5 callback timing/signature
-				g.GoToFactory(game.SceneContinue, func(*game.Game) (game.Scene, error) { return next, nil })
-			} else {
-				// FUN_004236f0 dispatches mode 13. Its global scene restart
-				// handler is not yet ported; do not silently treat it as Quit.
-				s.ctx.Menu.OpenGameOver(g)
-				s.ctx.Menu.Error = "Continue dispatcher (mode 13) is not ported"
-			}
+			next := s.OnContinue(g, s.ctx.State) // preserve t5 callback timing/signature
+			g.GoToFactory(game.SceneContinue, func(*game.Game) (game.Scene, error) { return next, nil })
 		case MenuTitle:
 			s.goGameOver(g)
 		case MenuRetry:
-			if s.OnRetry != nil {
-				g.GoToFactory(game.SceneRetry, func(g *game.Game) (game.Scene, error) { return s.OnRetry(g, s.ctx.State), nil })
-			} else {
-				s.ctx.Menu.OpenGameOver(g)
-				s.ctx.Menu.Error = "Retry constructor is not registered"
-			}
+			g.GoToFactory(game.SceneRetry, func(g *game.Game) (game.Scene, error) { return s.OnRetry(g, s.ctx.State), nil })
 		}
 		return nil
 	}
@@ -387,10 +355,8 @@ func (s *Stage) Update(g *game.Game) error {
 				g.MarkClear(ctx.State)
 			}
 			ctx.Menu.OpenClear(g) // MSG 0x14 -> FUN_00423370 (practice / Extra)
-		} else if s.NextScene != nil {
-			g.GoTo(s.NextScene(g, ctx.State))
 		} else {
-			g.GoTo(resultscene.New(ctx.State, resultscene.ModeStageClear, nil))
+			g.GoTo(s.NextScene(g, ctx.State))
 		}
 	}
 	return nil
@@ -400,17 +366,7 @@ func (s *Stage) Update(g *game.Game) error {
 // controller. The ending/staff visuals remain with their existing scene.
 func (s *Stage) OpenCompletion(g *game.Game) { s.ctx.Menu.OpenClear(g) }
 
-func (s *Stage) goGameOver(g *game.Game) {
-	if s.OnGameOver != nil {
-		g.GoTo(s.OnGameOver(g, s.ctx.State))
-	} else {
-		mode := resultscene.ModeGameOver
-		if s.ctx.Menu.Cleared {
-			mode = resultscene.ModeStageClear
-		}
-		g.GoTo(resultscene.New(s.ctx.State, mode, nil))
-	}
-}
+func (s *Stage) goGameOver(g *game.Game) { g.GoTo(s.OnGameOver(g, s.ctx.State)) }
 
 // update 推进一帧世界状态。不涉及场景切换，供 Update 与无头模拟共用。
 func (s *Stage) update(in *input.State) {
@@ -442,11 +398,6 @@ func (s *Stage) update(in *input.State) {
 
 	// 2. 脚本驱动（敌人/弹幕生成）
 	s.script.Update(ctx)
-
-	// 3. 敌人
-	for _, e := range ctx.Enemies {
-		e.Update()
-	}
 
 	// 4. 敌弹与激光（子弹自身的命中、擦弹判定在这里完成）
 	ctx.UpdateBullets()

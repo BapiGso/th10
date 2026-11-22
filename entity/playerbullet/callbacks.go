@@ -34,12 +34,8 @@ func (b *Bullet) tickHoming() {
 		b.Speed = float64(float32(speed + 0.2)) // DAT_00470c38, 0x428c0c; no clamp
 		return
 	}
-	x, y := float32(b.X-gameOriginX), float32(b.Y-gameOriginY)
-	if b.fromSHT {
-		x, y = b.pos[0], b.pos[1]
-	}
-	dx := float32(b.target.X-gameOriginX) - x
-	dy := float32(b.target.Y-gameOriginY) - y
+	dx := float32(b.target.X-gameOriginX) - b.pos[0]
+	dy := float32(b.target.Y-gameOriginY) - b.pos[1]
 	// 0x428b61-0x428b7d uses fpatan directly, not zun.Aim's coincident-point
 	// half-pi special case. FUN_00428ce0 is the same short difference as AngleDiff.
 	aim := float32(math.Atan2(float64(dy), float64(dx)))

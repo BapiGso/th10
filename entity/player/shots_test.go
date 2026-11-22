@@ -113,7 +113,7 @@ func TestSHTNoAttackResetsBurstButMovesExistingShots(t *testing.T) {
 	count := p.Bullets.ActiveCount()
 	p.NoAttack = true
 	p.UpdateInput(&in)
-	if p.reimuA.timer.Cur != -1 || p.Bullets.ActiveCount() != count {
+	if p.shot.timer.Cur != -1 || p.Bullets.ActiveCount() != count {
 		t.Fatal("dialog gate failed to reset the burst or removed existing shots")
 	}
 	p.Bullets.Each(func(b *playerbullet.Bullet) {

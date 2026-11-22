@@ -2,7 +2,6 @@ package ending
 
 import (
 	"fmt"
-	"sync"
 
 	"th10/anm"
 	"th10/game"
@@ -87,26 +86,11 @@ func NewStaff(state *game.GameState, back game.Scene) *Staff {
 	return &Staff{Ending: e}
 }
 
-var sceneFiles = struct {
-	sync.Mutex
-	files map[string]*anm.File
-}{files: map[string]*anm.File{}}
-
 func animation(name string) (*anm.File, error) {
-	sceneFiles.Lock()
-	defer sceneFiles.Unlock()
-	if f := sceneFiles.files[name]; f != nil {
-		return f, nil
-	}
-	f, err := gamedata.PresentationANM(name)
-	if err != nil {
-		return nil, err
-	}
 	if name == "text.anm" {
-		f = f.OrdinalScripts() // FUN_00447470's runtime text-script table
+		return gamedata.SharedOrdinalANM(name, true) // FUN_00447470's runtime text-script table
 	}
-	sceneFiles.files[name] = f
-	return f, nil
+	return gamedata.SharedPresentationANM(name)
 }
 
 func (e *Ending) init(name string, staff bool) {

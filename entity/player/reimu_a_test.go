@@ -118,12 +118,12 @@ func TestReimuAStickyTargetSelection(t *testing.T) {
 	b := &enemy.Enemy{X: 200, Y: 100, Active: true}
 	p.SetHomingCandidates([]*enemy.Enemy{a, b})
 	p.SetHomingCandidates([]*enemy.Enemy{b, a})
-	if p.reimuA.target != a {
+	if p.shot.target != a {
 		t.Fatal("target changed to nearer or reordered enemy")
 	}
 	a.Active = false
 	p.SetHomingCandidates([]*enemy.Enemy{a, b})
-	if p.reimuA.target != b {
+	if p.shot.target != b {
 		t.Fatal("did not release deleted enemy")
 	}
 }

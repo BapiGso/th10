@@ -9,7 +9,6 @@ import (
 	"th10/scene/loading"
 	selector "th10/scene/select"
 	"th10/scene/title"
-	"th10/sprite"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -35,7 +34,6 @@ func main() {
 		if *debugPower < 0 || *debugPower > game.PowerMax {
 			log.Fatal("-debug-power must be between 0 and 500")
 		}
-		sprite.Load()
 		g.SetScene(selector.NewDebugStageWithPower(g, title.New(), stageNum, game.CharReimu, game.ShotA, difficulty, *debugPower))
 	} else {
 		g.SetScene(loading.New())

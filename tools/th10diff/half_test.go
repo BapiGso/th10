@@ -43,7 +43,7 @@ func TestDiffHalfFramesWithGapsShiftAndCutoffs(t *testing.T) {
 		d.frames != 1 || d.half != 3 || d.halfA != 3 || d.halfB != 1 || d.gaps != 1 {
 		t.Fatalf("aligned half/gaps: code=%d differ=%+v", code, d)
 	}
-	d = &differ{shift: 10, from: 3, after: 2, eps: .002, angEps: .00011}
+	d = &differ{shift: 10, after: 2, eps: .002, angEps: .00011}
 	if code := d.compare(trace.NewReader(strings.NewReader(a)), trace.NewReader(strings.NewReader(b))); code != 0 || d.frames != 1 || d.half != 2 {
 		t.Fatalf("cutoff and half: code=%d differ=%+v", code, d)
 	}

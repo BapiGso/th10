@@ -3,7 +3,6 @@ package menus
 import (
 	"fmt"
 	"math"
-	"slices"
 	"strings"
 
 	"th10/anm"
@@ -154,8 +153,6 @@ func (s *MusicRoom) Update(g *game.Game) error {
 func (s *MusicRoom) TrackUnlocked(index int) bool {
 	return index >= 0 && index < len(s.tracks) && s.save != nil && s.save.Native.MusicUnlocked(index)
 }
-
-func (s *MusicRoom) Tracks() []MusicTrack { return slices.Clone(s.tracks) }
 
 func (s *MusicRoom) Play(g *game.Game, index int) error {
 	if index < 0 || index >= len(s.tracks) {

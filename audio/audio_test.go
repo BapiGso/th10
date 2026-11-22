@@ -21,8 +21,7 @@ import (
 )
 
 func TestSEDecode(t *testing.T) {
-	for _, name := range []string{SEShoot, SEEnemy, SEDamage, SEGraze, SEItem, SEExtend, SEBomb,
-		SEOk, SECancel, SESelect, SEPause, SEPowerUp, SEDead} {
+	for _, name := range seWav {
 		data, err := gamedata.ReadFile(datfs.EmbedPath(name))
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
@@ -44,8 +43,8 @@ func TestBGMLoopSeam(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tracks) != len(BGMNames) {
-		t.Fatalf("%d tracks in thbgm.fmt, %d names", len(tracks), len(BGMNames))
+	if len(tracks) != bgmCount {
+		t.Fatalf("%d tracks in thbgm.fmt, want %d", len(tracks), bgmCount)
 	}
 	for idx, tr := range tracks {
 		s := decodeBGM(t, tr)
@@ -166,7 +165,7 @@ func TestPlayBGMLoop(t *testing.T) {
 		t.Fatalf("index %d 超出范围 [0, %d)", idx, len(tracks))
 	}
 	tr := tracks[idx]
-	fmt.Printf("播放: BGM %02d %s (%s)\n", idx+1, BGMNames[idx], tr.Name)
+	fmt.Printf("播放: BGM %02d (%s)\n", idx+1, tr.Name)
 
 	bytesPerSec := float64(tr.SampleRate * pcmBytesPerFrame)
 	introSec := float64(tr.Intro) / bytesPerSec
@@ -186,7 +185,7 @@ func TestPlayBGMLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.Play()
-	defer p.Close()
+	defer p.PauseAndStopReading()
 
 	start := time.Now()
 	for range time.NewTicker(1 * time.Second).C {

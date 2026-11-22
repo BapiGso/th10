@@ -4,7 +4,6 @@ package game
 type Config struct {
 	BGMVolume float64       // 0.0 ~ 1.0
 	SEVolume  float64       // 0.0 ~ 1.0
-	Hint      bool          // 开启 hint 提示
 	Native    *NativeConfig `json:"-"` // original cfg, including the unmodeled +0x30 options
 }
 
@@ -12,7 +11,6 @@ func DefaultConfig() *Config {
 	return &Config{
 		BGMVolume: 1, // FUN_00418c40: cfg +0x20 defaults to 100
 		SEVolume:  0.8,
-		Hint:      true,
 		Native:    DefaultNativeConfig(),
 	}
 }

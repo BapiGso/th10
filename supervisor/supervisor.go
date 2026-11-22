@@ -83,8 +83,8 @@ type Camera struct {
 type Supervisor struct {
 	Dev Device // +8, DAT_00491c30
 
-	// Frame is the device's back buffer, which the chain's legacy nodes
-	// draw into with Ebiten (Legacy). It is nil with a recording device.
+	// Frame is the device's back buffer, which scenes copy to the screen.
+	// It is nil with a recording device.
 	Frame *ebiten.Image
 
 	// ANM is the ANM manager's drawing state (DAT_00491c10).
@@ -359,14 +359,4 @@ func (s *Supervisor) EndFrame() {
 	s.ANM.Flush()
 	s.Dev.SetTexture(nil)
 	s.Dev.Flush()
-}
-
-// Legacy is for chain nodes not yet ported, which draw into the back
-// buffer with Ebiten: ANM.Flush(), Dev.Flush(), and return Frame. Ebiten
-// keeps an image's draws in submission order, so the legacy picture lands
-// in its place in the chain. Neither flush is the original's.
-func (s *Supervisor) Legacy() *ebiten.Image {
-	s.ANM.Flush()
-	s.Dev.Flush()
-	return s.Frame
 }

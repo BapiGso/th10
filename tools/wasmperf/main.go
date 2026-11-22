@@ -1,4 +1,4 @@
-// Command wasmperf measures CPU-side WASM streaming and headless logic.
+// Command wasmperf measures CPU-side WASM headless logic.
 package main
 
 import (
@@ -20,8 +20,7 @@ func main() {
 
 func run(args []string) error {
 	flags := flag.NewFlagSet("wasmperf", flag.ContinueOnError)
-	kind := flags.String("kind", "logic", "measurement: logic or audio")
-	blocks := flags.Int("blocks", 32, "sequential reads per track/buffer size")
+	kind := flags.String("kind", "logic", "measurement: logic")
 	replayPath := flags.String("replay", "", "input replay for logic measurement")
 	chapter := flags.Int("chapter", 0, "replay chapter index")
 	frames := flags.Int("frames", 0, "logic frame limit (0 = all)")
@@ -30,15 +29,12 @@ func run(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || *blocks <= 0 || *frames < 0 || *warmup < 0 {
-		return fmt.Errorf("invalid kind/blocks/arguments")
+	if flags.NArg() != 0 || *frames < 0 || *warmup < 0 {
+		return fmt.Errorf("invalid arguments")
 	}
-	var measurements []audioMeasurement
 	var logic *sim.Profile
 	var err error
 	switch *kind {
-	case "audio":
-		measurements, err = measureAudio(*blocks)
 	case "logic":
 		if *replayPath == "" {
 			return fmt.Errorf("logic measurement requires -replay")
@@ -63,8 +59,7 @@ func run(args []string) error {
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(struct {
 		Kind, GoVersion, GOOS, GOARCH string
-		Audio                         []audioMeasurement
 		Logic                         *sim.Profile
 		Warmup                        int
-	}{*kind, runtime.Version(), runtime.GOOS, runtime.GOARCH, measurements, logic, *warmup})
+	}{*kind, runtime.Version(), runtime.GOOS, runtime.GOARCH, logic, *warmup})
 }

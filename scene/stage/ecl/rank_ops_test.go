@@ -39,7 +39,7 @@ func TestRankOpcodeFormats(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(params) != len(format) || !params[0].IsVar || params[0].VarID() != 0 {
+			if len(params) != len(format) || !params[0].IsVar || params[0].varID() != 0 {
 				t.Fatalf("params = %+v", params)
 			}
 			for i, p := range params {
@@ -58,12 +58,12 @@ func TestRankOpcodesUnusedInStages(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		prog, err := LoadProgram(data)
+		prog, err := loadProgram(data)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var counts [6]int
-		for _, sub := range prog.Subs {
+		for _, sub := range prog.subs {
 			for _, in := range sub.Instrs {
 				if in.Opcode >= 349 && in.Opcode <= 354 {
 					counts[in.Opcode-349]++

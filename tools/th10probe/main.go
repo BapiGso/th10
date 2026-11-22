@@ -19,17 +19,17 @@ import (
 func main() { os.Exit(run()) }
 
 type probeOptions struct {
-	PID                        uint
-	Exe, Out                   string
-	Frames                     int
-	Poll                       time.Duration
-	Sample                     sampleOptions
-	Timeout                    time.Duration
-	NoWait, SkipHash, Counters bool
-	Ext                        bool
-	Replay, OutDir             string
-	Chapter                    int
-	All, Demos                 bool
+	PID              uint
+	Exe, Out         string
+	Frames           int
+	Poll             time.Duration
+	Sample           sampleOptions
+	Timeout          time.Duration
+	NoWait, SkipHash bool
+	Ext              bool
+	Replay, OutDir   string
+	Chapter          int
+	All, Demos       bool
 }
 
 func parseProbeOptions(args []string, out io.Writer) (probeOptions, error) {
@@ -37,7 +37,6 @@ func parseProbeOptions(args []string, out io.Writer) (probeOptions, error) {
 	fs := flag.NewFlagSet("th10probe", flag.ContinueOnError)
 	fs.SetOutput(out)
 	var poll, settle, gap, budget int
-	var shotFrames, shotDir string
 	fs.UintVar(&o.PID, "pid", 0, "target process id")
 	fs.StringVar(&o.Exe, "exe", "", "path to th10.exe (locate process and verify SHA-256)")
 	fs.StringVar(&o.Out, "out", "-", "trace output (- = stdout)")
@@ -50,15 +49,12 @@ func parseProbeOptions(args []string, out io.Writer) (probeOptions, error) {
 	fs.DurationVar(&o.Timeout, "timeout", 30*time.Minute, "total waiting/capture deadline")
 	fs.BoolVar(&o.NoWait, "no-wait-start", false, "start at the current stage frame")
 	fs.BoolVar(&o.SkipHash, "skip-hash", false, "explicitly skip executable SHA-256 verification")
-	fs.BoolVar(&o.Counters, "probe-counters", false, "read candidate counters for 3 seconds, then exit")
 	fs.BoolVar(&o.Ext, "ext", false, "include native stats, player timers, all items, lasers and spell fields")
 	fs.StringVar(&o.Replay, "replay", "", "local replay file: read-only chapter/identity metadata, never controls the game")
 	fs.IntVar(&o.Chapter, "chapter", 0, "first replay chapter to capture (0-based, needs -replay)")
 	fs.BoolVar(&o.All, "all-chapters", false, "capture every chapter of -replay without detaching (needs -out-dir)")
 	fs.BoolVar(&o.Demos, "demos", false, "observe title demos and collect all four distinct native demo numbers")
 	fs.StringVar(&o.OutDir, "out-dir", "", "directory for per-chapter/demo files; existing files are never overwritten")
-	fs.StringVar(&shotFrames, "shot-frames", "", "disabled: this collector does not capture windows")
-	fs.StringVar(&shotDir, "shot-dir", "", "disabled: this collector does not capture windows")
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}
@@ -85,9 +81,6 @@ func parseProbeOptions(args []string, out io.Writer) (probeOptions, error) {
 	if o.Chapter < 0 || o.Chapter > 0 && o.Replay == "" || o.All && (o.Replay == "" || o.OutDir == "") || o.Demos && (o.All || o.Replay != "" || o.OutDir == "") ||
 		(o.All || o.Demos) && o.Out != "-" || o.OutDir != "" && !o.All && !o.Demos {
 		return o, fmt.Errorf("invalid replay/demo/output combination")
-	}
-	if shotFrames != "" || shotDir != "" {
-		return o, fmt.Errorf("window capture is disabled in the read-only collector")
 	}
 	o.Poll = time.Duration(poll) * time.Microsecond
 	o.Sample.Settle = time.Duration(settle) * time.Microsecond
@@ -127,10 +120,6 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	rd := &reader{mem: p, ext: opts.Ext}
-	if opts.Counters {
-		probeFrameCounters(ctx, rd)
-		return 0
-	}
 	fmt.Fprintf(os.Stderr, "th10probe: attached to pid %d (VM_READ/query only)\n", p.ID())
 	if err := collectCapture(ctx, rd, plan, os.Stderr, realClock()); err != nil {
 		fmt.Fprintln(os.Stderr, "th10probe: INCOMPLETE:", err)
@@ -140,42 +129,4 @@ func run() int {
 		return 2
 	}
 	return 0
-}
-func probeFrameCounters(ctx context.Context, rd *reader) {
-	candidates := []struct {
-		Name string
-		Addr uint32
-	}{
-		{"DAT_00474c88", addrFrameCounter}, {"DAT_00474c8c", 0x00474c8c},
-		{"DAT_00491c10", 0x00491c10}, {"DAT_00474c98", 0x00474c98},
-	}
-	type state struct {
-		first, last int32
-		changes     int
-		ok          bool
-	}
-	states := make([]state, len(candidates))
-	for i, c := range candidates {
-		v, err := rd.i32(c.Addr)
-		states[i] = state{first: v, last: v, ok: err == nil}
-	}
-	deadline := time.Now().Add(3 * time.Second)
-	for ctx.Err() == nil && time.Now().Before(deadline) {
-		for i, c := range candidates {
-			v, err := rd.i32(c.Addr)
-			if err != nil {
-				states[i].ok = false
-				continue
-			}
-			if v != states[i].last {
-				states[i].changes++
-				states[i].last = v
-			}
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	for i, c := range candidates {
-		s := states[i]
-		fmt.Printf("%-14s 0x%08x readable=%v changes=%d first=%d last=%d\n", c.Name, c.Addr, s.ok, s.changes, s.first, s.last)
-	}
 }

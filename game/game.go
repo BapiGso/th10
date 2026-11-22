@@ -3,7 +3,6 @@ package game
 import (
 	"fmt"
 	"math"
-	"os"
 	thaudio "th10/audio"
 	"th10/input"
 	"th10/pacing"
@@ -37,8 +36,6 @@ type Scene interface {
 // Game 主游戏结构，管理场景切换
 type Game struct {
 	current        Scene
-	next           Scene
-	nextSet        bool
 	scenes         sceneSwitcher // FUN_004218d0: numbered request/constructor/lifecycle
 	TitleEntry     int           // DAT_00491c00: initial/menu/replay/player-data entry
 	Selection      MenuSelection
@@ -60,7 +57,6 @@ type Game struct {
 	fps       float64 // logic frames per second, updated once a second
 	fpsFrames int     // logic frames since fpsT
 	fpsT      float64 // start of the current FPS window, seconds
-	showPace  bool    // TH10_PACE=1: show the pacing mode in the FPS readout
 }
 
 func New() *Game {
@@ -84,7 +80,6 @@ func New() *Game {
 		alternateRNG:   zun.RNG{State: seed},
 		initialRNGSeed: scoreStartupSeed(seed), // FUN_0042add0 consumes 512 main steps at score initialization
 		start:          now,
-		showPace:       os.Getenv("TH10_PACE") == "1",
 	}
 	g.BindMusicProgress(nil) // FUN_00420b10's ST music flags, before title playback
 	// Desktop picks display refreshes with the Pacer. The browser instead
@@ -139,7 +134,7 @@ func (g *Game) SetScene(s Scene) {
 	}
 	g.scenes.previous = g.scenes.current
 	g.scenes.current, g.scenes.request = sceneMode(s), sceneMode(s)
-	g.next, g.nextSet, g.scenes.pending = nil, false, nil
+	g.scenes.switching, g.scenes.pending = false, nil
 	g.current = s
 	g.scenes.clearPending = true
 	if life, ok := s.(SceneLifecycle); ok {
@@ -191,16 +186,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	// 全局 FPS 显示（右下角）
 	fps := fmt.Sprintf("%.0f FPS", g.fps)
-	x := ScreenWidth - 70
-	if g.showPace {
-		mode := " grid"
-		if g.pace.P > 0 {
-			mode = fmt.Sprintf(" L%d %.2fHz", g.pace.Lock, 1/g.pace.P)
-		}
-		fps += mode
-		x = ScreenWidth - 200
-	}
-	render.DebugPrintAt(screen, fps, x, ScreenHeight-16)
+	render.DebugPrintAt(screen, fps, ScreenWidth-70, ScreenHeight-16)
 }
 
 // keepAliveDot is the 1x1 image keepAlive draws; it is created on first use.
@@ -224,10 +210,11 @@ func (g *Game) Layout(_, _ int) (int, int) {
 
 // GoTo 切换到下一个场景（下一帧生效，允许 nil 表示回到空状态）
 func (g *Game) GoTo(s Scene) {
-	g.initScenes()
-	g.scenes.request, g.scenes.pending = sceneMode(s), nil
-	g.next = s
-	g.nextSet = true
+	var factory SceneFactory
+	if s != nil {
+		factory = func(*Game) (Scene, error) { return s, nil }
+	}
+	g.GoToFactory(sceneMode(s), factory)
 }
 
 // AudioContext 返回全局音频上下文

@@ -83,12 +83,12 @@ func TestTitleDemoResourcesAndPageHooks(t *testing.T) {
 	g := &game.Game{Config: game.DefaultConfig(), Save: game.DefaultSaveData()}
 	title := New()
 	called := false
-	title.SetPageHooks(sceneui.TitleMusicRoom, sceneui.TitlePageHooks{Calc: func(c *sceneui.TitleController, _ *game.Game, _ *input.State) error {
+	g.SetScene(title)
+	title.Controller.Hooks[sceneui.TitleMusicRoom] = sceneui.TitlePageHooks{Calc: func(c *sceneui.TitleController, _ *game.Game, _ *input.State) error {
 		called = true
 		c.SetState(sceneui.TitleMain)
 		return nil
-	}})
-	g.SetScene(title)
+	}}
 	title.Controller.SetState(sceneui.TitleMusicRoom)
 	if err := g.CalcScene(); err != nil {
 		t.Fatal(err)

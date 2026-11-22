@@ -3,40 +3,11 @@ package gamedata
 import (
 	"bytes"
 	"encoding/binary"
-	"sync"
 	"testing"
 
 	"th10/anm"
 	"th10/assets"
 )
-
-func TestTextureIndexDoesNotDecodeANMs(t *testing.T) {
-	previous := anmFiles
-	anmFiles = &sync.Map{}
-	defer func() { anmFiles = previous }()
-	index := textureIndex()
-	if index["background/stg3bg.png"] != "stage03.anm" {
-		t.Fatal("generated texture index has no stage-3 owner")
-	}
-	count := 0
-	anmFiles.Range(func(_, _ any) bool { count++; return true })
-	if count != 0 {
-		t.Fatal("building the texture index eagerly decoded ANMs")
-	}
-	if _, err := Image("anm/background/stg3bg.png"); err != nil {
-		t.Fatal(err)
-	}
-	anmFiles.Range(func(key, _ any) bool {
-		count++
-		if key != "anm/stage03.anm" {
-			t.Errorf("loaded unrelated ANM %v", key)
-		}
-		return true
-	})
-	if count != 1 {
-		t.Fatalf("loaded %d ANMs for one image", count)
-	}
-}
 
 func TestANMReadsKeepPrivateMutableData(t *testing.T) {
 	a, err := ReadFile("anm/enemy.anm")

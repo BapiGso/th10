@@ -8,7 +8,7 @@ import (
 )
 
 // Movement holds per-axis steps in hundredths of a pixel, as stored by
-// th10.exe 0x4248dc..0x424926. This is not yet a complete SHT shot interpreter.
+// th10.exe 0x4248dc..0x424926. The shot records are parsed by Parse (shot.go).
 type Movement struct {
 	Fast, Slow                 int
 	FastDiagonal, SlowDiagonal int

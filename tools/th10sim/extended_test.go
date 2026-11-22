@@ -12,6 +12,7 @@ import (
 	"th10/gamedata"
 	"th10/replay"
 	"th10/scene/stage"
+	stagescript "th10/scene/stage/script"
 	"th10/sim"
 	"th10/trace"
 	"th10/zun"
@@ -58,11 +59,11 @@ func TestSimOptInExtensionPreservesOrdinaryFrames(t *testing.T) {
 		t.Fatal(err)
 	}
 	var plain, ext bytes.Buffer
-	r := sim.New(cfg, scriptFactory)
+	r := sim.New(cfg, stagescript.New)
 	if err := r.Run(rp.Chapters[0], &plain, 3); err != nil {
 		t.Fatal(err)
 	}
-	r = sim.New(cfg, scriptFactory)
+	r = sim.New(cfg, stagescript.New)
 	r.TraceFrame = extendedFrame
 	if err := r.Run(rp.Chapters[0], &ext, 3); err != nil {
 		t.Fatal(err)

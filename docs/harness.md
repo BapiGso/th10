@@ -51,17 +51,15 @@ go run ./tools/th10diff -a .tmp/trace/orig.txt -b .tmp/trace/sim.txt
 
 续比只用于已证实的采样半帧，不替代完整比较：
 
-- `-from-frame N`：只比较原作参考帧号 ≥N 的帧（`-shift` 对齐在其后）。
-- `-after N`：跳过原作参考帧号 ≤N 的帧。
-- 两者同时给出时，跳过条件取并集。两者都不放宽 eps，也不删 M 行。
+- `-after N`：跳过原作参考帧号 ≤N 的帧（`-shift` 对齐在其后）。要从第 N 帧起比较，写 `-after N-1`。不放宽 eps，也不删 M 行。
 
 原作末行截断或短 B 行时返回读取错误（exit 2，输出 `INCOMPLETE`），不会当作 MATCH。
 
 六章基准 `.tmp/trace/d1c2/base_cN.txt`：c5 已于 2026-11-08 更新为 t13 合并后的输出，旧版保存为 `base_c5.pre_t13.txt`。
 
-新版探针不截图、不发窗口消息、不挂起线程、不修改原作内存。原 `-shot-frames／-shot-dir` 采集路径已禁用，传入非空值返回用法错误。L3 由用户自行目视或另行提供画面，不能用探针的数值 MATCH 冒充像素一致。
+探针不截图、不发窗口消息、不挂起线程、不修改原作内存。L3 由用户自行目视，不能用探针的数值 MATCH 冒充像素一致。
 
-新版自动把未确认算完的样本写成 H 半帧。`th10diff` 跳过它们并报告 `SKIP`，不计入匹配帧；全部重叠样本都是半帧时返回 INCOMPLETE。旧文件没有 H，仍需对已取证的半帧使用原续比开关。
+新版自动把未确认算完的样本写成 H 半帧。`th10diff` 跳过它们并报告 `SKIP`，不计入匹配帧；全部重叠样本都是半帧时返回 INCOMPLETE。旧文件没有 H，已取证的半帧仍用 `-after`。
 
 ### 原作配置 th10.cfg
 
@@ -161,7 +159,7 @@ foreach ($job in @(
 }
 ```
 
-正常新文件有 Z 帧提交与 Q 结束行；读取异常、超时、Ctrl+C 或未确认末帧会明确报告 INCOMPLETE，而不是静默输出损坏尾行。旧 trace 的已证实历史半帧不会被新工具自动补造标记；新采集使用 H，无须先猜 `-after／-from-frame`。
+正常新文件有 Z 帧提交与 Q 结束行；读取异常、超时、Ctrl+C 或未确认末帧会明确报告 INCOMPLETE，而不是静默输出损坏尾行。旧 trace 的已证实历史半帧不会被新工具自动补造标记；新采集使用 H，无须先猜 `-after`。
 
 ### 4．最后：标题 demo 自动采集
 
@@ -200,7 +198,7 @@ foreach ($n in 0..3) {
   复刻对普通算术按 float32 分步取整，三角函数／D3DX 仍有实现差异（见 `docs/research/m2_motion.md` 第 2 节）。
   验收：短窗口 epsilon ≤ 1e-3 px，且**不允许随帧数累积发散**——
   若发散说明是逻辑分歧而非精度问题，必须定位到具体帧。
-- **L3 视觉一致**：M2 之后接入 ANM/STD 再按像素 diff 收敛。
+- **L3 视觉一致**：画面由用户目视确认（见 `docs/open_items.md` 的 V 项）。项目没有自动像素差分；完整 smoke（`TH10_SMOKE=full`）只证明绘制路径不 panic。
 
 ## 已确认的回放格式事实
 
@@ -247,6 +245,22 @@ th10_05 为 208 字节。9 个用户槽位＋4 个 demo 已在第一轮做全文
 
 4 个官方 demo 的 trailer 与全局头**交叉验证一致**（角色/装备/难度/关卡四项），见
 `replay/replay_test.go`。
+
+## WASM 等价
+
+`tools/wasmcheck.ps1`（PowerShell 7，需本机 Go 与 Node，无 npm 依赖）验证 js/wasm 构建的逻辑与原生逐字节相同：
+
+```powershell
+pwsh -NoProfile -File tools/wasmcheck.ps1 -Baseline '.tmp/trace/d1c2' -Out '.tmp/wasmcheck'
+```
+
+- 参数：`-Replay`（默认 `.tmp/[th10]/replay/th10_05.rpy`）、`-Baseline`（含 `base_cN.txt` 的目录，可省）、`-Out`（默认 `.tmp/wasmcheck`）、`-SkipTests`、`-KeepTraces`。GOCACHE（未设置时）、GOTMPDIR、TMP／TEMP、TMPDIR 都放在 `-Out` 下。
+- 先构建原生与 js/wasm 两份 `th10sim` 和 `tools/wasmperf`。
+- 对第 0–5 章：原生生成 trace；给了 `-Baseline` 时与 `base_cN.txt` 比较；在 Node 中用 `tools/wasmexec/run.cjs`（`TH10_WASM_HEADLESS=1`）跑 wasm 版，再用 `tools/wasmexec/compare.cjs` 与原生逐字节比较；然后 `wasmperf -kind logic` 分别在 Node 与原生下跑，要求帧数、主／备用 RNG 状态与计数相同，并记录均值／最大帧耗时与内存。成功后删除该章 trace（`-KeepTraces` 保留）。
+- 除非 `-SkipTests`，再以 `GOOS=js GOARCH=wasm go test -exec 'node --stack-size=8192 tools/wasmexec/run.cjs'` 在 Node 中跑一组不需要图形的包测试（`TH10_WASM_FAKE_IDB=1` 提供假 IndexedDB）。
+- 每步输出写 `<Out>/<步骤>.txt`，汇总在 `summary.txt`；任一步失败立即停止并保留 trace。
+
+执行器细节见 `docs/research/wasm.md` §3。浏览器中的画面、音频与帧耗时不在此脚本范围内，见 `docs/open_items.md` V16。
 
 ## 回归护栏
 
