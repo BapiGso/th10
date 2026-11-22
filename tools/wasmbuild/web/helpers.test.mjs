@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { downloadWASM, integerSize, preventGameDefault, isStartKey, warmBootPack } from "./helpers.mjs";
+import { downloadWASM, integerSize, preventGameDefault, isStartKey, warmBootPack, enlargeOtoWorklet, installAudioQueue } from "./helpers.mjs";
+import { resolveObjectURL } from "node:buffer";
 
 test("integer viewport never uses fractional logical scaling", () => {
     assert.deepEqual(integerSize(1920, 1080), { scale: 2, width: 1280, height: 960 });
@@ -63,4 +64,30 @@ test("boot pack warm-up reads the manifest's boot pack and never throws", async 
     assert.deepEqual(requests, ["assets/manifest.json", "assets/boot.0123.pak"]);
     assert.equal(await warmBootPack(async () => new Response("", { status: 404 })), false);
     assert.equal(await warmBootPack(async () => { throw new Error("offline"); }), false);
+});
+
+const otoWorklet = "class OtoWorkletProcessor extends AudioWorkletProcessor {\n\tconstructor() {\n\t\tsuper();\n\t\tthis.bufferSize_ = 2048;\n\t}\n}\nregisterProcessor('oto-worklet-processor', OtoWorkletProcessor);\n";
+
+test("oto worklet queue is enlarged, and unknown modules are left alone", () => {
+    assert.match(enlargeOtoWorklet(otoWorklet, 8192), /this\.bufferSize_ = 8192;/);
+    assert.equal(enlargeOtoWorklet("registerProcessor('other', X);"), null);
+    assert.equal(enlargeOtoWorklet(otoWorklet.replace("this.bufferSize_ = 2048;", "")), null);
+});
+
+test("installed audio queue loads the patched module and falls back on failure", async () => {
+    const loaded = [];
+    class FakeWorklet { async addModule(url) { loaded.push(url.startsWith("blob:") ? await resolveObjectURL(url).text() : url); } }
+    assert.equal(installAudioQueue(FakeWorklet, async () => new Response(otoWorklet), 6000), true);
+    await new FakeWorklet().addModule("blob:oto");
+    assert.match(loaded[0], /this\.bufferSize_ = 6000;/);
+
+    class Other { async addModule(url) { loaded.push(url); } }
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+        installAudioQueue(Other, async () => { throw new Error("offline"); });
+        await new Other().addModule("blob:x");
+    } finally { console.warn = warn; }
+    assert.equal(loaded[1], "blob:x");
+    assert.equal(installAudioQueue(undefined), false);
 });

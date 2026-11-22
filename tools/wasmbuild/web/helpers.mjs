@@ -19,6 +19,41 @@ const gameKeys = new Set([
 export function preventGameDefault(event) { return gameKeys.has(event.code); }
 export function isStartKey(event) { return gameKeys.has(event.code) && !["KeyF", "F3", "ControlLeft", "ControlRight"].includes(event.code) && !event.ctrlKey && !event.altKey && !event.metaKey; }
 
+// AUDIO_QUEUE_FRAMES is the queue size oto's AudioWorklet processor keeps
+// (refilled from Go when below half). oto's default, 2048 frames, leaves
+// 23-46 ms of audio, so any main-thread task longer than that (a heavy frame,
+// a GC pause) starves the worklet: in headless Edge 10.6% of stage 1's audio
+// quanta were silent. 8192 keeps about 93 ms queued (0.5% silent there), at
+// the cost of that much more sound-effect latency.
+export const AUDIO_QUEUE_FRAMES = 8192;
+
+// enlargeOtoWorklet returns oto's worklet source with its queue set to
+// frames, or null when the source is not the processor it knows.
+export function enlargeOtoWorklet(source, frames = AUDIO_QUEUE_FRAMES) {
+    const size = /this\.bufferSize_ = \d+;/;
+    if (!source.includes("registerProcessor('oto-worklet-processor'") || !size.test(source)) return null;
+    return source.replace(size, `this.bufferSize_ = ${frames};`);
+}
+
+// installAudioQueue makes every AudioWorklet module oto adds load through
+// enlargeOtoWorklet. Anything unexpected falls back to the original module.
+export function installAudioQueue(AudioWorkletClass, fetcher = fetch, frames = AUDIO_QUEUE_FRAMES) {
+    const addModule = AudioWorkletClass?.prototype?.addModule;
+    if (typeof addModule !== "function") return false;
+    AudioWorkletClass.prototype.addModule = async function (url, options) {
+        try {
+            const patched = enlargeOtoWorklet(await (await fetcher(url)).text(), frames);
+            if (patched) {
+                const blobURL = URL.createObjectURL(new Blob([patched], { type: "text/javascript" }));
+                try { return await addModule.call(this, blobURL, options); } finally { URL.revokeObjectURL(blobURL); }
+            }
+            console.warn("[TH10] unknown AudioWorklet module; audio queue left at its default");
+        } catch (error) { console.warn("[TH10] audio queue patch failed:", error); }
+        return addModule.call(this, url, options);
+    };
+    return true;
+}
+
 // Downloads the boot asset pack next to the WASM instead of after Go starts:
 // Go's own fetch of the same URL is then answered from the HTTP cache (packs
 // are content-hashed and immutable). Any failure just leaves it to Go.

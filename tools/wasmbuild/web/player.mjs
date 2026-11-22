@@ -1,4 +1,8 @@
-import { preventGameDefault, isStartKey } from "./helpers.mjs";
+import { preventGameDefault, isStartKey, installAudioQueue } from "./helpers.mjs";
+
+// Before Go creates its audio context: a deeper worklet queue rides out
+// heavy frames instead of dropping audio (see AUDIO_QUEUE_FRAMES).
+installAudioQueue(globalThis.AudioWorklet);
 
 const boot = document.getElementById("boot");
 const GAME_CANVAS = "canvas:not(#loading)"; // Ebiten's canvas, not the loading screen's
