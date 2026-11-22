@@ -156,7 +156,8 @@ func (r *Renderer) draw8(vm *anm.VM, spr *Sprite) {
 		r.vtype = vtype3D
 	}
 
-	vs := quad8
+	vs := &r.quad3D
+	*vs = quad8
 	for i := range vs {
 		vs[i].Diffuse = r.tfDev
 	}

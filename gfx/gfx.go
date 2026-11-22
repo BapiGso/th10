@@ -16,6 +16,7 @@ package gfx
 import (
 	"image"
 	"image/color"
+	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
 )
@@ -266,6 +267,10 @@ type Device struct {
 	// Scratch for Draw3D, kept across calls so steady-state draws allocate
 	// nothing: toClip's output for every vertex, and one clipped polygon.
 	clips, poly []clipVertex
+
+	// opts is submit's draw options, reused so that a draw does not build a
+	// new uniform map; Ebiten copies the uniforms during the call.
+	opts ebiten.DrawTrianglesShaderOptions
 }
 
 // NewDevice returns a device drawing into a new back buffer.
@@ -507,7 +512,8 @@ func (d *Device) target(img *ebiten.Image, vp Viewport) *ebiten.Image {
 
 // Flush submits the pending batch. With s the batch's state, in this order:
 //
-//  1. If s both tests and writes depth: copy depth into snap over s.vp.
+//  1. If s both tests and writes depth: copy depth into snap over the
+//     batch's footprint (depthBox), the only pixels the depth pass reads.
 //  2. Colour pass: one DrawTrianglesShader32 onto target(Frame, s.vp) with
 //     s.blend, Images (s.tex, depth) and uniformsOf(s).
 //  3. If s writes depth: depth pass, the same vertices and indices onto
@@ -532,6 +538,7 @@ func (d *Device) target(img *ebiten.Image, vp Viewport) *ebiten.Image {
 // Since a draw in another state flushes first, submission order is always
 // the original's draw order. Call Flush before reading Frame.
 func (d *Device) Flush() {
+	tris := d.tris
 	d.tris = d.tris[:0]
 	if len(d.batch) == 0 {
 		return
@@ -543,7 +550,7 @@ func (d *Device) Flush() {
 	}
 	indices := d.indices[:n]
 	if s.depthTest() && s.depthWrite() {
-		d.copyDepth(s.vp)
+		d.copyDepth(depthBox(tris, viewportRect(s.vp)))
 	}
 	u := uniformsOf(s)
 	if dst := d.target(d.Frame, s.vp); dst != nil {
@@ -558,13 +565,49 @@ func (d *Device) Flush() {
 	d.batch = d.batch[:0]
 }
 
-// copyDepth copies depth into snap over vp. DrawImage draws a sub-image from
+// depthBox is the part of vp that the triangles tris can rasterise to: their
+// bounding box widened by two pixels, which covers any pixel-centre
+// convention. A depth pass reads snap only at its own fragments (dstPos), so
+// copying this box instead of the whole viewport gives the same result; in
+// stage 1 it was most of the frame's 3.7 Mpx of depth copies.
+func depthBox(tris []screenTri, vp image.Rectangle) image.Rectangle {
+	if len(tris) == 0 {
+		return vp
+	}
+	b := triBox(tris[0])
+	for _, t := range tris[1:] {
+		o := triBox(t)
+		for k := range 2 {
+			b.lo[k] = min(b.lo[k], o.lo[k])
+			b.hi[k] = max(b.hi[k], o.hi[k])
+		}
+	}
+	// Clamp in float first so huge or non-finite coordinates cannot overflow int.
+	clamp := func(v float32, lo, hi int) int {
+		if !(v >= float32(lo)) { // NaN goes low
+			return lo
+		}
+		if v > float32(hi) {
+			return hi
+		}
+		return int(v)
+	}
+	const pad = 2
+	return image.Rect(
+		clamp(float32(math.Floor(float64(b.lo[0])))-pad, vp.Min.X, vp.Max.X),
+		clamp(float32(math.Floor(float64(b.lo[1])))-pad, vp.Min.Y, vp.Max.Y),
+		clamp(float32(math.Ceil(float64(b.hi[0])))+pad+1, vp.Min.X, vp.Max.X),
+		clamp(float32(math.Ceil(float64(b.hi[1])))+pad+1, vp.Min.Y, vp.Max.Y),
+	)
+}
+
+// copyDepth copies depth into snap over r. DrawImage draws a sub-image from
 // the destination's origin, not from its own position, so the GeoM moves the
-// copy back to vp's top left, where it came from.
-func (d *Device) copyDepth(vp Viewport) {
+// copy back to r's top left, where it came from.
+func (d *Device) copyDepth(r image.Rectangle) {
 	// SubImage clips to the back buffer, so the translation must use the
 	// clipped rectangle's origin too.
-	r := viewportRect(vp).Intersect(image.Rect(0, 0, Width, Height))
+	r = r.Intersect(image.Rect(0, 0, Width, Height))
 	dst, src := sub(d.snap, r), sub(d.depth, r)
 	if dst == nil || src == nil {
 		return
@@ -578,24 +621,18 @@ func (d *Device) copyDepth(vp Viewport) {
 // and second in Images[1]. The shader reads Images[1] only to test depth, so it
 // matters only when u.DepthTest is set.
 func (d *Device) submit(dst *ebiten.Image, u uniforms, blend ebiten.Blend, tex *Texture, second *ebiten.Image, indices []uint32) {
-	opts := &ebiten.DrawTrianglesShaderOptions{
-		Blend:  blend,
-		Images: [4]*ebiten.Image{nil, second},
-		Uniforms: map[string]any{
-			"Textured":  u.Textured,
-			"Address":   u.Address,
-			"Filter":    u.Filter,
-			"FogMode":   u.FogMode,
-			"FogColor":  u.FogColor,
-			"FogStart":  u.FogStart,
-			"FogEnd":    u.FogEnd,
-			"AlphaRef":  u.AlphaRef,
-			"DepthTest": u.DepthTest,
-			"Pass":      u.Pass,
-		},
+	opts := &d.opts
+	if opts.Uniforms == nil {
+		opts.Uniforms = make(map[string]any, 10)
 	}
+	opts.Blend = blend
+	opts.Images = [4]*ebiten.Image{nil, second}
 	if tex != nil {
 		opts.Images[0] = tex.Image
 	}
+	m := opts.Uniforms
+	m["Textured"], m["Address"], m["Filter"], m["FogMode"] = u.Textured, u.Address, u.Filter, u.FogMode
+	m["FogColor"], m["FogStart"], m["FogEnd"] = u.FogColor, u.FogStart, u.FogEnd
+	m["AlphaRef"], m["DepthTest"], m["Pass"] = u.AlphaRef, u.DepthTest, u.Pass
 	dst.DrawTrianglesShader32(d.batch, indices, compiledShader(), opts)
 }

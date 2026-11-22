@@ -30,7 +30,8 @@ import "th10/gfx"
 // with the batch.
 func (r *Renderer) Rect(v [4]float32, c gfx.Color) {
 	r.Flush()
-	vs := [4]gfx.TLVertex{
+	vs := &r.quadTL
+	*vs = [4]gfx.TLVertex{
 		{X: v[0], Y: v[1], RHW: 1, Diffuse: c, Specular: noSpecular},
 		{X: v[2], Y: v[1], RHW: 1, Diffuse: c, Specular: noSpecular},
 		{X: v[0], Y: v[3], RHW: 1, Diffuse: c, Specular: noSpecular},

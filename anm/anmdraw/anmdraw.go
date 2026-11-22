@@ -195,6 +195,12 @@ type Renderer struct {
 	tfactor gfx.Color
 	tfDev   gfx.Color
 
+	// Vertex scratch for draw8 and Rect: the device does not keep the slice,
+	// and a local array would escape through the Device interface and be
+	// allocated on every draw.
+	quad3D [4]gfx.Vertex3D
+	quadTL [4]gfx.TLVertex
+
 	// sprite is the texture matrix cache (+0x3ada70): the sprite draw8 last
 	// set TEXTURE0 for. Reset and Invalidate clear it.
 	sprite *Sprite
