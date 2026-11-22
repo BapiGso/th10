@@ -4,7 +4,7 @@ package assets
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,26 +18,24 @@ import (
 // TextureVariant identifies the selected pixel policy for resource tests.
 const TextureVariant = "web"
 
-type packState struct {
-	once sync.Once
-	done chan struct{}
-	err  error
-}
+// prefetchWindow is how many background pack fetches may be in flight.
+const prefetchWindow = 3
 
 var store = struct {
 	sync.Mutex
 	manifest Manifest
 	started  bool
-	packs    map[string]*packState
+	packs    map[string]func() error // pack name -> its one load
 	files    map[string][]byte
 	textures map[string][]byte
 	loaded   int
+	total    int // bytes of every pack in the manifest
 	count    int
 	report   func(Progress)
-}{packs: map[string]*packState{}, files: map[string][]byte{}, textures: map[string][]byte{}}
+}{packs: map[string]func() error{}, files: map[string][]byte{}, textures: map[string][]byte{}}
 
 // Start fetches the manifest and the boot pack, then prefetches the other
-// packs in PackOrder in the background. It must run before the game reads
+// packs in PackOrder in the background, a few at a time. It must run before the game reads
 // any resource and must not run inside a js.FuncOf callback.
 func Start(report func(Progress)) error {
 	store.Lock()
@@ -51,7 +49,7 @@ func Start(report func(Progress)) error {
 	}
 	store.report = report
 	store.Unlock()
-	data, err := fetchBytes(ManifestPath, "no-cache")
+	data, err := fetchBytes(ManifestPath, "no-cache", "")
 	if err != nil {
 		return fmt.Errorf("asset manifest: %w", err)
 	}
@@ -62,19 +60,34 @@ func Start(report func(Progress)) error {
 	if _, ok := m.Packs[BootPack]; !ok {
 		return errors.New("asset manifest has no boot pack")
 	}
+	total := 0
+	for _, p := range m.Packs {
+		total += p.Bytes
+	}
 	store.Lock()
-	store.manifest = m
+	store.manifest, store.total = m, total
 	store.Unlock()
 	if err := ensure(BootPack); err != nil {
 		return err
 	}
+	// Fetches are native and off the Go thread; keeping a few in flight hides
+	// the per-request latency without losing the play order.
+	queue := make(chan string)
+	for range prefetchWindow {
+		go func() {
+			for name := range queue {
+				_ = ensure(name) // a failure is reported; a later read retries nothing and returns it
+			}
+		}()
+	}
 	go func() {
 		for _, name := range PackOrder() {
-			_ = ensure(name) // a failure is reported; a later read retries nothing and returns it
+			queue <- name
 		}
 		for name := range m.Packs { // packs added to the manifest but not to PackOrder
-			_ = ensure(name)
+			queue <- name
 		}
+		close(queue)
 	}()
 	return nil
 }
@@ -83,23 +96,16 @@ func Start(report func(Progress)) error {
 // prefetcher nor another reader has started it.
 func ensure(name string) error {
 	store.Lock()
-	p := store.packs[name]
-	if p == nil {
-		p = &packState{done: make(chan struct{})}
-		store.packs[name] = p
+	load, ok := store.packs[name]
+	if !ok {
+		load = sync.OnceValue(func() error { return loadPack(name) })
+		store.packs[name] = load
 	}
 	store.Unlock()
-	p.once.Do(func() {
-		go func() {
-			p.err = load(name)
-			close(p.done)
-		}()
-	})
-	<-p.done
-	return p.err
+	return load()
 }
 
-func load(name string) error {
+func loadPack(name string) error {
 	store.Lock()
 	info, ok := store.manifest.Packs[name]
 	report := store.report
@@ -107,17 +113,20 @@ func load(name string) error {
 	if !ok {
 		return nil // nothing published under this name (e.g. no common files)
 	}
+	// The browser checks the SHA-256 (Subresource Integrity) natively, off
+	// the single Go thread; hashing in Go cost ~17 ms of frame time per 2 MB.
+	sum, err := hex.DecodeString(info.SHA256)
+	integrity := "sha256-" + base64.StdEncoding.EncodeToString(sum)
 	var data []byte
-	var err error
 	for attempt := range 3 {
+		if err != nil {
+			break
+		}
 		if attempt > 0 {
 			time.Sleep(time.Duration(attempt) * time.Second)
 		}
-		if data, err = fetchBytes("assets/"+info.File, "default"); err == nil {
-			sum := sha256.Sum256(data)
-			if len(data) != info.Bytes || hex.EncodeToString(sum[:]) != info.SHA256 {
-				err = fmt.Errorf("size or SHA-256 differs from the manifest")
-			}
+		if data, err = fetchBytes("assets/"+info.File, "default", integrity); err == nil && len(data) != info.Bytes {
+			err = fmt.Errorf("size differs from the manifest")
 		}
 		if err == nil {
 			break
@@ -142,11 +151,7 @@ func load(name string) error {
 	}
 	store.loaded += info.Bytes
 	store.count++
-	total := 0
-	for _, p := range store.manifest.Packs {
-		total += p.Bytes
-	}
-	progress := Progress{Pack: name, Bytes: info.Bytes, LoadedBytes: store.loaded, TotalBytes: total, LoadedPacks: store.count, TotalPacks: len(store.manifest.Packs)}
+	progress := Progress{Pack: name, Bytes: info.Bytes, LoadedBytes: store.loaded, TotalBytes: store.total, LoadedPacks: store.count, TotalPacks: len(store.manifest.Packs)}
 	store.Unlock()
 	report(progress)
 	return nil
@@ -186,7 +191,7 @@ func ReadTexture(id string) ([]byte, error) {
 
 // fetchBytes waits for fetch(url) without blocking the JS event loop: the
 // promise callbacks only hand results to this goroutine.
-func fetchBytes(url, cache string) ([]byte, error) {
+func fetchBytes(url, cache, integrity string) ([]byte, error) {
 	type result struct {
 		value js.Value
 		err   error
@@ -209,6 +214,9 @@ func fetchBytes(url, cache string) ([]byte, error) {
 	}
 	options := js.Global().Get("Object").New()
 	options.Set("cache", cache)
+	if integrity != "" {
+		options.Set("integrity", integrity)
+	}
 	response, err := await(js.Global().Call("fetch", url, options))
 	if err != nil {
 		return nil, err

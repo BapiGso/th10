@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { downloadWASM, integerSize, preventGameDefault, isStartKey } from "./helpers.mjs";
+import { downloadWASM, integerSize, preventGameDefault, isStartKey, warmBootPack } from "./helpers.mjs";
 
 test("integer viewport never uses fractional logical scaling", () => {
     assert.deepEqual(integerSize(1920, 1080), { scale: 2, width: 1280, height: 960 });
@@ -50,4 +50,17 @@ test("game keys prevent scroll/find/reload defaults; host shortcuts do not start
     assert.equal(isStartKey({ code: "KeyF" }), false);
     assert.equal(isStartKey({ code: "F3" }), false);
     assert.equal(isStartKey({ code: "KeyR", ctrlKey: true }), false);
+});
+
+test("boot pack warm-up reads the manifest's boot pack and never throws", async () => {
+    const requests = [];
+    const fetcher = async url => {
+        requests.push(url);
+        if (url === "assets/manifest.json") return Response.json({ packs: { boot: { file: "boot.0123.pak" } } });
+        return new Response(new Uint8Array([1, 2, 3]));
+    };
+    assert.equal(await warmBootPack(fetcher), true);
+    assert.deepEqual(requests, ["assets/manifest.json", "assets/boot.0123.pak"]);
+    assert.equal(await warmBootPack(async () => new Response("", { status: 404 })), false);
+    assert.equal(await warmBootPack(async () => { throw new Error("offline"); }), false);
 });

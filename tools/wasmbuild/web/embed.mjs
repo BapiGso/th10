@@ -1,6 +1,6 @@
 // 只有游戏画面的宿主页（供博客等页面用 iframe 嵌入）：下载 WASM 交给 game.html，
 // 按整数倍铺满窗口，F 键全屏。下载进度、存档导入导出等完整界面见 index.html + app.mjs。
-import { downloadWASM, integerSize } from "./helpers.mjs";
+import { downloadWASM, integerSize, warmBootPack } from "./helpers.mjs";
 
 const frame = document.getElementById("game");
 let playerReady = false;
@@ -42,6 +42,7 @@ addEventListener("message", event => {
 frame.addEventListener("load", () => post({ type: "hello" }));
 post({ type: "hello" });
 
+void warmBootPack();
 try {
     const response = await fetch("release.json", { cache: "no-cache" });
     if (!response.ok) throw new Error(`发布清单 HTTP ${response.status}`);

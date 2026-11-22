@@ -19,6 +19,21 @@ const gameKeys = new Set([
 export function preventGameDefault(event) { return gameKeys.has(event.code); }
 export function isStartKey(event) { return gameKeys.has(event.code) && !["KeyF", "F3", "ControlLeft", "ControlRight"].includes(event.code) && !event.ctrlKey && !event.altKey && !event.metaKey; }
 
+// Downloads the boot asset pack next to the WASM instead of after Go starts:
+// Go's own fetch of the same URL is then answered from the HTTP cache (packs
+// are content-hashed and immutable). Any failure just leaves it to Go.
+export async function warmBootPack(fetcher = fetch) {
+    try {
+        const response = await fetcher("assets/manifest.json", { cache: "no-cache" });
+        const file = response.ok ? (await response.json()).packs?.boot?.file : null;
+        if (typeof file !== "string") return false;
+        const pack = await fetcher(`assets/${file}`);
+        if (!pack.ok) return false;
+        await pack.arrayBuffer(); // read to the end so the browser stores it
+        return true;
+    } catch { return false; }
+}
+
 export async function downloadWASM(url, expectedBytes, onProgress, fetcher = fetch) {
     if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > 512 * 1048576) {
         throw new Error("Invalid release size; rebuild dist with wasmbuild.");

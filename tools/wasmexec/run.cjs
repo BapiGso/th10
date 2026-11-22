@@ -25,10 +25,14 @@ if (process.env.TH10_WASM_HEADLESS === "1") require("./headless.cjs");
 // th10web asset packs: serve fetch(relative URL) from a built dist directory.
 if (process.env.TH10_WASM_ASSET_DIR) {
     const root = path.resolve(process.env.TH10_WASM_ASSET_DIR);
-    globalThis.fetch = async url => {
+    globalThis.fetch = async (url, options = {}) => {
         const file = path.resolve(root, String(url).split("?")[0]);
         if (!file.startsWith(root + path.sep) || !fs.existsSync(file)) return { ok: false, status: 404 };
         const data = fs.readFileSync(file);
+        // Subresource Integrity, as a browser checks it: a mismatch rejects.
+        if (options.integrity && options.integrity !== "sha256-" + require("node:crypto").createHash("sha256").update(data).digest("base64")) {
+            throw new TypeError(`integrity mismatch for ${url}`);
+        }
         return { ok: true, status: 200, arrayBuffer: async () => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) };
     };
 }

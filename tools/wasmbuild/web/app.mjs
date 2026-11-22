@@ -1,4 +1,4 @@
-import { downloadWASM, integerSize, mebibytes } from "./helpers.mjs";
+import { downloadWASM, integerSize, mebibytes, warmBootPack } from "./helpers.mjs";
 
 const stage = document.getElementById("stage");
 const frame = document.getElementById("game");
@@ -100,6 +100,7 @@ frame.contentWindow.postMessage({ type: "hello" }, location.origin);
 async function load() {
     try {
         if (location.protocol === "file:") throw new Error("请通过 wasmbuild -serve 预览，不要直接打开本地 HTML。");
+        void warmBootPack();
         const response = await fetch("release.json", { cache: "no-cache" });
         if (!response.ok) throw new Error(`发布清单 HTTP ${response.status}`);
         const release = await response.json();
