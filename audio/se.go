@@ -109,15 +109,17 @@ func (m *Manager) queueSE(id int, pan int32) {
 // ids have separate voices even when they refer to the same wav.
 func (m *Manager) flushSE() {
 	for _, q := range m.seQueue {
-		if p := m.seByID[q.id]; p != nil {
-			p.PauseAndStopReading()
-		}
 		name, _ := SEName(q.id)
+		pcm := m.seCache[name] // preloadSE decoded every seWav entry
+		if m.se == nil || m.seVolume <= 0 || pcm == nil {
+			continue
+		}
 		gain := seGain(q.id)
 		if m.nativeVolume {
 			gain = nativeGain(m.nativeSE, int32(seTable[q.id].vol), true)
 		}
-		m.seByID[q.id] = m.playSEPan(name, gain, q.pan())
+		l, r := sePanGains(q.pan())
+		m.se.play(q.id, pcm, gain*l, gain*r)
 	}
 	m.seQueue = m.seQueue[:0]
 }

@@ -21,7 +21,4 @@ func TestPlaySEPanning(t *testing.T) {
 		m.Update()
 		time.Sleep(time.Second)
 	}
-	for _, p := range m.sePlayers {
-		p.PauseAndStopReading()
-	}
 }

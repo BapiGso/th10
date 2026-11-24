@@ -16,10 +16,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/audio/vorbis"
 )
 
-const (
-	pcmBytesPerFrame   = 4 // ebiten streams are 16-bit stereo
-	maxActiveSEPlayers = 64
-)
+const pcmBytesPerFrame = 4 // ebiten streams are 16-bit stereo
 
 // bgmCount is the number of thbgm.fmt records (music-room order).
 const bgmCount = 18
@@ -56,9 +53,8 @@ type Manager struct {
 	bgmObserver func(int) // FUN_00420b10/00420b90: music-room unlock ordinal
 	seVolume    float64
 	seCache     map[string][]byte
-	sePlayers   []*audio.Player
+	se          seOutput    // one voice per table id; nil without a device
 	seQueue     []seRequest // FUN_0043dd10's per-id pan requests for this frame
-	seByID      [len(seTable)]*audio.Player
 	// seAux is the unused +6 attribute copied to manager+0x408 (0x43dd8b).
 	seAux               [len(seTable)]int16
 	nativeVolume        bool
@@ -73,35 +69,15 @@ func NewManager(ctx *audio.Context) *Manager {
 	}
 	if ctx != nil {
 		_ = m.preloadSE(ctx.SampleRate())
+		m.se = newSEOutput(ctx, m.seCache)
 	}
 	return m
 }
 
-func (m *Manager) playSEPan(name string, gain float64, pan int32) *audio.Player {
-	m.cleanupSE()
-	if m.ctx == nil || m.seVolume <= 0 {
-		return nil
-	}
-	pcm := m.seCache[name] // preloadSE decoded every seWav entry
-	if pcm == nil {
-		return nil
-	}
-	m.trimSEPlayers()
-	p, err := m.ctx.NewPlayer(newPanStream(bytes.NewReader(pcm), gain, pan))
-	if err != nil {
-		return nil
-	}
-	p.SetVolume(m.seVolume)
-	p.Play()
-	m.sePlayers = append(m.sePlayers, p)
-	return p
-}
-
-// Update flushes FUN_0043dd10's sound queue and releases finished voices.
+// Update flushes FUN_0043dd10's sound queue.
 // Call once at the end of the game frame (FUN_00439390, 0x43943b).
 func (m *Manager) Update() {
 	m.flushSE()
-	m.cleanupSE()
 	if m.fadeLeft > 0 && !m.bgmPaused {
 		if m.fadeLeft--; m.fadeLeft == 0 {
 			m.StopBGM()
@@ -111,52 +87,6 @@ func (m *Manager) Update() {
 				gain = nativeGain(m.nativeBGM, int32(m.fadeLeft*5000/m.fadeTotal)-5000, false)
 			}
 			m.bgm.SetVolume(gain)
-		}
-	}
-}
-
-func (m *Manager) cleanupSE() {
-	n := 0
-	for _, p := range m.sePlayers {
-		if p == nil {
-			continue
-		}
-		if p.IsPlaying() {
-			m.sePlayers[n] = p
-			n++
-			continue
-		}
-		p.PauseAndStopReading()
-		m.clearSEID(p)
-	}
-	for i := n; i < len(m.sePlayers); i++ {
-		m.sePlayers[i] = nil
-	}
-	m.sePlayers = m.sePlayers[:n]
-}
-
-func (m *Manager) trimSEPlayers() {
-	if len(m.sePlayers) < maxActiveSEPlayers {
-		return
-	}
-	excess := len(m.sePlayers) - maxActiveSEPlayers + 1
-	for _, p := range m.sePlayers[:excess] {
-		if p != nil {
-			p.PauseAndStopReading()
-			m.clearSEID(p)
-		}
-	}
-	copy(m.sePlayers, m.sePlayers[excess:])
-	for i := len(m.sePlayers) - excess; i < len(m.sePlayers); i++ {
-		m.sePlayers[i] = nil
-	}
-	m.sePlayers = m.sePlayers[:len(m.sePlayers)-excess]
-}
-
-func (m *Manager) clearSEID(p *audio.Player) {
-	for id, voice := range m.seByID {
-		if voice == p {
-			m.seByID[id] = nil
 		}
 	}
 }
@@ -291,10 +221,8 @@ func (m *Manager) SetSEVolume(v float64) {
 		v = 1
 	}
 	m.seVolume = v
-	for _, p := range m.sePlayers {
-		if p != nil {
-			p.SetVolume(v)
-		}
+	if m.se != nil {
+		m.se.setMaster(v)
 	}
 }
 

@@ -110,3 +110,21 @@ js 构建的 `./cmd` 依赖中已不再包含：ebitenui（及 bbcode、x/exp）
   - `tools/wasmbuild/packs_test.go`：每個嵌入文件逐字節進唯一一包，manifest 哈希正確，預覽服務器路徑白名單和緩存頭正確。
   - `assets/assets_web_test.go`（th10web 版，Node 下用 `TH10_WASM_ASSET_DIR` 偽 fetch）：202 個文件經真實 fetch 路徑讀回一致，全部 ANM 都能還原。
 - 無頭 Chrome 實測：boot 包到齊，Vorbis 預熱完成，runtime-ready；其餘 26 包隨後在後台全部到齊，無錯誤。
+
+## 音效播放卡頓（2026-11-23）
+
+- 現象：WASM、144 Hz，Boss／中 Boss 等音效密集場景卡頓。
+- 原因：每次 SE 播放都新建一個 Ebiten `audio.Player`。oto 的 mux 會為新播放器預讀最多 0.5 s PCM，混音也在 Go 裡做；WASM 只有一條主線程，這些工作都擠在 rAF 之間，把渲染擠掉了。邏輯（Update 約 0.6–2 ms）、draw 數量（每幀 16–22 次 submit）和 GC 都不是主因。
+- 修法：每個 SE 表 id 一個常駐 voice，對應原作每 id 一個 DirectSound 緩衝。重播只回繞，不分配。
+  - js（`audio/seweb_js.go`）：交給 Web Audio，在瀏覽器的音頻線程混音。每 id 一張固定圖（splitter → 左右 gain → merger → master），重播只是換一個 BufferSource。第一次播放時建 AudioContext 並上傳全部 wav；Safari 要在手勢裡 resume，所以掛了 keydown／pointerdown／touchend 監聽。
+  - 桌面（`audio/semixer.go`）：在 Go 裡把全部 voice 混進一個常駐 Ebiten 播放器，緩衝 40 ms。
+  - 排隊、聲像平均、原生音量曲線不變；BGM 不變（網頁 200 ms 緩衝）。
+- Chrome 實測（th10_05 第 3 章，10000 幀上限，SyncWithFPS）：
+
+| | 卡頓幀（間隔 >20 ms 或 Update+Draw >10 ms） | 幀間隔 p95 / p99 |
+|---|---|---|
+| 修前 | 371 | 18.1 ms / — |
+| 修後 | 9 | 8.2 / 11.6 ms |
+| 修後、靜音 SE | 8 | 8.4 / 11.9 ms |
+
+- 剩下的少量尖峰來自關卡開始時懶建貼圖，和音效無關，未處理。144 Hz 下固定 60 TPS 的 2/3 刷新節奏不均是另一回事，不在此修。
